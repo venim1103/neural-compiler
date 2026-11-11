@@ -1,0 +1,90 @@
+name: Container Images
+
+on:
+  push:
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/containers.yml"
+      - "pyproject.toml"
+  pull_request:
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/containers.yml"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  images:
+    name: ${{ matrix.backend }} Image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        include:
+          - backend: cpu
+            lock: requirements.lock
+            index: https://download.pytorch.org/whl/cpu
+            cuda: "none"
+          - backend: cu128
+            lock: gpu/requirements.lock
+            index: https://download.pytorch.org/whl/cu128
+            cuda: "12.8"
+    env:
+      DEPENDENCY_LOCK: ${{ matrix.lock }}
+      TORCH_INDEX_URL: ${{ matrix.index }}
+      EXPECTED_CUDA: ${{ matrix.cuda }}
+      IMAGE_TAG: neural-compiler-ci:${{ github.sha }}-${{ matrix.backend }}
+    steps:
+      - name: Check Out Source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Check Runner Headroom
+        run: |
+          available_disk="$(df -B1 --output=avail "$GITHUB_WORKSPACE" | tail -n 1)"
+          available_memory_kib="$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo)"
+          printf 'Available disk bytes: %s; memory KiB: %s\n' \
+            "$available_disk" "$available_memory_kib"
+          if (( available_disk < 24 * 1024 * 1024 * 1024 || available_memory_kib < 6 * 1024 * 1024 )); then
+            printf 'Insufficient runner headroom for a bounded fresh build.\n' >&2
+            exit 1
+          fi
+          docker version
+          docker info
+      - name: Prepare Host Certificates
+        run: bash .devcontainer/prepare-build.sh
+      - name: Build Fresh Dependency Image
+        run: |
+          docker build --pull --no-cache --platform linux/amd64 \
+            --file .devcontainer/Dockerfile \
+            --build-arg "DEPENDENCY_LOCK=$DEPENDENCY_LOCK" \
+            --build-arg "TORCH_INDEX_URL=$TORCH_INDEX_URL" \
+            --tag "$IMAGE_TAG" .devcontainer
+          image_bytes="$(docker image inspect --format '{{.Size}}' "$IMAGE_TAG")"
+          docker image inspect --format 'ID={{.Id}} bytes={{.Size}}' "$IMAGE_TAG"
+          if (( image_bytes > 12 * 1024 * 1024 * 1024 )); then
+            printf 'Image exceeds the 12 GiB output limit.\n' >&2
+            exit 1
+          fi
+      - name: Offline Image Wiring and Tests
+        run: |
+          docker run --rm --network none --cpus 2 --memory 6g --memory-swap 6g \
+            --env NEURAL_COMPILER_DEVICE=cpu \
+            --env HF_HUB_OFFLINE=1 --env TRANSFORMERS_OFFLINE=1 \
+            --env PYTHONDONTWRITEBYTECODE=1 \
+            --env 'PYTEST_ADDOPTS=-p no:cacheprovider' \
+            --env "EXPECTED_CUDA=$EXPECTED_CUDA" \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/workspace,readonly" \
+            --workdir /workspace "$IMAGE_TAG" bash -e -o pipefail -c '
+              python -m pip check
+              python -c "import os, torch; actual = torch.version.cuda or \"none\"; expected = os.environ[\"EXPECTED_CUDA\"]; print(\"Torch:\", torch.__version__, \"CUDA build:\", actual); assert actual == expected, (actual, expected)"
+              python .devcontainer/smoke.py --tests
+              ruff check --no-cache src tests .devcontainer/smoke.py
+            '
