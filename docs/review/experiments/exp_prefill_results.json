@@ -1,0 +1,56 @@
+[
+ {
+  "context": 256,
+  "new_tokens": 1,
+  "incremental_ms": 62.9,
+  "reprefill_ms": 156.8
+ },
+ {
+  "context": 256,
+  "new_tokens": 16,
+  "incremental_ms": 81.1,
+  "reprefill_ms": 160.2
+ },
+ {
+  "context": 256,
+  "new_tokens": 64,
+  "incremental_ms": 78.4,
+  "reprefill_ms": 179.3
+ },
+ {
+  "context": 1024,
+  "new_tokens": 1,
+  "incremental_ms": 65.9,
+  "reprefill_ms": 448.6
+ },
+ {
+  "context": 1024,
+  "new_tokens": 16,
+  "incremental_ms": 82.5,
+  "reprefill_ms": 440.4
+ },
+ {
+  "context": 1024,
+  "new_tokens": 64,
+  "incremental_ms": 84.1,
+  "reprefill_ms": 443.5
+ },
+ {
+  "context": 4096,
+  "new_tokens": 1,
+  "incremental_ms": 62.8,
+  "reprefill_ms": 1489.2
+ },
+ {
+  "context": 4096,
+  "new_tokens": 16,
+  "incremental_ms": 122.9,
+  "reprefill_ms": 1503.8
+ },
+ {
+  "context": 4096,
+  "new_tokens": 64,
+  "incremental_ms": 98.9,
+  "reprefill_ms": 1514.2
+ }
+]

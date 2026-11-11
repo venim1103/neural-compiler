@@ -1,0 +1,591 @@
+{
+ "part_b": {
+  "python": {
+   "correct": 10,
+   "of": 12,
+   "compile_error": 0,
+   "runtime_error": 0,
+   "timeout": 0,
+   "wrong": 2,
+   "mean_tokens": 70.3,
+   "batch_steps": 129,
+   "batch_ms_per_step": 139.6
+  },
+  "c": {
+   "correct": 10,
+   "of": 12,
+   "compile_error": 1,
+   "runtime_error": 0,
+   "timeout": 0,
+   "wrong": 1,
+   "mean_tokens": 257.1,
+   "batch_steps": 500,
+   "batch_ms_per_step": 117.1
+  },
+  "wat": {
+   "correct": 0,
+   "of": 12,
+   "compile_error": 12,
+   "runtime_error": 0,
+   "timeout": 0,
+   "wrong": 0,
+   "mean_tokens": 851.7,
+   "batch_steps": 900,
+   "batch_ms_per_step": 137.8
+  },
+  "asm": {
+   "correct": 0,
+   "of": 12,
+   "compile_error": 12,
+   "runtime_error": 0,
+   "timeout": 0,
+   "wrong": 0,
+   "mean_tokens": 652.7,
+   "batch_steps": 900,
+   "batch_ms_per_step": 117.8
+  },
+  "hex": {
+   "correct": 0,
+   "of": 12,
+   "compile_error": 7,
+   "runtime_error": 5,
+   "timeout": 0,
+   "wrong": 0,
+   "mean_tokens": 600,
+   "batch_steps": 600,
+   "batch_ms_per_step": 99.7
+  }
+ },
+ "part_c": {
+  "double_palindromes": {
+   "program_tokens": 219,
+   "exec_status": "ok",
+   "exec_output": "Count: 18\nSum: 286602",
+   "program_correct": false,
+   "final_answer": "286602",
+   "final_correct": true,
+   "decode_ms_per_token": 127.6,
+   "gen_program_ms": 29708,
+   "exec_ms": 82.02,
+   "result_tokens": 23,
+   "prefill_result_ms": 12982.4,
+   "answer_tokens": 13,
+   "gen_answer_ms": 1644,
+   "reprefill_full_context_tokens": 356,
+   "reprefill_full_context_ms": 195.3,
+   "transcript": "To find the sum of all integers $1 \\le n < 300000$ that are palindromes in both base 10 and base 2, I will write a Python script to iterate through the numbers, check the condition, and sum them up.\n\n```python\ndef is_palindrome(s):\n    return s == s[::-1]\n\ntotal_sum = 0\ncount = 0\n\nfor n in range(1, 300000):\n    # Check base 10 palindrome\n    base10_str = str(n)\n    if not is_palindrome(base10_str):\n        continue\n    \n    # Check base 2 palindrome\n    base2_str = bin(n)[2:] # bin() returns '0b...', slice off the first two chars\n    if not is_palindrome(base2_str):\n        continue\n    \n    total_sum += n\n    count += 1\n\nprint(f\"Count: {count}\")\nprint(f\"Sum: {total_sum}\")\n```\n```output\nCount: 18\nSum: 286602\n```\nFinal answer: 286602<|im_end|>\n<|endoftext|>"
+  },
+  "lcg_median": {
+   "program_tokens": 115,
+   "exec_status": "ok",
+   "exec_output": "1030877685",
+   "program_correct": true,
+   "final_answer": "1030877685",
+   "final_correct": true,
+   "decode_ms_per_token": 134.7,
+   "gen_program_ms": 15931,
+   "exec_ms": 0.83,
+   "result_tokens": 18,
+   "prefill_result_ms": 257.5,
+   "answer_tokens": 17,
+   "gen_answer_ms": 2445,
+   "reprefill_full_context_tokens": 277,
+   "reprefill_full_context_ms": 233.2,
+   "transcript": "```python\ndef generate_sequence():\n    x = 42\n    sequence = []\n    for _ in range(51):\n        sequence.append(x)\n        x = (1103515245 * x + 12345) % (2**31)\n    return sequence\n\nseq = generate_sequence()\nsorted_seq = sorted(seq)\nmedian = sorted_seq[25]  # 26th smallest (0-indexed 25)\nprint(median)\n```\n```output\n1030877685\n```\nFinal answer: 1030877685<|im_end|>\n<|endoftext|>"
+  },
+  "collatz": {
+   "program_tokens": 149,
+   "exec_status": "ok",
+   "exec_output": "6171",
+   "program_correct": true,
+   "final_answer": "6171",
+   "final_correct": true,
+   "decode_ms_per_token": 137.4,
+   "gen_program_ms": 21437,
+   "exec_ms": 93.78,
+   "result_tokens": 12,
+   "prefill_result_ms": 226.5,
+   "answer_tokens": 11,
+   "gen_answer_ms": 1326,
+   "reprefill_full_context_tokens": 276,
+   "reprefill_full_context_ms": 222.2,
+   "transcript": "```python\ndef collatz_steps(n):\n    steps = 0\n    while n != 1:\n        if n % 2 == 0:\n            n = n // 2\n        else:\n            n = 3 * n + 1\n        steps += 1\n    return steps\n\nmax_steps = -1\nresult_s = -1\n\nfor s in range(1, 10000):\n    steps = collatz_steps(s)\n    if steps > max_steps:\n        max_steps = steps\n        result_s = s\n    elif steps == max_steps and s < result_s:\n        result_s = s\n\nprint(result_s)\n```\n```output\n6171\n```\nFinal answer: 6171<|im_end|>\n<|endoftext|>"
+  },
+  "digits_2_100": {
+   "program_tokens": 110,
+   "exec_status": "ok",
+   "exec_output": "1267650600228229401496703205376\nSum of digits: 115",
+   "program_correct": false,
+   "final_answer": "115",
+   "final_correct": true,
+   "decode_ms_per_token": 121.3,
+   "gen_program_ms": 13682,
+   "exec_ms": 1.07,
+   "result_tokens": 48,
+   "prefill_result_ms": 177.7,
+   "answer_tokens": 10,
+   "gen_answer_ms": 1412,
+   "reprefill_full_context_tokens": 254,
+   "reprefill_full_context_ms": 242.8,
+   "transcript": "To find the sum of the decimal digits of $2^{100}$, I will first compute the value of $2^{100}$ and then sum its digits.\n\n```python\n# Compute 2 to the power of 100\nnumber = 2 ** 100\n\n# Convert the number to a string to iterate over digits\ndigit_sum = sum(int(digit) for digit in str(number))\n\nprint(f\"{number}\")\nprint(f\"Sum of digits: {digit_sum}\")\n```\n```output\n1267650600228229401496703205376\nSum of digits: 115\n```\nFinal answer: 115<|im_end|>\n<|endoftext|>"
+  },
+  "lattice_paths": {
+   "program_tokens": 380,
+   "exec_status": "ok",
+   "exec_output": "601080390",
+   "program_correct": true,
+   "final_answer": "601080390",
+   "final_correct": true,
+   "decode_ms_per_token": 130.2,
+   "gen_program_ms": 52388,
+   "exec_ms": 1.8,
+   "result_tokens": 17,
+   "prefill_result_ms": 203.9,
+   "answer_tokens": 16,
+   "gen_answer_ms": 2162,
+   "reprefill_full_context_tokens": 509,
+   "reprefill_full_context_ms": 236.3,
+   "transcript": "To find the number of monotone lattice paths from the top-left to the bottom-right corner of a $16 \\times 16$ grid of squares, we first determine the number of steps required.\n\n1.  **Grid Dimensions**: A $16 \\times 16$ grid of squares has $16$ rows and $16$ columns.\n2.  **Vertices**: The grid lines form a lattice of points. To go from the top-left corner to the bottom-right corner, one must move across the grid.\n    *   Moving from the left edge to the right edge requires $16$ steps to the right.\n    *   Moving from the top edge to the bottom edge requires $16$ steps down.\n3.  **Total Steps**: The total number of steps in any monotone path is $16 + 16 = 32$.\n4.  **Combinatorics**: A path is defined by the sequence of moves (Right or Down). We need to choose which $16$ of the $32$ steps are \"Right\" (the remaining $16$ will automatically be \"Down\").\n    *   The number of such paths is given by the binomial coefficient $\\binom{n}{k}$, where $n$ is the total number of steps and $k$ is the number of steps in one direction.\n    *   Formula: $\\binom{32}{16} = \\frac{32!}{16! \\cdot 16!}$.\n\nLet's calculate this value using Python.\n\n```python\nimport math\n\nn = 32\nk = 16\n\n# Calculate binomial coefficient C(n, k)\nresult = math.comb(n, k)\n\nprint(result)\n```\n```output\n601080390\n```\nFinal answer: 601080390<|im_end|>\n<|endoftext|>"
+  },
+  "modpow": {
+   "program_tokens": 39,
+   "exec_status": "ok",
+   "exec_output": "235939645",
+   "program_correct": true,
+   "final_answer": "235939645",
+   "final_correct": true,
+   "decode_ms_per_token": 133.6,
+   "gen_program_ms": 5522,
+   "exec_ms": 0.47,
+   "result_tokens": 17,
+   "prefill_result_ms": 204.0,
+   "answer_tokens": 16,
+   "gen_answer_ms": 1934,
+   "reprefill_full_context_tokens": 165,
+   "reprefill_full_context_ms": 189.4,
+   "transcript": "```python\nresult = pow(3, 1000000000, 1000000007)\nprint(result)\n```\n```output\n235939645\n```\nFinal answer: 235939645<|im_end|>\n<|endoftext|>"
+  }
+ },
+ "programs": {
+  "python/primes_sum": {
+   "tokens": 128,
+   "status": "ok",
+   "correct": true,
+   "output": "21171191",
+   "code": "def is_prime(n):\n    if n < 2:\n        return False\n    if n == 2:\n        return True\n    if n % 2 == 0:\n        return False\n    for i in range(3, int(n**0.5) + 1, 2):\n        if n % i == 0:\n            return False\n    return True\n\ntotal = 0\nfor num in range(2, 20000):\n    if is_prime(num):\n        total += num\n\nprint(total)\n"
+  },
+  "python/collatz": {
+   "tokens": 122,
+   "status": "ok",
+   "correct": true,
+   "output": "6171",
+   "code": "def collatz_steps(n):\n    steps = 0\n    while n != 1:\n        n = n // 2 if n % 2 == 0 else 3 * n + 1\n        steps += 1\n    return steps\n\nmax_steps = -1\nbest_s = 1\n\nfor s in range(1, 10000):\n    steps = collatz_steps(s)\n    if steps > max_steps:\n        max_steps = steps\n        best_s = s\n\nprint(best_s)\n"
+  },
+  "python/lcm_1_25": {
+   "tokens": 54,
+   "status": "ok",
+   "correct": true,
+   "output": "26771144400",
+   "code": "import math\nfrom functools import reduce\n\ndef lcm(a, b):\n    return a * b // math.gcd(a, b)\n\nresult = reduce(lcm, range(1, 26))\nprint(result)\n"
+  },
+  "python/fib_mod": {
+   "tokens": 61,
+   "status": "ok",
+   "correct": true,
+   "output": "184550589",
+   "code": "MOD = 1000000007\na, b = 0, 1\nfor _ in range(2, 81):\n    a, b = b, (a + b) % MOD\nprint(b)\n"
+  },
+  "python/divisors": {
+   "tokens": 107,
+   "status": "ok",
+   "correct": true,
+   "output": "256",
+   "code": "import math\n\ndef count_divisors(n):\n    divisors = 0\n    for i in range(1, int(math.isqrt(n)) + 1):\n        if n % i == 0:\n            if i * i == n:\n                divisors += 1\n            else:\n                divisors += 2\n    return divisors\n\nn = 9699690\nresult = count_divisors(n)\nprint(result)\n"
+  },
+  "python/binomial": {
+   "tokens": 22,
+   "status": "ok",
+   "correct": true,
+   "output": "137846528820",
+   "code": "from math import comb\nprint(comb(40, 20))\n"
+  },
+  "python/digits_2_100": {
+   "tokens": 23,
+   "status": "ok",
+   "correct": true,
+   "output": "115",
+   "code": "print(sum(int(d) for d in str(2**100)))\n"
+  },
+  "python/modpow": {
+   "tokens": 36,
+   "status": "ok",
+   "correct": true,
+   "output": "235939645",
+   "code": "print(pow(3, 1000000000, 1000000007))\n"
+  },
+  "python/lcg_median": {
+   "tokens": 74,
+   "status": "ok",
+   "correct": false,
+   "output": "293225800",
+   "code": "x = 42\nfor _ in range(50):\n    x = (1103515245 * x + 12345) % (2**31)\nxs = sorted([x for _ in range(51)])\nprint(xs[25])\n"
+  },
+  "python/double_palindromes": {
+   "tokens": 72,
+   "status": "ok",
+   "correct": false,
+   "output": "18",
+   "code": "def is_palindrome(s):\n    return s == s[::-1]\n\ncount = 0\nfor n in range(1, 300000):\n    if is_palindrome(str(n)) and is_palindrome(bin(n)[2:]):\n        count += 1\n\nprint(count)\n"
+  },
+  "python/vowels": {
+   "tokens": 58,
+   "status": "ok",
+   "correct": true,
+   "output": "24",
+   "code": "text = \"the quick brown fox jumps over the lazy dog while seven wizards quietly hex jumbo bags\"\nvowels = \"aeiou\"\ncount = sum(1 for char in text.lower() if char in vowels)\nprint(count)\n"
+  },
+  "python/lattice_paths": {
+   "tokens": 87,
+   "status": "ok",
+   "correct": true,
+   "output": "601080390",
+   "code": "n = 16\n# The number of steps right is n, and the number of steps down is n.\n# Total steps = 2n. We need to choose n steps to be 'right' (or 'down').\n# Formula: C(2n, n)\nfrom math import comb\nresult = comb(2 * n, n)\nprint(result)\n"
+  },
+  "c/primes_sum": {
+   "tokens": 220,
+   "status": "ok",
+   "correct": true,
+   "output": "21171191",
+   "code": "#include <stdio.h>\n#include <stdbool.h>\n\nint main() {\n    int limit = 20000;\n    bool is_prime[limit];\n\n    // Initialize all entries as true\n    for (int i = 0; i < limit; i++) {\n        is_prime[i] = true;\n    }\n\n    // Sieve of Eratosthenes\n    for (int p = 2; p * p < limit; p++) {\n        if (is_prime[p]) {\n            for (int i = p * p; i < limit; i += p) {\n                is_prime[i] = false;\n            }\n        }\n    }\n\n    int sum = 0;\n    for (int p = 2; p < limit; p++) {\n        if (is_prime[p]) {\n            sum += p;\n        }\n    }\n\n    printf(\"%d\\n\", sum);\n\n    return 0;\n}\n"
+  },
+  "c/collatz": {
+   "tokens": 185,
+   "status": "ok",
+   "correct": true,
+   "output": "6171",
+   "code": "#include <stdio.h>\n#include <limits.h>\n\nint main() {\n    int best_s = 1;\n    int max_steps = 0;\n\n    for (int s = 1; s < 10000; s++) {\n        int current = s;\n        int steps = 0;\n\n        while (current != 1) {\n            if (current % 2 == 0) {\n                current = current / 2;\n            } else {\n                current = 3 * current + 1;\n            }\n            steps++;\n        }\n\n        if (steps > max_steps) {\n            max_steps = steps;\n            best_s = s;\n        }\n    }\n\n    printf(\"%d\\n\", best_s);\n    return 0;\n}\n"
+  },
+  "c/lcm_1_25": {
+   "tokens": 150,
+   "status": "ok",
+   "correct": false,
+   "output": "-2135207472",
+   "code": "#include <stdio.h>\n\nint gcd(int a, int b) {\n    while (b != 0) {\n        int temp = b;\n        b = a % b;\n        a = temp;\n    }\n    return a;\n}\n\nint lcm(int a, int b) {\n    return (a / gcd(a, b)) * b;\n}\n\nint main() {\n    int result = 1;\n    for (int i = 1; i <= 25; i++) {\n        result = lcm(result, i);\n    }\n    printf(\"%d\\n\", result);\n    return 0;\n}\n"
+  },
+  "c/fib_mod": {
+   "tokens": 141,
+   "status": "ok",
+   "correct": true,
+   "output": "184550589",
+   "code": "#include <stdio.h>\n\nint main() {\n    long long MOD = 1000000007;\n    long long a = 0; // F(0)\n    long long b = 1; // F(1)\n    \n    // Compute F(80) iteratively\n    for (int i = 2; i <= 80; i++) {\n        long long c = (a + b) % MOD;\n        a = b;\n        b = c;\n    }\n    \n    printf(\"%lld\\n\", b);\n    return 0;\n}\n"
+  },
+  "c/divisors": {
+   "tokens": 500,
+   "status": "compile_error",
+   "correct": false,
+   "output": "/prog.c:72:9: error: expected declaration or statement at end of input\n   72 |         temp\n      |         ^~~~\n/tmp/tmp4a8rmrgu/prog.c:72:9: error: expected declaration or statement at end of input\n",
+   "code": "#include <stdio.h>\n\nint main() {\n    long long n = 9699690;\n    int count = 0;\n    int temp = n;\n\n    // Count prime factorization exponents\n    // Check 2\n    while (temp % 2 == 0) {\n        count++;\n        temp /= 2;\n    }\n    // Check 3\n    while (temp % 3 == 0) {\n        count++;\n        temp /= 3;\n    }\n    // Check 5\n    while (temp % 5 == 0) {\n        count++;\n        temp /= 5;\n    }\n    // Check 7\n    while (temp % 7 == 0) {\n        count++;\n        temp /= 7;\n    }\n    // Check 11\n    while (temp % 11 == 0) {\n        count++;\n        temp /= 11;\n    }\n    // Check 13\n    while (temp % 13 == 0) {\n        count++;\n        temp /= 13;\n    }\n    // Check 17\n    while (temp % 17 == 0) {\n        count++;\n        temp /= 17;\n    }\n    // Check 19\n    while (temp % 19 == 0) {\n        count++;\n        temp /= 19;\n    }\n    // Check 23\n    while (temp % 23 == 0) {\n        count++;\n        temp /= 23;\n    }\n    // Check 29\n    while (temp % 29 == 0) {\n        count++;\n        temp /= 29;\n    }\n    // Check 31\n    while (temp % 31 == 0) {\n        count++;\n        temp /= 31;\n    }\n    // Check 37\n    while (temp % 37 == 0) {\n        count++;\n        temp /= 37;\n    }\n    // Check 41\n    while (temp % 41 == 0) {\n        count++;\n        temp"
+  },
+  "c/binomial": {
+   "tokens": 96,
+   "status": "ok",
+   "correct": true,
+   "output": "137846528820",
+   "code": "#include <stdio.h>\n\nint main() {\n    long long n = 40, k = 20;\n    long long result = 1;\n    for (int i = 1; i <= k; i++) {\n        result = result * (n - i + 1) / i;\n    }\n    printf(\"%lld\\n\", result);\n    return 0;\n}\n"
+  },
+  "c/digits_2_100": {
+   "tokens": 419,
+   "status": "ok",
+   "correct": true,
+   "output": "115",
+   "code": "#include <stdio.h>\n#include <stdlib.h>\n\nint main() {\n    // Use an array to store digits in reverse order (least significant first)\n    // 2^100 is approximately 1.26765e+30, so we need about 31 digits.\n    // We'll use a safe size of 100.\n    int digits[100];\n    int size = 0;\n\n    // Function to multiply the large number represented by 'digits' by a scalar 'factor'\n    // Returns the new size.\n    int multiply(int *digits, int size, int factor) {\n        int carry = 0;\n        for (int i = 0; i < size; i++) {\n            long long current = (long long)digits[i] * factor + carry;\n            digits[i] = (int)(current % 10);\n            carry = (int)(current / 10);\n        }\n        while (carry) {\n            digits[size++] = carry % 10;\n            carry /= 10;\n        }\n        return size;\n    }\n\n    // Initialize the number to 1 (represented as a single digit)\n    digits[0] = 1;\n    size = 1;\n\n    // Compute 2^100 by multiplying by 2, 100 times\n    for (int i = 0; i < 100; i++) {\n        size = multiply(digits, size, 2);\n    }\n\n    // Compute the sum of the decimal digits\n    int sum = 0;\n    for (int i = 0; i < size; i++) {\n        sum += digits[i];\n    }\n\n    // Print the final integer answer\n    printf(\"%d\\n\", sum);\n\n    return 0;\n}\n"
+  },
+  "c/modpow": {
+   "tokens": 183,
+   "status": "ok",
+   "correct": true,
+   "output": "235939645",
+   "code": "#include <stdio.h>\n\ntypedef long long ll;\n\nll power(ll base, ll exp, ll mod) {\n    ll result = 1;\n    base %= mod;\n    while (exp > 0) {\n        if (exp % 2 == 1) {\n            result = (result * base) % mod;\n        }\n        base = (base * base) % mod;\n        exp /= 2;\n    }\n    return result;\n}\n\nint main() {\n    ll base = 3;\n    ll exp = 1000000000LL;\n    ll mod = 1000000007LL;\n    printf(\"%lld\\n\", power(base, exp, mod));\n    return 0;\n}\n"
+  },
+  "c/lcg_median": {
+   "tokens": 462,
+   "status": "ok",
+   "correct": true,
+   "output": "1030877685",
+   "code": "#include <stdio.h>\n#include <stdlib.h>\n\nint main() {\n    int x[51];\n    int i;\n\n    // Initialize x0\n    x[0] = 42;\n\n    // Generate x1 to x51\n    // Formula: x(k+1) = (1103515245 * x(k) + 12345) mod 2^31\n    // Note: 2^31 is 2147483648. Since we are using signed 32-bit int, \n    // the result of the multiplication might overflow before modulo.\n    // We can use unsigned int for the calculation to handle the large intermediate value correctly.\n    unsigned int multiplier = 1103515245U;\n    unsigned int adder = 12345U;\n    unsigned int modulus = 2147483648U; // 2^31\n\n    for (i = 1; i <= 51; i++) {\n        unsigned int temp = (unsigned int)((long long)x[i-1] * multiplier + adder);\n        x[i] = (int)(temp % modulus);\n    }\n\n    // Sort the array x[0] to x[50] (51 elements)\n    // We need the 26th smallest, which is at index 25 (0-based) after sorting.\n    for (i = 0; i < 51; i++) {\n        for (int j = i + 1; j < 51; j++) {\n            if (x[i] > x[j]) {\n                int temp_val = x[i];\n                x[i] = x[j];\n                x[j] = temp_val;\n            }\n        }\n    }\n\n    // The median of 51 elements is the 26th smallest (index 25)\n    printf(\"%d\\n\", x[25]);\n\n    return 0;\n}\n"
+  },
+  "c/double_palindromes": {
+   "tokens": 293,
+   "status": "ok",
+   "correct": true,
+   "output": "286602",
+   "code": "#include <stdio.h>\n#include <stdbool.h>\n\n// Function to check if a number is a palindrome in base 10\nbool is_palindrome_base10(int n) {\n    int original = n;\n    int reversed = 0;\n    while (n > 0) {\n        reversed = reversed * 10 + n % 10;\n        n /= 10;\n    }\n    return original == reversed;\n}\n\n// Function to check if a number is a palindrome in base 2\nbool is_palindrome_base2(int n) {\n    if (n == 0) return true;\n    int original = n;\n    int reversed = 0;\n    while (n > 0) {\n        reversed = (reversed << 1) | (n & 1);\n        n >>= 1;\n    }\n    return original == reversed;\n}\n\nint main() {\n    int sum = 0;\n    for (int n = 1; n < 300000; n++) {\n        if (is_palindrome_base10(n) && is_palindrome_base2(n)) {\n            sum += n;\n        }\n    }\n    printf(\"%d\\n\", sum);\n    return 0;\n}\n"
+  },
+  "c/vowels": {
+   "tokens": 185,
+   "status": "ok",
+   "correct": true,
+   "output": "24",
+   "code": "#include <stdio.h>\n#include <string.h>\n\nint main() {\n    const char *str = \"the quick brown fox jumps over the lazy dog while seven wizards quietly hex jumbo bags\";\n    int count = 0;\n    size_t len = strlen(str);\n\n    for (size_t i = 0; i < len; i++) {\n        char c = str[i];\n        if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u' ||\n            c == 'A' || c == 'E' || c == 'I' || c == 'O' || c == 'U') {\n            count++;\n        }\n    }\n\n    printf(\"%d\\n\", count);\n    return 0;\n}\n"
+  },
+  "c/lattice_paths": {
+   "tokens": 251,
+   "status": "ok",
+   "correct": true,
+   "output": "601080390",
+   "code": "#include <stdio.h>\n\nint main() {\n    int n = 16;\n    // The number of steps right is n, and the number of steps down is n.\n    // Total steps = 2n. We need to choose n steps to be 'right' (or 'down').\n    // Formula: C(2n, n) = (2n)! / (n! * n!)\n    \n    // We compute C(32, 16) using a loop to avoid overflow with large factorials\n    // by multiplying and dividing incrementally.\n    // C(n, k) = C(n, k-1) * (n - k + 1) / k\n    \n    int total_steps = 2 * n;\n    int steps_right = n;\n    unsigned long long result = 1;\n    \n    for (int i = 1; i <= steps_right; i++) {\n        result = result * (total_steps - i + 1);\n        result = result / i;\n    }\n    \n    printf(\"%lu\\n\", result);\n    \n    return 0;\n}\n"
+  },
+  "wat/primes_sum": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "unknown operator or unexpected token\n     --> <anon>:35:5\n      |\n   35 |     i32.sqrt\n      |     ^",
+   "code": "(module\n  (memory 1)\n  (func $is_prime (param i32) (result i32)\n    local.get 0\n    local.get 0\n    i32.lt_s\n    if\n      i32.const 1\n      return\n    end\n    local.get 0\n    i32.const 2\n    i32.eq\n    if\n      i32.const 1\n      return\n    end\n    local.get 0\n    i32.const 2\n    i32.lt_s\n    if\n      i32.const 0\n      return\n    end\n    local.get 0\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    i32.sub\n    i32.sqrt\n    i32.floor\n    local.get 0\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    i32.sub\n    i32.rem_s\n    i32.const 0\n    i32.eq\n    if\n      i32.const 0\n      return\n    end\n    local.get 0\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    i32.sub\n    i32.rem_s\n    i32.const 0\n    i32.eq\n    if\n      i32.const 0\n      return\n    end\n    local.get 0\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    i32.sub\n    i32.rem_s\n    i32.const 0\n    i32.eq\n    if\n      i32.const 0\n      return\n    end\n    local.get 0\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    i32.sub\n    i32.rem_s\n    i32.const 0\n    i32.eq\n    if\n      i32.const 0\n      return\n    end\n    local.get 0\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    i32.sub\n    i32.rem_s\n    i32.const 0\n    i32.eq\n    if\n      i32.const 0\n      return\n    end\n    local.get 0\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    i32.sub\n    i32.rem_s\n    i32.const 0\n    i32.eq\n    if\n      i32.const 0\n      return\n    end\n    local.get 0\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    local.get 0\n    i32.const 2\n    i32.add\n    i32.mul\n    i32.sub\n    i32.rem_s"
+  },
+  "wat/collatz": {
+   "tokens": 763,
+   "status": "compile_error",
+   "correct": false,
+   "output": "failed to compile: wasm[0]::function[0]::solve\n\nCaused by:\n    0: WebAssembly translation error\n    1: Invalid input WebAssembly code at offset 177: type mismatch: expected i64, found i32\n",
+   "code": "(module\n  (memory 1)\n  (func $solve (export \"solve\") (result i64)\n    (local $s i32)\n    (local $steps i32)\n    (local $max_steps i32)\n    (local $best_s i32)\n    (local $current_s i32)\n    (local $current_steps i32)\n    (local $next_s i32)\n    (local $temp i32)\n    \n    ;; Initialize best_s to 1 with 0 steps (since 1 takes 0 steps to reach 1)\n    (local.set $best_s (i32.const 1))\n    (local.set $max_steps (i32.const 0))\n    \n    ;; Loop s from 2 to 9999\n    (loop $outer\n      (br_if $outer (i32.lt_u (local.get $s) (i32.const 10000)))\n      \n      ;; Initialize steps for current s\n      (local.set $current_s (local.get $s))\n      (local.set $current_steps (i32.const 0))\n      \n      ;; Simulate Collatz sequence\n      (loop $inner\n        (br_if $inner (i32.eq (local.get $current_s) (i32.const 1)))\n        \n        ;; Calculate next number\n        (local.set $next_s (i32.const 0))\n        (if (i32.and (i32.const 1) (i32.shr_u (local.get $current_s) (i32.const 31)))\n          (then\n            ;; Odd: 3n + 1\n            (local.set $next_s (i32.add (i32.mul (i32.const 3) (local.get $current_s)) (i32.const 1)))\n          )\n          (else\n            ;; Even: n / 2\n            (local.set $next_s (i32.shr_u (local.get $current_s) (i32.const 1)))\n          )\n        )\n        \n        ;; Check for overflow or excessive growth (safety check)\n        (if (i32.gt_u (local.get $next_s) (i32.const 2147483647))\n          (then\n            (local.set $current_steps (i32.const 0))\n            (br $outer)\n          )\n        )\n        \n        (local.set $current_s (local.get $next_s))\n        (i32.add (local.get $current_steps) (i32.const 1))\n        (local.set $current_steps (local.get $current_steps))\n        \n        (br $inner)\n      )\n      \n      ;; Update best if current steps > max steps\n      (if (i32.gt_u (local.get $current_steps) (local.get $max_steps))\n        (then\n          (local.set $max_steps (local.get $current_steps))\n          (local.set $best_s (local.get $current_s))\n        )\n      )\n      \n      (i32.add (local.get $s) (i32.const 1))\n      (local.set $s (local.get $s))\n      \n      (br $outer)\n    )\n    \n    (local.get $best_s)\n  )\n)\n"
+  },
+  "wat/lcm_1_25": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "f`, `structref`, `arrayref`, `i31ref`, `nullfuncref`, `nullexternref`, `nullexnref`, `nullcontref`, `nullref`, lparen\n     --> <anon>:73:18\n      |\n   73 |     (local $i56_i\n      |                  ^",
+   "code": "(module\n  (memory 1)\n  (func $solve (export \"solve\") (result i64)\n    (local $i i32)\n    (local $lcm i64)\n    (local $temp i64)\n    (local $limit i32)\n    (local $start i32)\n    (local $end i32)\n    (local $result i64)\n    (local $div i64)\n    (local $mod i64)\n    (local $gcd i64)\n    (local $a i64)\n    (local $b i64)\n    (local $x i64)\n    (local $y i64)\n    (local $t i64)\n    (local $i2 i32)\n    (local $i3 i32)\n    (local $i4 i32)\n    (local $i5 i32)\n    (local $i6 i32)\n    (local $i7 i32)\n    (local $i8 i32)\n    (local $i9 i32)\n    (local $i10 i32)\n    (local $i11 i32)\n    (local $i12 i32)\n    (local $i13 i32)\n    (local $i14 i32)\n    (local $i15 i32)\n    (local $i16 i32)\n    (local $i17 i32)\n    (local $i18 i32)\n    (local $i19 i32)\n    (local $i20 i32)\n    (local $i21 i32)\n    (local $i22 i32)\n    (local $i23 i32)\n    (local $i24 i32)\n    (local $i25 i32)\n    (local $i26 i32)\n    (local $i27 i32)\n    (local $i28 i32)\n    (local $i29 i32)\n    (local $i30 i32)\n    (local $i31 i32)\n    (local $i32_i32 i32)\n    (local $i33_i32 i32)\n    (local $i34_i32 i32)\n    (local $i35_i32 i32)\n    (local $i36_i32 i32)\n    (local $i37_i32 i32)\n    (local $i38_i32 i32)\n    (local $i39_i32 i32)\n    (local $i40_i32 i32)\n    (local $i41_i32 i32)\n    (local $i42_i32 i32)\n    (local $i43_i32 i32)\n    (local $i44_i32 i32)\n    (local $i45_i32 i32)\n    (local $i46_i32 i32)\n    (local $i47_i32 i32)\n    (local $i48_i32 i32)\n    (local $i49_i32 i32)\n    (local $i50_i32 i32)\n    (local $i51_i32 i32)\n    (local $i52_i32 i32)\n    (local $i53_i32 i32)\n    (local $i54_i32 i32)\n    (local $i55_i32 i32)\n    (local $i56_i"
+  },
+  "wat/fib_mod": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "unknown operator or unexpected token\n     --> <anon>:106:6\n      |\n  106 |     (local\n      |      ^",
+   "code": "(module\n  (memory 1)\n  (func $solve (export \"solve\") (result i64)\n    (local $a i64)\n    (local $b i64)\n    (local $c i64)\n    (local $n i64)\n    (local $mod i64)\n    (local $i i64)\n    (local $temp i64)\n    (local.get 0)\n    (local.set $n)\n    (local.get 1)\n    (local.set $mod)\n    (local.get 2)\n    (local.set $a)\n    (local.get 3)\n    (local.set $b)\n    (local.get 4)\n    (local.set $i)\n    (local.get 5)\n    (local.set $temp)\n    (local.get 6)\n    (local.set $c)\n    (local.get 7)\n    (local.set $temp)\n    (local.get 8)\n    (local.set $c)\n    (local.get 9)\n    (local.set $temp)\n    (local.get 10)\n    (local.set $c)\n    (local.get 11)\n    (local.set $temp)\n    (local.get 12)\n    (local.set $c)\n    (local.get 13)\n    (local.set $temp)\n    (local.get 14)\n    (local.set $c)\n    (local.get 15)\n    (local.set $temp)\n    (local.get 16)\n    (local.set $c)\n    (local.get 17)\n    (local.set $temp)\n    (local.get 18)\n    (local.set $c)\n    (local.get 19)\n    (local.set $temp)\n    (local.get 20)\n    (local.set $c)\n    (local.get 21)\n    (local.set $temp)\n    (local.get 22)\n    (local.set $c)\n    (local.get 23)\n    (local.set $temp)\n    (local.get 24)\n    (local.set $c)\n    (local.get 25)\n    (local.set $temp)\n    (local.get 26)\n    (local.set $c)\n    (local.get 27)\n    (local.set $temp)\n    (local.get 28)\n    (local.set $c)\n    (local.get 29)\n    (local.set $temp)\n    (local.get 30)\n    (local.set $c)\n    (local.get 31)\n    (local.set $temp)\n    (local.get 32)\n    (local.set $c)\n    (local.get 33)\n    (local.set $temp)\n    (local.get 34)\n    (local.set $c)\n    (local.get 35)\n    (local.set $temp)\n    (local.get 36)\n    (local.set $c)\n    (local.get 37)\n    (local.set $temp)\n    (local.get 38)\n    (local.set $c)\n    (local.get 39)\n    (local.set $temp)\n    (local.get 40)\n    (local.set $c)\n    (local.get 41)\n    (local.set $temp)\n    (local.get 42)\n    (local.set $c)\n    (local.get 43)\n    (local.set $temp)\n    (local.get 44)\n    (local.set $c)\n    (local.get 45)\n    (local.set $temp)\n    (local.get 46)\n    (local.set $c)\n    (local.get 47)\n    (local"
+  },
+  "wat/divisors": {
+   "tokens": 457,
+   "status": "compile_error",
+   "correct": false,
+   "output": "expected an instruction\n     --> <anon>:22:35\n      |\n   22 |         (local.set $temp (i64.mul $i $i))\n      |                                   ^",
+   "code": "(module\n  (memory 1)\n  (func $solve (export \"solve\") (result i64)\n    (local $n i64)\n    (local $count i32)\n    (local $i i64)\n    (local $divisor i64)\n    (local $temp i64)\n    (local $is_divisor i32)\n    \n    ;; Initialize n to 9699690\n    (local.set $n (i64.const 9699690))\n    ;; Initialize count to 0\n    (local.set $count (i32.const 0))\n    ;; Initialize i to 1\n    (local.set $i (i64.const 1))\n    \n    ;; Loop while i * i <= n\n    (block $outer\n      (loop $outer\n        ;; Check if i * i > n\n        (local.set $temp (i64.mul $i $i))\n        (if (result i32)\n          (br_if $outer (i32.lt_u (i32.eqz (i64.lt_s $temp $n))))\n        )\n        \n        ;; Check if i divides n\n        (local.set $divisor (i64.rem $n $i))\n        (if (result i32)\n          (br_if $outer (i32.eqz $divisor))\n        )\n        \n        ;; If i divides n, increment count\n        (if (result i32)\n          (br_if $outer (i32.eqz $divisor))\n        )\n        (local.set $count (i32.add $count (i32.const 1)))\n        \n        ;; Increment i\n        (local.set $i (i64.add $i (i64.const 1)))\n        \n        ;; Continue loop\n        (br $outer)\n      )\n    )\n    \n    ;; Return the count\n    (local.get $count)\n  )\n)\n"
+  },
+  "wat/binomial": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "expected `)`\n     --> <anon>:78:11\n      |\n   78 |     (local\n      |           ^",
+   "code": "(module\n  (memory 1)\n  (func $solve (export \"solve\") (result i64)\n    (local $i i32)\n    (local $j i32)\n    (local $numerator i64)\n    (local $denominator i64)\n    (local $result i64)\n    (local $temp i64)\n    (local $fact i64)\n    (local $fact2 i64)\n    (local $fact3 i64)\n    (local $fact4 i64)\n    (local $fact5 i64)\n    (local $fact6 i64)\n    (local $fact7 i64)\n    (local $fact8 i64)\n    (local $fact9 i64)\n    (local $fact10 i64)\n    (local $fact11 i64)\n    (local $fact12 i64)\n    (local $fact13 i64)\n    (local $fact14 i64)\n    (local $fact15 i64)\n    (local $fact16 i64)\n    (local $fact17 i64)\n    (local $fact18 i64)\n    (local $fact19 i64)\n    (local $fact20 i64)\n    (local $fact21 i64)\n    (local $fact22 i64)\n    (local $fact23 i64)\n    (local $fact24 i64)\n    (local $fact25 i64)\n    (local $fact26 i64)\n    (local $fact27 i64)\n    (local $fact28 i64)\n    (local $fact29 i64)\n    (local $fact30 i64)\n    (local $fact31 i64)\n    (local $fact32 i64)\n    (local $fact33 i64)\n    (local $fact34 i64)\n    (local $fact35 i64)\n    (local $fact36 i64)\n    (local $fact37 i64)\n    (local $fact38 i64)\n    (local $fact39 i64)\n    (local $fact40 i64)\n    (local $fact41 i64)\n    (local $fact42 i64)\n    (local $fact43 i64)\n    (local $fact44 i64)\n    (local $fact45 i64)\n    (local $fact46 i64)\n    (local $fact47 i64)\n    (local $fact48 i64)\n    (local $fact49 i64)\n    (local $fact50 i64)\n    (local $fact51 i64)\n    (local $fact52 i64)\n    (local $fact53 i64)\n    (local $fact54 i64)\n    (local $fact55 i64)\n    (local $fact56 i64)\n    (local $fact57 i64)\n    (local $fact58 i64)\n    (local $fact59 i64)\n    (local $fact60 i64)\n    (local $fact61 i64)\n    (local $fact62 i64)\n    (local $fact63 i64)\n    (local $fact64 i64)\n    (local $fact65 i64)\n    (local $fact66 i64)\n    (local $fact67 i64)\n    (local $fact68 i64)\n    (local"
+  },
+  "wat/digits_2_100": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "expected `)`\n     --> <anon>:78:23\n      |\n   78 |     (local $temp66 i64\n      |                       ^",
+   "code": "(module\n  (memory 1)\n  (func $solve (export \"solve\") (result i64)\n    (local $n i64)\n    (local $sum i64)\n    (local $temp i64)\n    (local $divisor i64)\n    (local $remainder i64)\n    (local $power i64)\n    (local $base i64)\n    (local $exp i64)\n    (local $result i64)\n    (local $carry i64)\n    (local $temp2 i64)\n    (local $temp3 i64)\n    (local $temp4 i64)\n    (local $temp5 i64)\n    (local $temp6 i64)\n    (local $temp7 i64)\n    (local $temp8 i64)\n    (local $temp9 i64)\n    (local $temp10 i64)\n    (local $temp11 i64)\n    (local $temp12 i64)\n    (local $temp13 i64)\n    (local $temp14 i64)\n    (local $temp15 i64)\n    (local $temp16 i64)\n    (local $temp17 i64)\n    (local $temp18 i64)\n    (local $temp19 i64)\n    (local $temp20 i64)\n    (local $temp21 i64)\n    (local $temp22 i64)\n    (local $temp23 i64)\n    (local $temp24 i64)\n    (local $temp25 i64)\n    (local $temp26 i64)\n    (local $temp27 i64)\n    (local $temp28 i64)\n    (local $temp29 i64)\n    (local $temp30 i64)\n    (local $temp31 i64)\n    (local $temp32 i64)\n    (local $temp33 i64)\n    (local $temp34 i64)\n    (local $temp35 i64)\n    (local $temp36 i64)\n    (local $temp37 i64)\n    (local $temp38 i64)\n    (local $temp39 i64)\n    (local $temp40 i64)\n    (local $temp41 i64)\n    (local $temp42 i64)\n    (local $temp43 i64)\n    (local $temp44 i64)\n    (local $temp45 i64)\n    (local $temp46 i64)\n    (local $temp47 i64)\n    (local $temp48 i64)\n    (local $temp49 i64)\n    (local $temp50 i64)\n    (local $temp51 i64)\n    (local $temp52 i64)\n    (local $temp53 i64)\n    (local $temp54 i64)\n    (local $temp55 i64)\n    (local $temp56 i64)\n    (local $temp57 i64)\n    (local $temp58 i64)\n    (local $temp59 i64)\n    (local $temp60 i64)\n    (local $temp61 i64)\n    (local $temp62 i64)\n    (local $temp63 i64)\n    (local $temp64 i64)\n    (local $temp65 i64)\n    (local $temp66 i64"
+  },
+  "wat/modpow": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "empty identifier\n     --> <anon>:73:12\n      |\n   73 |     (local $\n      |            ^",
+   "code": "(module\n  (memory 1)\n  (func $pow (export \"solve\") (result i64)\n    (local $base i64)\n    (local $exp i64)\n    (local $result i64)\n    (local $mod i64)\n    (local $temp i64)\n    (local $i i64)\n    (local $j i64)\n    (local $k i64)\n    (local $carry i64)\n    (local $dividend i64)\n    (local $divisor i64)\n    (local $quotient i64)\n    (local $remainder i64)\n    (local $pow_result i64)\n    (local $pow_base i64)\n    (local $pow_exp i64)\n    (local $pow_mod i64)\n    (local $pow_temp i64)\n    (local $pow_i i64)\n    (local $pow_j i64)\n    (local $pow_k i64)\n    (local $pow_carry i64)\n    (local $pow_dividend i64)\n    (local $pow_divisor i64)\n    (local $pow_quotient i64)\n    (local $pow_remainder i64)\n    (local $pow_pow_result i64)\n    (local $pow_pow_base i64)\n    (local $pow_pow_exp i64)\n    (local $pow_pow_mod i64)\n    (local $pow_pow_temp i64)\n    (local $pow_pow_i i64)\n    (local $pow_pow_j i64)\n    (local $pow_pow_k i64)\n    (local $pow_pow_carry i64)\n    (local $pow_pow_dividend i64)\n    (local $pow_pow_divisor i64)\n    (local $pow_pow_quotient i64)\n    (local $pow_pow_remainder i64)\n    (local $pow_pow_pow_result i64)\n    (local $pow_pow_pow_base i64)\n    (local $pow_pow_pow_exp i64)\n    (local $pow_pow_pow_mod i64)\n    (local $pow_pow_pow_temp i64)\n    (local $pow_pow_pow_i i64)\n    (local $pow_pow_pow_j i64)\n    (local $pow_pow_pow_k i64)\n    (local $pow_pow_pow_carry i64)\n    (local $pow_pow_pow_dividend i64)\n    (local $pow_pow_pow_divisor i64)\n    (local $pow_pow_pow_quotient i64)\n    (local $pow_pow_pow_remainder i64)\n    (local $pow_pow_pow_pow_result i64)\n    (local $pow_pow_pow_pow_base i64)\n    (local $pow_pow_pow_pow_exp i64)\n    (local $pow_pow_pow_pow_mod i64)\n    (local $pow_pow_pow_pow_temp i64)\n    (local $pow_pow_pow_pow_i i64)\n    (local $pow_pow_pow_pow_j i64)\n    (local $pow_pow_pow_pow_k i64)\n    (local $pow_pow_pow_pow_carry i64)\n    (local $pow_pow_pow_pow_dividend i64)\n    (local $pow_pow_pow_pow_divisor i64)\n    (local $pow_pow_pow_pow_quotient i64)\n    (local $pow_pow_pow_pow_remainder i64)\n    (local $pow_pow_pow_pow_pow_result i64)\n    (local $pow_pow_pow_pow_pow_base i64)\n    (local $pow_pow_pow_pow_pow_exp i64)\n    (local $pow_pow_pow_pow_pow_mod i64)\n    (local $"
+  },
+  "wat/lcg_median": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "unknown operator or unexpected token\n     --> <anon>:51:6\n      |\n   51 |     (local $x0 i64)\n      |      ^",
+   "code": "(module\n  (memory 1)\n  (func $solve (export \"solve\") (result i64)\n    (local $x i64)\n    (local $sorted i64)\n    (local $i i32)\n    (local $j i32)\n    (local $temp i64)\n    (local $count i32)\n    \n    ;; Initialize x0\n    (local.set $x (i64.const 42))\n    \n    ;; Generate x1 to x51\n    (loop $gen_loop\n      (local.get $x)\n      (i32.const 1103515245)\n      (i32.const 12345)\n      (i64.mul)\n      (i64.add)\n      (i32.const 2147483648)\n      (i64.rem_u)\n      (local.set $x)\n      (i32.const 51)\n      (local.get $i)\n      (i32.lt_s)\n      (if\n        (then\n          (local.get $i)\n          (i32.const 1)\n          (i32.add)\n          (local.set $i)\n          (br $gen_loop)\n        )\n        (else\n          br $sort_loop\n        )\n      )\n    )\n    \n    ;; Sort the 51 values (x0 to x50) into a linear array\n    ;; We will store them in memory starting at offset 0\n    ;; x0 is at 0, x1 at 1, ..., x50 at 50\n    \n    ;; Copy generated values to memory (x1 to x51)\n    ;; Note: x0 was overwritten in the loop, so we need to save it or recompute.\n    ;; Let's restructure: save x0 before loop, then loop generates x1..x51.\n    ;; Actually, the loop above overwrites x. Let's fix the logic.\n    \n    ;; Re-implementation with correct storage\n    (local $x0 i64)\n    (local $curr i64)\n    (local $idx i32)\n    \n    ;; Save x0\n    (i64.const 42)\n    (local.set $x0)\n    \n    ;; Generate x1..x51 into memory\n    (local $mem_ptr i32)\n    (i32.const 0)\n    (local.set $mem_ptr)\n    \n    (loop $store_loop\n      (local.get $x0)\n      (i32.const 1103515245)\n      (i32.const 12345)\n      (i64.mul)\n      (i64.add)\n      (i32.const 2147483648)\n      (i64.rem_u)\n      (local.set $curr)\n      \n      ;; Store curr at $mem_ptr\n      (local.get $mem_ptr)\n      (local.get $curr)\n      (i32.store8)\n      \n      (i32.const 51)\n      (local.get $idx)\n      (i32.lt_s)\n      (if\n        (then\n          (local.get $idx)\n          (i32.const 1)\n          (i32.add)\n          (local.set $idx)\n          (br $store_loop)\n        )\n        (else\n          br $sort_loop\n        )\n      )\n    )\n    \n    ;; Now we have x0 at 0, x1 at 1, ..., x50 at 50 in memory.\n    ;; We need to sort these 51 elements.\n    ;; Since 51 is small, we can use a simple bubble sort or insertion sort.\n    ;; Let's use a simple selection sort for clarity and correctness.\n    \n    ;; Sort array of "
+  },
+  "wat/double_palindromes": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "expected an instruction\n     --> <anon>:99:1\n      |\n   99 | \n      | ^",
+   "code": "(module\n  (memory 1)\n  (func $solve (export \"solve\") (result i64)\n    (local $i i32)\n    (local $sum i64)\n    (local $n i64)\n    (local $base10 i64)\n    (local $base2 i64)\n    (local $rev10 i64)\n    (local $rev2 i64)\n    (local $temp i64)\n    (local $div i64)\n    (local $mod i64)\n    (local $pow2 i64)\n    (local $bit i64)\n    \n    (local.get $sum)\n    (i64.const 0)\n    (local.set $sum)\n    \n    (i64.const 1)\n    (local.set $i)\n    \n    (block $outer\n      (loop $loop\n        (i64.lt_s (local.get $i) (i64.const 300000))\n        (br_if $outer)\n        \n        (i64.const 1)\n        (local.set $n)\n        (i64.add (local.get $i) (local.get $n))\n        (local.set $n)\n        \n        ;; Check if n is a palindrome in base 10\n        (i64.const 0)\n        (local.set $rev10)\n        (i64.const 1)\n        (local.set $temp)\n        (local.set $base10)\n        (local.set $div)\n        (local.set $mod)\n        \n        (block $check10\n          (loop $loop10\n            (i64.eqz (local.get $temp))\n            (br_if $check10)\n            \n            (local.get $temp)\n            (i64.rem_u (i64.const 10))\n            (local.set $mod)\n            \n            (i64.add (local.get $rev10) (local.get $mod))\n            (i64.shl (i64.const 1))\n            (local.set $temp)\n            (local.set $rev10)\n            \n            (i64.gt_s (local.get $temp) (local.get $n))\n            (br_if $check10)\n            \n            (i64.const 1)\n            (local.set $div)\n            (i64.div_u (local.get $temp) (i64.const 10))\n            (local.set $div)\n            \n            (i64.eqz (local.get $div))\n            (br_if $check10)\n            \n            (i64.const 1)\n            (local.set $temp)\n            (local.set $base10)\n            (local.set $div)\n            (local.set $mod)\n            \n            (block $check10b\n              (loop $loop10b\n                (i64.eqz (local.get $temp))\n                (br_if $check10b)\n                \n                (local.get $temp)\n                (i64.rem_u (i64.const 10))\n                (local.set $mod)\n                \n                (i64.add (local.get $rev10) (local.get $mod))\n                (i64.shl (i64.const 1))\n                (local.set $temp)\n                (local.set $rev10)\n                \n                (i64.gt_s (local.get $temp) (local.get $n))\n                (br_if $check10b)\n                \n                (i64.const 1)\n                (local.set $div)\n                (i64.div_u (local.get $temp) (i64.const 10))\n                (local.set $div)\n                \n                (i64.eqz (local.get $div))\n                (br_if $check10b)\n                \n"
+  },
+  "wat/vowels": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "expected `)`\n     --> <anon>:77:24\n      |\n   77 |     (local $char61 i32)\n      |                        ^",
+   "code": "(module\n  (memory 1)\n  (data (i32.const 0) \"the quick brown fox jumps over the lazy dog while seven wizards quietly hex jumbo bags\")\n  (export \"solve\" (func $solve))\n  (func $solve (result i64)\n    (local $i i32)\n    (local $j i32)\n    (local $count i32)\n    (local $char i32)\n    (local $len i32)\n    (local $pos i32)\n    (local $vowel i32)\n    (local $lowercase i32)\n    (local $offset i32)\n    (local $idx i32)\n    (local $result i32)\n    (local $temp i32)\n    (local $char2 i32)\n    (local $char3 i32)\n    (local $char4 i32)\n    (local $char5 i32)\n    (local $char6 i32)\n    (local $char7 i32)\n    (local $char8 i32)\n    (local $char9 i32)\n    (local $char10 i32)\n    (local $char11 i32)\n    (local $char12 i32)\n    (local $char13 i32)\n    (local $char14 i32)\n    (local $char15 i32)\n    (local $char16 i32)\n    (local $char17 i32)\n    (local $char18 i32)\n    (local $char19 i32)\n    (local $char20 i32)\n    (local $char21 i32)\n    (local $char22 i32)\n    (local $char23 i32)\n    (local $char24 i32)\n    (local $char25 i32)\n    (local $char26 i32)\n    (local $char27 i32)\n    (local $char28 i32)\n    (local $char29 i32)\n    (local $char30 i32)\n    (local $char31 i32)\n    (local $char32 i32)\n    (local $char33 i32)\n    (local $char34 i32)\n    (local $char35 i32)\n    (local $char36 i32)\n    (local $char37 i32)\n    (local $char38 i32)\n    (local $char39 i32)\n    (local $char40 i32)\n    (local $char41 i32)\n    (local $char42 i32)\n    (local $char43 i32)\n    (local $char44 i32)\n    (local $char45 i32)\n    (local $char46 i32)\n    (local $char47 i32)\n    (local $char48 i32)\n    (local $char49 i32)\n    (local $char50 i32)\n    (local $char51 i32)\n    (local $char52 i32)\n    (local $char53 i32)\n    (local $char54 i32)\n    (local $char55 i32)\n    (local $char56 i32)\n    (local $char57 i32)\n    (local $char58 i32)\n    (local $char59 i32)\n    (local $char60 i32)\n    (local $char61 i32)"
+  },
+  "wat/lattice_paths": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "expected `)`\n     --> <anon>:86:11\n      |\n   86 |     (local\n      |           ^",
+   "code": "(module\n  (memory 1)\n  (func $solve (export \"solve\") (result i64)\n    (local $n i32)\n    (local $result i64)\n    (local $i i32)\n    (local $j i32)\n    (local $sum i64)\n    (local $path i64)\n    (local $count i64)\n    (local $temp i64)\n    (local $grid i32)\n    (local $rows i32)\n    (local $cols i32)\n    (local $k i32)\n    (local $m i32)\n    (local $p i32)\n    (local $q i32)\n    (local $r i32)\n    (local $s i32)\n    (local $t i32)\n    (local $u i32)\n    (local $v i32)\n    (local $w i32)\n    (local $x i32)\n    (local $y i32)\n    (local $z i32)\n    (local $a i32)\n    (local $b i32)\n    (local $c i32)\n    (local $d i32)\n    (local $e i32)\n    (local $f i32)\n    (local $g i32)\n    (local $h i32)\n    (local $i2 i32)\n    (local $j2 i32)\n    (local $k2 i32)\n    (local $l i32)\n    (local $m2 i32)\n    (local $n2 i32)\n    (local $o i32)\n    (local $p2 i32)\n    (local $q2 i32)\n    (local $r2 i32)\n    (local $s2 i32)\n    (local $t2 i32)\n    (local $u2 i32)\n    (local $v2 i32)\n    (local $w2 i32)\n    (local $x2 i32)\n    (local $y2 i32)\n    (local $z2 i32)\n    (local $a2 i32)\n    (local $b2 i32)\n    (local $c2 i32)\n    (local $d2 i32)\n    (local $e2 i32)\n    (local $f2 i32)\n    (local $g2 i32)\n    (local $h2 i32)\n    (local $i3 i32)\n    (local $j3 i32)\n    (local $k3 i32)\n    (local $l3 i32)\n    (local $m3 i32)\n    (local $n3 i32)\n    (local $o3 i32)\n    (local $p3 i32)\n    (local $q3 i32)\n    (local $r3 i32)\n    (local $s3 i32)\n    (local $t3 i32)\n    (local $u3 i32)\n    (local $v3 i32)\n    (local $w3 i32)\n    (local $x3 i32)\n    (local $y3 i32)\n    (local $z3 i32)\n    (local $a3 i32)\n    (local $b3 i32)\n    (local $c3 i32)\n    (local $d3 i32)\n    (local $e3 i32)\n    (local $f3 i32)\n    (local"
+  },
+  "asm/primes_sum": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "/tmpa_b0n8yr/solve.s:95: Error: operand size mismatch for `mov'\n/tmp/tmpa_b0n8yr/solve.s:96: Error: operand size mismatch for `mov'\n/tmp/tmpa_b0n8yr/solve.s:98: Error: operand size mismatch for `cmp'\n",
+   "code": ".global solve\nsolve:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 128\n    mov rdi, 20000\n    mov rsi, 2\n    mov rax, 0\n    mov rcx, 0\n    mov rdx, 0\n\n.is32:\n    cmp rdi, rsi\n    jge .is32_end\n    mov rax, rsi\n    mov rdx, 1\n    mov rsi, 2\n    mov rdi, rax\n    mov rcx, rax\n    .is32_loop:\n        cmp rdi, rsi\n        jge .is32_loop_end\n        mov rdx, 1\n        mov rsi, 2\n        mov rdi, rsi\n        mov rcx, rdi\n        .is32_inner:\n            cmp rdi, rcx\n            jge .is32_inner_end\n            mov rdx, 1\n            mov rsi, 2\n            mov rdi, rsi\n            mov rcx, rdi\n            .is32_inner_inner:\n                cmp rdi, rcx\n                jge .is32_inner_inner_end\n                mov rdx, 1\n                mov rsi, 2\n                mov rdi, rsi\n                mov rcx, rdi\n                .is32_inner_inner_inner:\n                    cmp rdi, rcx\n                    jge .is32_inner_inner_inner_end\n                    mov rdx, 1\n                    mov rsi, 2\n                    mov rdi, rsi\n                    mov rcx, rdi\n                    .is32_inner_inner_inner_inner:\n                        cmp rdi, rcx\n                        jge .is32_inner_inner_inner_inner_end\n                        mov rdx, 1\n                        mov rsi, 2\n                        mov rdi, rsi\n                        mov rcx, rdi\n                        .is32_inner_inner_inner_inner_inner:\n                            cmp rdi, rcx\n                            jge .is32_inner_inner_inner_inner_inner_end\n                            mov rdx, 1\n                            mov rsi, 2\n                            mov rdi, rsi\n                            mov rcx, rdi\n                            .is32_inner_inner_inner_inner_inner_inner:\n                                cmp rdi, rcx\n                                jge .is32_inner_inner_inner_inner_inner_inner_end\n                                mov rdx, 1\n                                mov rsi, 2\n                                mov rdi, rsi\n                                mov rcx, rdi\n                                .is32_inner_inner_inner_inner_inner_inner_inner:\n                                    cmp rdi, rcx\n                                    jge .is32_inner_inner_inner_inner_inner_inner_inner_end\n                                    mov rdx, 1\n                                    mov rsi, 2\n                                    mov rdi, rsi\n                                    mov rcx, rdi\n                                    .is32_inner_inner_inner_inner_inner_inner_inner_inner:\n                                        cmp rdi, rcx\n                                        jge .is32_inner_inner_inner_inner_inner_inner_inner_inner_end\n                                        mov rdx, 1\n                                        mov rsi, 2\n                                        mov rdi, rsi\n                                        mov rcx, rdi\n                                        .is32_inner_inner_inner_inner_inner_inner_inner_inner_inner:\n                                            cmp rdi, rcx\n                                            jge .is32_inner_inner_inner_inner_inner_inner_inner_inner_inner_end\n                                            mov rdx, 1\n                                            mov rsi, 2\n                                            mov rdi, rsi\n                                            mov rcx, rdi\n                                            .is32_inner_inner_inner_inner_inner_inner_inner_inner_inner_inner:\n                                                cmp rdi, rcx\n                                                jge .is32_inner_inner_inner_inner_inner_inner_inner_inner_inner_inner_end\n                                                mov rdx, 1\n                                                mov rsi, 2\n                                                mov rdi, rsi\n                                                mov rcx, rdi\n                                                .is32_inner_inner_inner_inner_inner_inner_inner_inner_inner_inner_inner:\n                                                    cmp rdi, rcx\n                                                    jge .is32_inner_inner_inner"
+  },
+  "asm/collatz": {
+   "tokens": 283,
+   "status": "compile_error",
+   "correct": false,
+   "output": " suffix given and no register operands; using default for `inc'\n/tmp/tmpdl3459cj/solve.s:47: Error: operand size mismatch for `mov'\n/tmp/tmpdl3459cj/solve.s:48: Error: operand size mismatch for `add'\n",
+   "code": ".global solve\nsolve:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 128\n\n    mov rax, 1\n    mov rcx, 10000\n    mov rdx, 0\n\nloop_start:\n    cmp rax, rcx\n    jge loop_end\n\n    mov rsi, rax\n    mov rdi, 0\n    mov rdx, 0\n\n    .Lcheck:\n    cmp rdi, 1\n    jne .Lnext\n    cmp rsi, 1\n    jne .Lnext\n    jmp .Ldone\n\n.Lnext:\n    mov rax, rsi\n    mov rcx, 0\n    mov rdx, 0\n\n    .Lcollatz:\n    test rax, rax\n    jz .Ldone\n\n    mov rax, rax\n    mov rcx, 3\n    mul rcx\n    add rax, 1\n    mov rsi, rax\n    jmp .Lcollatz\n\n.Ldone:\n    inc rdx\n    jmp .Lcheck\n\nloop_end:\n    mov rax, rdx\n    add rsp, 128\n    pop rbp\n    ret\n"
+  },
+  "asm/lcm_1_25": {
+   "tokens": 525,
+   "status": "compile_error",
+   "correct": false,
+   "output": " `mov'\n/tmp/tmpdr_rouqn/solve.s:47: Warning: no instruction mnemonic suffix given and no register operands; using default for `mul'\n/tmp/tmpdr_rouqn/solve.s:50: Error: operand size mismatch for `add'\n",
+   "code": ".global solve\nsolve:\n    # Initialize rax to 1 (identity for LCM)\n    xor     rax, rax\n    inc     rax\n\n    # Loop from 2 to 25\n    mov     rcx, 2\n    mov     rdx, 25\n\nloop_start:\n    cmp     rcx, rdx\n    jg      loop_end\n\n    # rax = LCM(rax, rcx) = (rax * rcx) / GCD(rax, rcx)\n    # Since rax and rcx are coprime if we process sequentially and divide out factors,\n    # we can just multiply and divide by GCD.\n    # However, a simpler approach for LCM(a, b) is (a*b)/GCD(a,b).\n    # We need to compute GCD(rax, rcx).\n\n    # Compute GCD(rax, rcx) using Euclidean algorithm\n    mov     r8, rax\n    mov     r9, rcx\n\ngcd_loop:\n    test    r8, r8\n    jz      gcd_done\n    xor     rdx, rdx\n    div     r9          # rax = r8 / r9, rdx = r8 % r9\n    mov     r8, rdx\n    jmp     gcd_loop\n\ngcd_done:\n    # r8 now holds GCD(rax, rcx)\n\n    # Compute (rax * rcx) / r8\n    # We do this as (rax / r8) * rcx to avoid overflow, though with numbers up to 25 it's safe.\n    # Actually, rax can be large, but rcx is small.\n    # Let's do: rax = (rax * rcx) / r8\n    # Since r8 divides rax, we can do: rax = (rax / r8) * rcx\n\n    mov     r8, rax\n    mov     r9, r8\n    div     r8          # rax = rax / r8, rdx = remainder (should be 0)\n    # Now rax = rax / gcd\n    mov     r8, rcx\n    mul     r8          # rax = rax * rcx\n\nloop_end:\n    add     rcx, 1\n    jmp     loop_start\n"
+  },
+  "asm/fib_mod": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "othing\n/tmp/tmpbqg9_qoj/solve.s:66: Error: invalid operands (*UND* and *UND* sections) for `+'\n/tmp/tmpbqg9_qoj/solve.s: Error: invalid operands (*ABS* and *UND* sections) for `%' when setting `next'\n",
+   "code": ".global solve\nsolve:\n    push rbp\n    mov rbp, rsp\n    mov rax, 0          ; F(0)\n    mov rcx, 1          ; F(1)\n    mov rdx, 80         ; n = 80\n    mov r8, 1000000007  ; MOD\n\n    ; Iterative computation: F(i) = (F(i-1) + F(i-2)) % MOD\n    ; We maintain: rax = F(i-1), rcx = F(i-2)\n    ; Loop runs 80 times to reach F(80)\n    ; After loop: rax holds F(80)\n\n    mov r9, 0           ; i = 0\nloop_fib:\n    cmp r9, rdx\n    jl .next_iter\n    ; Loop finished, rax contains F(80)\n    jmp .done\n\n.next_iter:\n    ; Compute next = (current + prev) % MOD\n    add rax, rcx\n    cmp rax, r8\n    cmovg rax, 0        ; If rax >= MOD, set rax = 0 (effectively rax -= MOD)\n    ; Note: cmovg with 0 works because if rax >= MOD, we want rax - MOD.\n    ; However, cmovg sets rax to 0 if condition is true, which is wrong.\n    ; Correction: use sub and conditional jump or proper cmov.\n    ; Let's re-evaluate: if rax >= MOD, rax = rax - MOD.\n    ; Since we only add once, rax can be at most 2*MOD - 2.\n    ; So one subtraction is enough.\n    cmp rax, r8\n    jge .sub_mod\n    jmp .update\n\n.sub_mod:\n    sub rax, r8\n\n.update:\n    ; Shift: new prev = current, new current = next\n    mov rcx, rax\n    mov rax, rcx\n    mov rcx, rax\n    mov rax, rcx\n    ; Wait, logic error in register mapping above.\n    ; Let's restart the loop logic clearly.\n    ; Before loop: rax = F(0), rcx = F(1)\n    ; We want to compute F(2) to F(80).\n    ; In each iteration:\n    ;   temp = rax + rcx\n    ;   rax = temp\n    ;   rcx = old_rax\n    ; But we need to mod at each step.\n    ; Actually, standard approach:\n    ;   next = (rax + rcx) % MOD\n    ;   rax = next\n    ;   rcx = old_rax\n    ; But we need to preserve old_rax before overwriting.\n    ; Let's fix the loop body.\n\n    ; Corrected loop body logic:\n    ; We are at start of iteration i (0 to 79).\n    ; rax = F(i), rcx = F(i+1)\n    ; We want to compute F(i+2).\n    ; next = (rax + rcx) % MOD\n    ; rax = next\n    ; rcx = old_rax\n    ; But wait, initially rax=F(0), rcx=F(1).\n    ; After 1st iter: rax=F(2), rcx=F(1) -> then we need to shift rcx to F(1) for next?\n    ; No, we need:\n    ;   temp = rax + rcx\n    ;   rax = temp\n    ;   rcx = old_rax\n    ; But we must mod temp.\n    ; Let's restructure:\n    ;   temp = rax + rcx\n    ;   cmp temp, MOD\n    ;   jge sub_mod\n    ;   rax = temp\n    ;   jmp shift\n    ; sub_mod:\n    ;   sub rax,"
+  },
+  "asm/divisors": {
+   "tokens": 100,
+   "status": "compile_error",
+   "correct": false,
+   "output": "eprecated and will be removed in a future version of the linker\n/usr/bin/ld: /tmp/ccSq7zn3.o: in function `solve':\n(.text+0x3): undefined reference to `rax'\ncollect2: error: ld returned 1 exit status\n",
+   "code": ".global solve\nsolve:\n    # 9699690 = 2 * 3 * 5 * 7 * 11 * 13 * 17 * 19\n    # Exponents are all 1.\n    # Number of divisors = (1+1)^8 = 2^8 = 256.\n    mov     $256, rax\n    ret\n"
+  },
+  "asm/binomial": {
+   "tokens": 179,
+   "status": "compile_error",
+   "correct": false,
+   "output": " `div'\n/tmp/tmpk5z8i4m0/solve.s:28: Warning: no instruction mnemonic suffix given and no register operands; using default for `inc'\n/tmp/tmpk5z8i4m0/solve.s:32: Error: operand size mismatch for `add'\n",
+   "code": ".global solve\nsolve:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 128\n\n    mov rdi, 40\n    mov rsi, 20\n    mov rdx, 20\n\n    mov rax, 1\n    mov rcx, 1\n\n    .loop:\n        cmp rdx, 0\n        jz .done\n\n        mov r8, rdi\n        sub r8, rdx\n        mov r9, rax\n        mul r8\n        div r9\n\n        mov rax, rdi\n        mul rsi\n        div rdx\n\n        inc rdx\n        jmp .loop\n\n    .done:\n    add rsp, 128\n    pop rbp\n    ret\n"
+  },
+  "asm/digits_2_100": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "am1txw/solve.s:92: Error: operand size mismatch for `xor'\n/tmp/tmpp_am1txw/solve.s:93: Error: operand size mismatch for `xor'\n/tmp/tmpp_am1txw/solve.s:94: Error: number of operands mismatch for `xor'\n",
+   "code": ".global solve\nsolve:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 128\n    mov rax, 2\n    mov rcx, 100\n    mov rdi, rax\n    mov rsi, rcx\n    xor rdx, rdx\n    xor r8, r8\n    xor r9, r9\n    xor r10, r10\n    xor r11, r11\n    xor r12, r12\n    xor r13, r13\n    xor r14, r14\n    xor r15, r15\n    xor r16, r16\n    xor r17, r17\n    xor r18, r18\n    xor r19, r19\n    xor r20, r20\n    xor r21, r21\n    xor r22, r22\n    xor r23, r23\n    xor r24, r24\n    xor r25, r25\n    xor r26, r26\n    xor r27, r27\n    xor r28, r28\n    xor r29, r29\n    xor r30, r30\n    xor r31, r31\n    xor r32, r32\n    xor r33, r33\n    xor r34, r34\n    xor r35, r35\n    xor r36, r36\n    xor r37, r37\n    xor r38, r38\n    xor r39, r39\n    xor r40, r40\n    xor r41, r41\n    xor r42, r42\n    xor r43, r43\n    xor r44, r44\n    xor r45, r45\n    xor r46, r46\n    xor r47, r47\n    xor r48, r48\n    xor r49, r49\n    xor r50, r50\n    xor r51, r51\n    xor r52, r52\n    xor r53, r53\n    xor r54, r54\n    xor r55, r55\n    xor r56, r56\n    xor r57, r57\n    xor r58, r58\n    xor r59, r59\n    xor r60, r60\n    xor r61, r61\n    xor r62, r62\n    xor r63, r63\n    xor r64, r64\n    xor r65, r65\n    xor r66, r66\n    xor r67, r67\n    xor r68, r68\n    xor r69, r69\n    xor r70, r70\n    xor r71, r71\n    xor r72, r72\n    xor r73, r73\n    xor r74, r74\n    xor r75, r75\n    xor r76, r76\n    xor r77, r77\n    xor r78, r78\n    xor r79, r79\n    xor r80, r80\n    xor r81, r81\n    xor r82, r82\n    xor r83, r83\n    xor r84, r84\n    xor r85, r85\n    xor r86, r86\n    xor r87, r87\n    xor r88, r88\n    xor r89, r89\n    xor r90, r90\n    xor"
+  },
+  "asm/modpow": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "`mov'\n/tmp/tmpq8pzfj6w/solve.s:78: Warning: no instruction mnemonic suffix given and no register operands; using default for `idiv'\n/tmp/tmpq8pzfj6w/solve.s:79: Error: operand size mismatch for `mov'\n",
+   "code": ".global solve\nsolve:\n    # Constants\n    # MOD = 1000000007\n    # BASE = 3\n    # EXP = 1000000000\n    \n    # We need to compute 3^1000000000 mod 1000000007\n    # Since the exponent is large, we use modular exponentiation.\n    # However, 10^9 is too large for a single 64-bit multiplication without overflow\n    # if we are not careful, but actually 10^9 fits in 64 bits.\n    # The issue is that during intermediate steps, the product of two numbers < MOD\n    # can exceed 2^64. MOD^2 is approx 10^18, which fits in 64 bits (max ~1.8e19).\n    # So standard 64-bit multiplication is safe for modulo 1000000007.\n    \n    # Initialize result = 1\n    mov rax, 1\n    \n    # Initialize base = 3\n    mov rdx, 3\n    \n    # Initialize exponent = 1000000000\n    mov rsi, 1000000000\n    \n    # Initialize modulus = 1000000007\n    mov rdi, 1000000007\n    \n    # Modular exponentiation loop: result = (result * base) % mod\n    # while exponent > 0\n    # If exponent is odd: result = (result * base) % mod\n    # exponent = exponent / 2\n    # base = (base * base) % mod\n    \n    # We will implement this iteratively.\n    # Since the exponent is 10^9, we need about 30 iterations.\n    \n.loop:\n    # Check if exponent is 0\n    test rsi, rsi\n    jz .done\n    \n    # If exponent is odd\n    test rsi, 1\n    jz .even_exp\n    \n    # result = (result * base) % mod\n    mul rdx          # rax = rax * rdx (base), rdx = high part (should be 0 since mod < 2^32)\n    # Now rax = result * base. We need rax % mod.\n    # Since result < mod and base < mod, result*base < mod^2 approx 10^18.\n    # 10^18 < 2^60, so it fits in 64 bits.\n    # We can use idiv to get remainder, but idiv is slow.\n    # Better: use a custom division or rely on the fact that we can do:\n    # rax = rax % rdi\n    # But x86-64 doesn't have a direct mod instruction.\n    # We can use idiv rdi, but that divides by rdi and sets quotient in rax, remainder in edx.\n    # Wait, idiv rdi: rax = dividend, rdi = divisor -> rax = quotient, edx = remainder.\n    # So:\n    mov rax, rax     # dividend\n    idiv rdi         # rax = rax / rdi, edx = rax % rdi\n    mov rax, edx     # result = remainder\n    \n    # exponent = exponent / 2\n    shr rsi, 1\n    \n    # base = (base * base) % mod\n    mul rdx          # rax = rdx * rdx\n    mov rax, rax\n    idiv rdi\n    mov rdx, edx     # base = remainder\n    \n    jmp .loop\n\n.even_exp:\n    # exponent is even, so we don't update result\n    # base = (base * base) % mod\n    mul rdx\n    mov rax, rax\n    idiv rdi\n    mov rdx, edx\n    \n    #"
+  },
+  "asm/lcg_median": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "\n/tmp/tmp2x7tgtni/solve.s:73: Error: operand size mismatch for `mov'\n/tmp/tmp2x7tgtni/solve.s:74: Error: operand size mismatch for `mov'\n/tmp/tmp2x7tgtni/solve.s:76: Error: unknown pseudo-op: `.sort'\n",
+   "code": ".global solve\nsolve:\n    # Initialize x0 = 42\n    mov     rax, 42\n    mov     rcx, 0          # k = 0\n\n    # Generate x1 to x51\n    # Loop 50 times to compute x1..x51\n    mov     rdx, 0          # x_k\n    mov     r8, 0           # counter for x values (0 to 50)\n    mov     r9, 0           # index for storage (0 to 50)\n\n    # We need 51 values. Loop 51 times.\n    # First iteration: compute x1, store at index 0\n    # Actually, let's do: compute x0 (already in rax), store at 0.\n    # Then loop 50 times to compute x1..x51.\n\n    # Store x0\n    mov     rax, 42\n    mov     [rbx], rax      # rbx points to start of array\n\n    mov     rcx, 0          # k = 0\n    mov     rdx, 42         # x_k = 42\n\n    # Loop 50 times to generate x1 to x50? No, we need x1 to x51.\n    # So we need 50 iterations to get x1..x50, plus one more for x51?\n    # x(k+1) depends on x(k).\n    # Start: x0 = 42.\n    # Iter 1: x1 = f(x0)\n    # ...\n    # Iter 50: x50 = f(x49)\n    # Iter 51: x51 = f(x50)\n    # So we need 51 iterations after storing x0.\n\n    mov     r8, 0           # iteration counter (0 to 50)\n    mov     r9, 1           # current x value (x_k)\n\n    # We'll use a loop to generate 51 new values (x1 to x51)\n    # Store them in [rbx+1] to [rbx+51]\n\n    mov     rdx, 0          # x_k\n    mov     r8, 0           # i = 0\n\n    # Loop 51 times\n    mov     r9d, 51         # limit\n    .gen_loop:\n        cmp     r8, r9d\n        jge     .done_gen\n\n        # x_next = (1103515245 * x_k + 12345) mod 2^31\n        # 1103515245 = 0x412C3F7D\n        # 12345 = 0x3039\n        # mod 2^31 means we can ignore bits 32 and above.\n\n        mov     eax, r8d    # x_k in eax (low 32 bits)\n        mov     ecx, 0x412C3F7D\n        imul   eax, ecx     # eax = x_k * 1103515245\n        add     eax, 0x3039 # + 12345\n        and     eax, 0x7FFFFFFF # mod 2^31\n\n        mov     [rbx+r8], eax\n        inc     r8\n\n        mov     r8d, eax    # x_k = x_next\n        jmp     .gen_loop\n\n    .done_gen:\n\n    # Now we have 51 values in [rbx] to [rbx+50]\n    # Sort them using insertion sort (simple and efficient for small N)\n    # We'll sort in place.\n\n    mov     r8, 0           # i = 0 (outer loop)\n    mov     r9, 50          # j limit\n\n    .sort"
+  },
+  "asm/double_palindromes": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "pgcj1jzsr/solve.s:125: Error: operand size mismatch for `mov'\n/tmp/tmpgcj1jzsr/solve.s:128: Error: operand size mismatch for `cmp'\n/tmp/tmpgcj1jzsr/solve.s:130: Error: operand size mismatch for `mov'\n",
+   "code": ".global solve\nsolve:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 1600000\n\n    mov rdi, 1\n    mov rsi, 299999\n\n    mov rax, 0\n    mov rcx, 0\n\n.l1:\n    cmp rdi, rsi\n    jge .l2\n\n    mov rdx, rdi\n    mov r8, 0\n    mov r9, 0\n    mov r10, 0\n    mov r11, 0\n\n.l2:\n    cmp rdx, 0\n    jz .l3\n    mov r11, rdx\n    mov rdx, rdx\n    mov r10, 0\n.l3:\n    xor rdx, rdx\n    mov r8, 0\n    mov r9, 0\n    mov r10, 0\n    mov r11, 0\n\n.l4:\n    cmp rdx, 0\n    jz .l5\n    mov r11, rdx\n    mov rdx, rdx\n    mov r10, 0\n.l5:\n    xor rdx, rdx\n    mov r8, 0\n    mov r9, 0\n    mov r10, 0\n    mov r11, 0\n\n.l6:\n    cmp rdx, 0\n    jz .l7\n    mov r11, rdx\n    mov rdx, rdx\n    mov r10, 0\n.l7:\n    xor rdx, rdx\n    mov r8, 0\n    mov r9, 0\n    mov r10, 0\n    mov r11, 0\n\n.l8:\n    cmp rdx, 0\n    jz .l9\n    mov r11, rdx\n    mov rdx, rdx\n    mov r10, 0\n.l9:\n    xor rdx, rdx\n    mov r8, 0\n    mov r9, 0\n    mov r10, 0\n    mov r11, 0\n\n.l10:\n    cmp rdx, 0\n    jz .l11\n    mov r11, rdx\n    mov rdx, rdx\n    mov r10, 0\n.l11:\n    xor rdx, rdx\n    mov r8, 0\n    mov r9, 0\n    mov r10, 0\n    mov r11, 0\n\n.l12:\n    cmp rdx, 0\n    jz .l13\n    mov r11, rdx\n    mov rdx, rdx\n    mov r10, 0\n.l13:\n    xor rdx, rdx\n    mov r8, 0\n    mov r9, 0\n    mov r10, 0\n    mov r11, 0\n\n.l14:\n    cmp rdx, 0\n    jz .l15\n    mov r11, rdx\n    mov rdx, rdx\n    mov r10, 0\n.l15:\n    xor rdx, rdx\n    mov r8, 0\n    mov r9, 0\n    mov r10, 0\n    mov r11, 0\n\n.l16:\n    cmp rdx, 0\n    jz .l17\n    mov r11, rdx\n    mov rdx, rdx\n    mov r10, 0\n.l17:\n    xor rdx, rdx\n    mov r8, 0\n    mov r9, 0\n    mov r10, 0\n    mov r11, 0\n\n.l18:\n    cmp rdx, 0\n    jz .l19\n    mov r11, r"
+  },
+  "asm/vowels": {
+   "tokens": 445,
+   "status": "compile_error",
+   "correct": false,
+   "output": ":77: Error: no such instruction: `db \"the quick brown fox jumps over the lazy dog while seven wizards quietly hex jumbo bags\",0'\n/tmp/tmpmc3lpee_/solve.s:79: Error: no such instruction: `equ $ - str'\n",
+   "code": ".global solve\nsolve:\n    push rbp\n    mov rbp, rsp\n    push rax\n    push rcx\n    push rdx\n    push rsi\n    push rdi\n    push rbx\n\n    # Initialize counter in rax\n    xor rax, rax\n\n    # Define the string and length\n    # String: \"the quick brown fox jumps over the lazy dog while seven wizards quietly hex jumbo bags\"\n    # Length: 112 characters (including spaces)\n    # We will use a loop to iterate through the string\n\n    # Load the string into rsi\n    lea rsi, [rel str]\n    # Load the length into rdx\n    lea rdx, [rel len]\n\n    # Loop through the string\n.loop:\n    cmp rdx, 0\n    je .done\n\n    # Get current character\n    mov al, [rsi]\n    cmp al, 'a'\n    jne .check2\n    inc rax\n    jmp .next_char\n\n.check2:\n    cmp al, 'e'\n    jne .check3\n    inc rax\n    jmp .next_char\n\n.check3:\n    cmp al, 'i'\n    jne .check4\n    inc rax\n    jmp .next_char\n\n.check4:\n    cmp al, 'o'\n    jne .check5\n    inc rax\n    jmp .next_char\n\n.check5:\n    cmp al, 'u'\n    jne .next_char\n    inc rax\n\n.next_char:\n    inc rsi\n    dec rdx\n    jmp .loop\n\n.done:\n    pop rbx\n    pop rdi\n    pop rsi\n    pop rdx\n    pop rcx\n    pop rax\n    pop rbp\n    ret\n\n.data\nstr:\n    db \"the quick brown fox jumps over the lazy dog while seven wizards quietly hex jumbo bags\", 0\nlen:\n    equ $ - str\n"
+  },
+  "asm/lattice_paths": {
+   "tokens": 900,
+   "status": "compile_error",
+   "correct": false,
+   "output": "p8lgvt_0v/solve.s:100: Error: operand size mismatch for `mov'\n/tmp/tmp8lgvt_0v/solve.s:101: Error: operand size mismatch for `mov'\n/tmp/tmp8lgvt_0v/solve.s:102: Error: operand size mismatch for `mov'\n",
+   "code": ".global solve\nsolve:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 128\n    mov rax, 0\n    mov rdi, 16\n    mov rsi, 16\n    mov rdx, 16\n    mov rcx, 16\n    mov r8, 0\n    mov r9, 0\n    mov r10, 0\n    mov r11, 0\n    mov r12, 0\n    mov r13, 0\n    mov r14, 0\n    mov r15, 0\n    mov r16, 0\n    mov r17, 0\n    mov r18, 0\n    mov r19, 0\n    mov r20, 0\n    mov r21, 0\n    mov r22, 0\n    mov r23, 0\n    mov r24, 0\n    mov r25, 0\n    mov r26, 0\n    mov r27, 0\n    mov r28, 0\n    mov r29, 0\n    mov r30, 0\n    mov r31, 0\n    mov r32, 0\n    mov r33, 0\n    mov r34, 0\n    mov r35, 0\n    mov r36, 0\n    mov r37, 0\n    mov r38, 0\n    mov r39, 0\n    mov r40, 0\n    mov r41, 0\n    mov r42, 0\n    mov r43, 0\n    mov r44, 0\n    mov r45, 0\n    mov r46, 0\n    mov r47, 0\n    mov r48, 0\n    mov r49, 0\n    mov r50, 0\n    mov r51, 0\n    mov r52, 0\n    mov r53, 0\n    mov r54, 0\n    mov r55, 0\n    mov r56, 0\n    mov r57, 0\n    mov r58, 0\n    mov r59, 0\n    mov r60, 0\n    mov r61, 0\n    mov r62, 0\n    mov r63, 0\n    mov r64, 0\n    mov r65, 0\n    mov r66, 0\n    mov r67, 0\n    mov r68, 0\n    mov r69, 0\n    mov r70, 0\n    mov r71, 0\n    mov r72, 0\n    mov r73, 0\n    mov r74, 0\n    mov r75, 0\n    mov r76, 0\n    mov r77, 0\n    mov r78, 0\n    mov r79, 0\n    mov r80, 0\n    mov r81, 0\n    mov r82, 0\n    mov r83, 0\n    mov r84, 0\n    mov r85, 0\n    mov r86, 0\n    mov r87, 0\n    mov r88, 0\n    mov r89, 0\n    mov r90, 0\n    mov r91, 0\n    mov r92, 0\n    mov r93, 0\n    mov r94, 0\n    mov r95, 0\n    mov r96, 0\n    mov r97, 0\n    mov r98, 0\n    mov r99, 0\n"
+  },
+  "hex/primes_sum": {
+   "tokens": 600,
+   "status": "compile_error",
+   "correct": false,
+   "output": "not an even-length hex string",
+   "code": "554889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54"
+  },
+  "hex/collatz": {
+   "tokens": 600,
+   "status": "runtime_error",
+   "correct": false,
+   "output": "Invalid memory read (UC_ERR_READ_UNMAPPED)",
+   "code": "31 0f 05 48 83 ec 28 48 89 7d f8 48 89 75 f0 48 89 7d f4 48 89 7d f8 48 89 75 f4 48 89 7d fc 48 89 75 00 48 89 7d 04 48 89 75 08 48 89 7d 0c 48 89 75 10 48 89 7d 14 48 89 75 18 48 89 7d 1c 48 89 75 20 48 89 7d 24 48 89 75 28 48 89 7d 2c 48 89 75 30 48 89 7d 34 48 89 75 38 48 89 7d 3c 48 89 75 40 48 89 7d 44 48 89 7d 48 48 89 7d 4c 48 89 7d 50 48 89 7d 54 48 89 7d 58 48 89 7d 5c 48 89 7d 60 48 89 7d 64 48 89 7d 68 48 89 7d 6c 48 89 7d 70 48 89 7d 74 48 89 7d 78 48 89 7d 7c 48 89 7d 80 48 89 7d 84 48 89 7d 88 48 89 7d 8c 48 89 7d 90 48 89 7d 94 48 89 7d 98 48 89 7d 9c 48 89 7d a0 48 89 7d a4 48 89 7d a8 48 "
+  },
+  "hex/lcm_1_25": {
+   "tokens": 600,
+   "status": "compile_error",
+   "correct": false,
+   "output": "not an even-length hex string",
+   "code": "554889e54889f04883ec20488974240848897c24104889a424184889ac24204889b424284889bc24304889c424384889cc24404889d424484889dc24504889ec24584889f424604889fc24684889g424704889h424784889i424804889j424884889k424904889l424984889m424a04889n424a84889o424b04889p424b84889q424c04889r424c84889s424d04889t424d84889u424e04889v424e84889w424f04889x424f84889y425004889z425084889a425104889b425184889c425204889d425284889e425304889f425384889g425404889h425484889i425504889j425584889k425604889l425684889m425704889n425784889o425804889p425884889q425904889r425984889s425a04889t425a84889u425b04889v425b84889w425c04889x425c84889y425d048"
+  },
+  "hex/fib_mod": {
+   "tokens": 600,
+   "status": "compile_error",
+   "correct": false,
+   "output": "not an even-length hex string",
+   "code": "3b010500000000004883ec2848897ec048897ed048897ee848897ef048897f0048897f1048897f2048897f3048897f4048897f5048897f6048897f7048897f8048897f9048897fa048897fb048897fc048897fd048897fe048897ff048898000488980104889802048898030488980404889805048898060488980704889808048898090488980a0488980b0488980c0488980d0488980e0488980f048898100488981104889812048898130488981404889815048898160488981704889818048898190488981a0488981b0488981c0488981d0488981e0488981f048898200488982104889822048898230488982404889825048898260488982704889828048898290488982a0488982b0488982c0488982d0488982e0488982f04889830048898310488983204889833048898340488"
+  },
+  "hex/divisors": {
+   "tokens": 600,
+   "status": "compile_error",
+   "correct": false,
+   "output": "not an even-length hex string",
+   "code": "554889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54889e54"
+  },
+  "hex/binomial": {
+   "tokens": 600,
+   "status": "compile_error",
+   "correct": false,
+   "output": "not an even-length hex string",
+   "code": "554889e54889f04883ec20488974240848897c24104889a424184889ac24204889b424284889bc24304889c424384889cc24404889d424484889fc24504889ec24584889f424604889f824684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684889fc24684"
+  },
+  "hex/digits_2_100": {
+   "tokens": 600,
+   "status": "compile_error",
+   "correct": false,
+   "output": "not an even-length hex string",
+   "code": "554883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec080000004889f04883ec0"
+  },
+  "hex/modpow": {
+   "tokens": 600,
+   "status": "compile_error",
+   "correct": false,
+   "output": "not an even-length hex string",
+   "code": "554889e54889f04883ec20488975fc488975f9488975f4488975f048897dfc48897df948897df448897df0488975f8488975f5488975f0488975ed488975e8488975e3488975de488975d9488975d4488975cf488975ca488975c5488975c0488975bb488975b6488975b1488975ac488975a7488975a24889759d48897598488975934889758e48897589488975844889757f4889757a48897575488975704889756b48897566488975614889755c48897557488975524889754d48897548488975434889753e48897539488975344889752f4889752a48897525488975204889751b48897516488975114889750c4889750748897502488974ff488974f2488974ed488974e8488974e3488974de488974d9488974d4488974cf488974ca488974c5488974c0488974bb488974b6488974b14"
+  },
+  "hex/lcg_median": {
+   "tokens": 600,
+   "status": "runtime_error",
+   "correct": false,
+   "output": "Invalid memory write (UC_ERR_WRITE_UNMAPPED)",
+   "code": "554883ec084889e54889f0488971e0488971e8488971ec488971f0488971f8488971fc48897100488971084889710c4889711048897114488971184889711c4889712048897124488971284889712c4889713048897134488971384889713c4889714048897144488971484889714c4889715048897154488971584889715c4889716048897164488971684889716c4889717048897174488971784889717c4889718048897184488971884889718c4889719048897194488971984889719c488971a0488971a4488971a8488971ac488971b0488971b4488971b8488971bc488971c0488971c4488971c8488971cc488971d0488971d4488971d8488971dc488971e0488971e4488971e8488971ec488971f0488971f4488971f8488971fc48897100488971084889710c48897110"
+  },
+  "hex/double_palindromes": {
+   "tokens": 600,
+   "status": "runtime_error",
+   "correct": false,
+   "output": "Invalid memory write (UC_ERR_WRITE_UNMAPPED)",
+   "code": "554889e54883ec204889e5488945fd488945f8488945f0488945f4488945f8488945fc488945ff4889450148894505488945094889450d4889451148894515488945194889451d4889452148894525488945294889452d4889453148894535488945394889453d4889454148894545488945494889454d4889455148894555488945594889455d4889456148894565488945694889456d4889457148894575488945794889457d4889458148894585488945894889458d4889459148894595488945994889459d488945a1488945a5488945a9488945ad488945b1488945b5488945b9488945bd488945c1488945c5488945c9488945cd488945d1488945d5488945d9488945dd488945e1488945e5488945e9488945ed488945f1488945f5488945f9488945fd488945ff4889460148"
+  },
+  "hex/vowels": {
+   "tokens": 600,
+   "status": "runtime_error",
+   "correct": false,
+   "output": "Invalid memory read (UC_ERR_READ_UNMAPPED)",
+   "code": "314053454141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141"
+  },
+  "hex/lattice_paths": {
+   "tokens": 600,
+   "status": "runtime_error",
+   "correct": false,
+   "output": "Invalid memory write (UC_ERR_WRITE_UNMAPPED)",
+   "code": "554889e54889f04883ec10488974240848897c2410488974241848897c2420488974242848897c2430488974243848897c2440488974245048897c2458488974246048897c246848897c247048897c248048897c248848897c249048897c249848897c24a048897c24a848897c24b048897c24b848897c24c048897c24c848897c24d048897c24d848897c24e048897c24e848897c24f048897c24f848897c250048897c250848897c251048897c251848897c252048897c252848897c253048897c253848897c254048897c254848897c255048897c255848897c256048897c256848897c257048897c257848897c258048897c258848897c259048897c259848897c25a048897c25a848897c25b048897c25b848897c25c048897c25c848897c25d048897c25d848897c"
+  }
+ }
+}
