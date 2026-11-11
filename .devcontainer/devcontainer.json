@@ -1,0 +1,31 @@
+{
+  "name": "Neural Compiler (CPU)",
+  "initializeCommand": ["bash", "${localWorkspaceFolder}/.devcontainer/prepare-build.sh"],
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".",
+    "options": ["--platform=linux/amd64"]
+  },
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "init": true,
+  "runArgs": ["--shm-size=2g"],
+  "mounts": [
+    "source=neural-compiler-cache-${devcontainerId},target=/home/vscode/.cache,type=volume"
+  ],
+  "postCreateCommand": ["/opt/venv/bin/python", "${containerWorkspaceFolder}/.devcontainer/smoke.py"],
+  "waitFor": "postCreateCommand",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.testing.pytestEnabled": true
+      }
+    }
+  }
+}

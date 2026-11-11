@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!host-ca-certificates.crt
+!requirements.lock
+!gpu/
+!gpu/requirements.lock

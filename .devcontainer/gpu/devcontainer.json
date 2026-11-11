@@ -1,0 +1,41 @@
+{
+  "name": "Neural Compiler (CUDA, Docker)",
+  "initializeCommand": ["bash", "${localWorkspaceFolder}/.devcontainer/prepare-build.sh"],
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": "..",
+    "args": {
+      "DEPENDENCY_LOCK": "gpu/requirements.lock",
+      "TORCH_INDEX_URL": "https://download.pytorch.org/whl/cu128"
+    },
+    "options": ["--platform=linux/amd64"]
+  },
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "init": true,
+  "hostRequirements": {"gpu": true},
+  "runArgs": ["--shm-size=2g", "--gpus", "all"],
+  "containerEnv": {
+    "NEURAL_COMPILER_DEVICE": "cuda",
+    "NVIDIA_VISIBLE_DEVICES": "all",
+    "NVIDIA_DRIVER_CAPABILITIES": "compute,utility"
+  },
+  "mounts": [
+    "source=neural-compiler-cache-${devcontainerId},target=/home/vscode/.cache,type=volume"
+  ],
+  "postCreateCommand": ["/opt/venv/bin/python", "${containerWorkspaceFolder}/.devcontainer/smoke.py"],
+  "waitFor": "postCreateCommand",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.testing.pytestEnabled": true
+      }
+    }
+  }
+}

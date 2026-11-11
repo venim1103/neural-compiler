@@ -1,0 +1,47 @@
+{
+  "name": "Neural Compiler (CUDA, Podman/WSL)",
+  "initializeCommand": ["bash", "${localWorkspaceFolder}/.devcontainer/prepare-build.sh"],
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": "..",
+    "args": {
+      "DEPENDENCY_LOCK": "gpu/requirements.lock",
+      "TORCH_INDEX_URL": "https://download.pytorch.org/whl/cu128"
+    },
+    "options": ["--platform=linux/amd64", "--format=docker"]
+  },
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "init": true,
+  "runArgs": [
+    "--shm-size=2g",
+    "--device", "nvidia.com/gpu=all",
+    "--device", "/dev/dxg",
+    "--security-opt", "label=disable",
+    "--mount", "type=bind,source=/usr/lib/wsl,target=/usr/lib/wsl,readonly"
+  ],
+  "containerEnv": {
+    "NEURAL_COMPILER_DEVICE": "cuda",
+    "LD_LIBRARY_PATH": "/usr/lib/wsl/lib",
+    "NVIDIA_VISIBLE_DEVICES": "all",
+    "NVIDIA_DRIVER_CAPABILITIES": "compute,utility"
+  },
+  "mounts": [
+    "source=neural-compiler-cache-${devcontainerId},target=/home/vscode/.cache,type=volume"
+  ],
+  "postCreateCommand": ["/opt/venv/bin/python", "${containerWorkspaceFolder}/.devcontainer/smoke.py"],
+  "waitFor": "postCreateCommand",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.testing.pytestEnabled": true
+      }
+    }
+  }
+}
