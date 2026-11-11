@@ -1,322 +1,237 @@
-# Architecture and Mathematical Foundations of Weight-Compiled Looped Neural Virtual Machines, In-Weights Compilers, and Zero-Copy Hardware Bridges
+# Architecture and Mathematical Foundations of Neural Compilation: LLM-as-Compiler with a Native CPU Execution Bridge and Audited Weight-Compiled Virtual Machines
 
 ## Abstract
 
-Embedding deterministic computing machinery directly into the parameter spaces of neural networks eliminates the serialization latency, context-window pollution, and security boundaries of external neurosymbolic tool-calling pipelines. Existing weight-compiled neural computers have evolved along two distinct axes: (1) **token-autoregressive co-processors**—such as `Qwenputer`, `Qwenx86`, `qwenGPU`, and the `WASM Interpreter Transformer`—which prepend compiled circuit layers to pretrained large language models (LLMs) and use linear attention fast weights (`Gated DeltaNet`) or prefix-sum attention as addressable memory, and (2) **depth-looped state engines**—exemplified by `Loom`—which execute complete instruction cycles in-place via iterative depth recurrence ($X^{(t+1)} = \mathcal{F}_\theta(X^{(t)})$) over a fixed bipolar tensor without generating intermediate tokens.
+A central question in neurosymbolic systems is how a language model can compile algorithmic intent within its own weights and execute the resulting computation with high speed, determinism, and safety. Prior work has pursued two distinct interpretations of "in-weights compilation and execution":
+1. **Weight-Compiled Virtual Machines (`Qwenputer`, `Qwenx86`, `qwenGPU`, `Loom`, `WASM Interpreter`, `Percepta`):** Digital processors, arithmetic logic units (ALUs), and software compilers (`qcc`) are analytically compiled into transformer weights so that forward passes emulate hardware clock cycles.
+2. **LLM-as-Compiler with a Native Hardware Execution Bridge:** The language model acts as the compiler from natural-language/algorithmic intent to a compact executable program (or intermediate representation), while a trusted host bridge lowers, validates, sandboxes, and executes that program natively on the physical CPU, injecting the result back into the model's live KV and recurrent state cache.
 
-This whitepaper synthesizes both paradigms into a unified, mathematically verified master architecture: the **Orthogonal Looped Neural Virtual Machine (NeuroVM)**. We resolve the core structural trade-offs of prior systems by combining:
-1. **Orthogonal Residual Subspace Cohabitation** with an **Early-Exit Fused SRAM Triton Loop**, allowing an 8-layer compiled processor to cohabit a frozen foundation model with zero logit divergence ($0.0$ KL) while bypassing downstream language layers and vocabulary projections during internal clock cycles.
-2. **A Mathematically Consistent Hybrid ALU** that unifies bit-sliced 6-threshold ReLU direct borrow-chain subtraction ($10N$ hidden units) and opcode-as-operand routing with an explicit **Bipolar-to-Scalar DAC / Limb-Chunked SwiGLU Multiplier / Scalar-to-Bipolar ADC** pipeline.
-3. **Folded Layer-3 Deadzone Snapping** ($\epsilon = 0.1$), preserving digital bipolar invariants ($\{-1, +1\}$) across millions of recurrent passes within an 8-layer budget.
-4. **Multi-Head Banked Gated DeltaNet-2 Fast-Weight RAM**, scaling exact rank-one orthonormal memory addressing ($S_t^{(h)} = S_{t-1}^{(h)}(I - e_i e_i^T) + v_t e_i^T$) across $H = 64$ parallel memory banks without key-dimension explosion or cross-talk.
-5. **A Dual-Tier Compilation Pipeline and Zero-Copy Pinned MMIO Hardware Bridge**, pairing an in-weights recursive-descent compiler firmware (`qcc`-class) in ROM with a host Clang/LLVM serializer and a `cudaHostAllocMapped` trap interface for native CPU syscalls, CUDA Tensor Core kernels, and NPU execution.
-
----
-
-## 1. Architectural Precedents in Weight-Compiled Neural Computers
-
-Weight-compiled neural virtual machines derive network parameters algebraically from formal instruction set architecture (ISA) specifications and digital logic equations rather than stochastic gradient descent. Across current literature, six primary architectures establish the empirical baseline for neural execution engines:
-
-| System | Base Model / Framework | Target ISA / Abstract Machine | Weight Construction Methodology | Architectural Topology | Memory & State Substrate | Verified Execution Throughput |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Qwenputer** | `Qwen3.5-4B` | 32-bit RISC-V (`RV32IM` + `Zba` + Bignum unit) | Analytical compilation via `chipformer` DSL | 11 compiled layers prepended to frozen 4B LLM | Gated DeltaNet recurrent state ($\alpha=1, \beta=1$) | 3,200–5,500 trace tokens/s (NVIDIA L4 via fused Triton) |
-| **Qwenx86** | `Qwen3.5-4B` | 64-bit x86 (MSVC integer subset + flag $\mu$-ops) | Analytical compilation (`chipformer` fork) | 13 compiled layers prepended to frozen 4B LLM | Multi-head Gated DeltaNet (64 KB RAM, 256 KB ROM, 128 KB data) | 169k trace tokens in 71.2s (~2,377 tokens/s on RTX GPU) |
-| **qwenGPU** | `Qwen3.5-2B` | 4-lane SIMT GPU (NVIDIA PTX subset) | Analytical compilation via extended `chipformer` | 45 compiled layers prepended ahead of 24 LLM layers | Gated DeltaNet state (15 regs/lane, shared RAM, ROM) | 10–15 trace tokens/s (Apple Silicon MPS) |
-| **Loom** | Standalone Looped Transformer | 22-opcode single-cycle ISA (`SUBLEQ` + 21 ops) | Analytical derivation from ISA circuit spec | 8 fixed-depth layers iterated cyclically in-place | Persistent bipolar tensor $X \in \{-1, +1\}^{d \times n}$ | 1 instruction per 8-layer pass; FPGA-verified (Alveo U200) |
-| **WASM Interpreter** | Standalone Autoregressive Transformer | WebAssembly Bytecode (25 opcodes, stack VM) | Analytical linear algebra compilation | 8 heterogeneous layers ($d=100$, 30 total heads) | Autoregressive trace via `SumAttn` & parabolic keys | Exact bytecode trace autoregression (112/112 tests) |
-| **Percepta WASM** | Standalone Autoregressive (2D Attention) | WebAssembly (stack machine runtime) | Analytical compilation | 7 layers ($d=36$, 18 2D attention heads) | Token-embedded execution state history | >30,000 trace tokens/s (CPU-specialized streaming) |
-
-### 1.1 Prepend Token-Driven Co-Processors (`Qwenputer`, `Qwenx86`, `qwenGPU`)
-In `Qwenputer`, an 11-layer analytically compiled 32-bit RISC-V processor (`RV32IM` with `Zba` address-generation extensions and a hardware bignum unit) is prepended directly upstream of `Qwen3.5-4B`'s native language layers. The residual stream is widened so that the compiled "chip layers" operate in dedicated orthogonal subspaces without perturbing pretrained language weights ($0.0$ KL divergence on natural text). Execution advances via autoregressive token generation: emitting structured trace tokens (memory addresses, data words, and clock markers) updates the recurrent Gated DeltaNet state matrices, while a host driver (`RvChat`) hides internal trace tokens from the conversational context window.
-
-`Qwenx86-4B-compact` extends this topology to 13 prepended layers to support a 64-bit x86 integer subset (targeting MSVC output) and an expanded memory map: 64 KB of writeable RAM distributed across 64 RAM heads, 256 KB of code ROM, and 128 KB of read-only constants. To handle x86 condition flags (`ZF`, `SF`, `CF`, `OF`) efficiently, `Qwenx86` introduces dedicated flag micro-operations (`FADD`, `FSUB`, `FAND`, `FOR`, `FXOR`, `FINC`, `FDEC`) and decomposes 64-bit operations into paired 32-bit lanes. Crucially, `Qwenx86` embeds a complete C compiler (`qcc`) and runtime firmware directly into its weight ROM, enabling the model to emit C code inside a native `<tool_call>`, compile the source into x86 machine code inside its own weights, and execute the resulting binary within a single generation session.
-
-`qwenGPU` scales analytical weight compilation from scalar CPUs to data-parallel SIMT execution by prepending 45 compiled layers to `Qwen3.5-2B` (forming a 69-layer hybrid model). The compiled layers implement a 4-lane SIMT processor capable of executing compiled NVIDIA PTX kernels, including per-lane predicate registers, warp shuffles, divergent branch reconvergence, shared memory, and `__syncthreads()` barriers.
-
-### 1.2 Stack-Based Autoregressive Bytecode Engines (`WASM Interpreter`, `Percepta`)
-The `WASM Interpreter Transformer` (`eastlondoner/wasm-interpreter-transformer`) compiles a 25-opcode WebAssembly stack machine into an 8-layer heterogeneous transformer ($d = 100$) with 30 total attention heads distributed across Layers 0–7 as $[13, 1, 0, 8, 2, 1, 1, 4]$. Rather than relying on linear RNN states, it reconstructs machine state over the autoregressive trace using causal prefix sums (`SumAttn`) to track dynamic operand stack depth and parabolic key-query matching to fetch local variables and stack operands across arbitrary call depths.
-
-### 1.3 Depth-Recurrent State Engines (`Loom`)
-Departing from sequence autoregression, `Loom` (`arXiv:2604.08816`) implements a general-purpose virtual machine via depth recurrence over an 8-layer transformer block. All machine state—scratchpad registers, data RAM, instruction ROM, and the program counter (`PC`)—is encoded in a fixed-size bipolar matrix $X \in \{-1, +1\}^{d \times n}$. Each forward pass through the 8-layer block executes one complete machine instruction in-place ($X^{(t+1)} = \mathcal{F}_\theta(X^{(t)})$) with zero token emission, zero vocabulary projection overhead, and zero floating-point drift across millions of sequential instructions.
+This whitepaper presents a two-part synthesis grounded in empirical measurements on `Qwen/Qwen3.5-4B` (32 layers, 24 Gated DeltaNet + 8 full-attention layers) and a rigorous numerical audit (`docs/review/verify_whitepaper.py`):
+- **Part I (Primary System Architecture — LLM-as-Compiler + Native CPU Bridge):** We demonstrate experimentally (`E1`–`E3b`) why running a software compiler or emulator inside neural weights is $4\times 10^4\text{–}10^5\times$ slower than native host execution (`Qwenx86`'s in-weights `qcc` takes 169,293 machine trace tokens and 71.2 s to compile and run `6 * 7`, whereas host `tcc -run` takes 1.7 ms and `wasmtime` Cranelift compilation takes 0.64–0.75 ms). We detail our production architecture: multi-tier target emission (Python default at $1.00\times$ token cost and 10/12 zero-shot accuracy; C fast path at $7\text{–}32\times$ faster loop execution; and a middle-level IR research track comparing a typed surface DSL against validator-constrained `LLM-WAT`), an out-of-process jailed execution bridge (`bubblewrap`/`nsjail` + `seccomp` + fuel-metered `wasmtime` with in-jail compilation), live KV + Gated DeltaNet cache resumption (saving $>1.3$ s per call at 4k context over stateless re-prefill), and a two-stage SFT + GRPO RL training pipeline.
+- **Part II (Audited Reference Specification for Weight-Compiled Neural Virtual Machines):** For applications requiring self-contained weight-space execution or formal circuit verification, we provide the corrected mathematical foundations of depth-looped (`Loom`) and token-driven (`Qwenputer`, `Percepta`) neural computers—resolving critical errors in prior hybrid drafts regarding MSB-vs-LSB borrow-chain indexing, floating-point precision ceilings (`bf16`/`TF32`/`fp32`/`fp64`), `ReGLU` vs. `SwiGLU` multiplication, ADC neuron scaling, continuous restoring clamps, parabolic addressing limits, and Gated DeltaNet memory banking.
 
 ---
 
-## 2. Paradigm Analysis: Sequence Autoregression vs. Depth Recurrence
+## 1. Taxonomy of "In-Weights Compilation" and Precedent Systems
 
-Choosing how time and state evolve inside a neural computer dictates its hardware utilization profile, memory complexity, and maximum sustainable clock rate.
+### 1.1 Four Meanings of Compiling Within Model Weights
 
-```
-Paradigm A: Token-Autoregressive Co-Processor (Qwenputer / Qwenx86)
-[Token t] -> [13 Chip Layers] -> [36 Frozen LLM Layers] -> [LM Head (248k Vocab)] -> [Sample Token t+1]
-  * Cost per micro-step: Full 4B model pass + vocabulary projection + sequence growth.
-
-Paradigm B: Orthogonal Looped Co-Processor (Unified NeuroVM Architecture)
-[LLM emits <tool_call>]
-       │
-       ▼ (Enter Fused In-SRAM Triton Loop)
-  ┌──► [8 Compiled Looped VM Layers (Pinned in L2 / SRAM)] ──┐
-  │                        │                                  │
-  └────── Recirculate X^{(t+1)} (PC != 0 & Trap == 0) ────────┘
-                           │
-       ▼ (Exit on PC == 0 or REG_MMIO_CMD != 0)
-[Resume LLM Decoding / Dispatch Zero-Copy Host Hardware Bridge]
-```
-
-### 2.1 Bottlenecks of Pure Token Autoregression
-Driving virtual machine execution via token generation imposes three structural overheads:
-1. **Full-Backbone Parameter Traffic:** When 11–13 chip layers are prepended to a 4B LLM without an early-exit loop, every machine trace token forces the runtime to execute all 32–36 downstream language layers and project hidden states through the unembedding matrix $W_u \in \mathbb{R}^{d \times |V|}$ ($|V| = 248,320$ in `Qwen3.5`). Because a single C program execution spans $50,000$ to $358,500$ trace tokens, 99% of memory bandwidth is spent reading frozen language weights that perform no virtual machine computation.
-2. **Multi-Token Instruction Dilution:** Because each trace token only carries a narrow slice of state update (an address pointer, a 32-bit word, or a step marker), executing a single ISA instruction requires 3 to 6 autoregressive token steps, reducing 5,000 trace tokens/s to ~1,000 actual instructions/s.
-3. **Kernel Launch and Sampling Latency:** Autoregressive stepping synchronizes across the GPU command queue at every token unless captured inside a static CUDA graph or custom multi-step kernel.
-
-### 2.2 Advantages and Scaling Laws of Depth-Looped Execution
-In a depth-looped architecture, sequence generation is suspended during program execution. The state tensor $X \in \mathbb{R}^{d \times n}$ recirculates through a compact $K$-layer block ($K = 8$) whose total weight footprint is only 8.3 MB to 28 MB (`fp32`/`bf16`). Because both the state tensor $X$ and the 8 layer parameter matrices fit inside GPU L2 cache and Streaming Multiprocessor (SM) SRAM, the entire execution loop runs without touching device High Bandwidth Memory (HBM).
-
-When looped architectures are alternatively used for latent chain-of-thought reasoning across token sequences, naive serving allocates a $K \times T$ key-value cache grid. Recent serving optimizations—**LoopKV** (which compresses early recurrent draft iterations to 2-bit precision or shares terminal iteration KV tensors, cutting KV memory traffic by 35% and boosting throughput by $1.7\times\text{–}2.2\times$) and **LoopSpec** (pipelined self-speculative decoding across recurrent depths)—mitigate multi-token loop costs. For deterministic virtual machine execution, however, **pure in-place state recurrence + linear fast weights** eliminates sequence KV caching during the execution loop entirely.
-
----
-
-## 3. Mathematical Foundations of Neural Execution Circuits
-
-### 3.1 Circuit Complexity ($\text{TC}^0$) and Computational Universality
-A single feed-forward pass through a fixed-depth transformer with bounded precision is restricted to the circuit complexity class $\text{TC}^0$ (constant-depth threshold circuits), which cannot solve problems requiring unbounded sequential state composition (such as arbitrary-length graph reachability or general program evaluation). However, iterating a fixed transformer block $\mathcal{F}_\theta: \mathbb{R}^{d \times n} \to \mathbb{R}^{d \times n}$ via recurrent feedback $X^{(t+1)} = \mathcal{F}_\theta(X^{(t)})$ forms a discrete-time dynamical system that emulates a Universal Register Machine, achieving full Turing completeness bounded only by the finite word size $N$ and memory capacity.
-
-### 3.2 Direct Borrow-Chain Arithmetic via 6-Threshold ReLU Networks
-Classical digital logic synthesis inside neural networks requires a 3-layer FFN cascade to subtract two $N$-bit numbers: Layer A performs one's complement bit inversion ($\neg B$), Layer B propagates carries to form two's complement ($-B = \neg B + 1$), and Layer C ripples carries across $A + (-B)$. Following `Loom`, this 3-layer cascade is compressed into a **single FFN layer** using direct borrow-chain subtraction over bipolar bit vectors.
-
-Let two $N$-bit signed two's-complement integers $A, B$ be encoded in bipolar format $A_i, B_i \in \{-1, +1\}$ for bit indices $i \in \{0, \dots, N-1\}$ (ordered MSB-first, where $+1$ represents binary `1` and $-1$ represents binary `0`). For each bit position $i$, a linear projection computes the weighted partial difference $D_i$:
-
-$$D_i = \sum_{j=0}^{i-1} 2^{N-2-j} (A_j - B_j) + \frac{1}{2}(A_i - B_i)$$
-
-Here, the weight $2^{N-2-j}$ equals half the binary positional value of bit $j$, scaling the bipolar difference $(A_j - B_j) \in \{-2, 0, +2\}$ so that $D_i$ takes exact integer values. Let $P = 2^{N-1-i}$. We construct six pre-activation thresholds per bit using three antagonistic ReLU pairs:
-
-$$z_{i,1} = D_i + P + 1, \quad z_{i,2} = D_i + P$$
-$$z_{i,3} = -D_i, \quad z_{i,4} = -D_i - 1$$
-$$z_{i,5} = D_i - P + 1, \quad z_{i,6} = D_i - P$$
-
-The output difference bit $R_i \in \{-1, +1\}$ is obtained in a single two-layer perceptron pass ($\text{FFN}(x) = W_2\,\text{ReLU}(W_1 x + b_1) + b_2$):
-
-$$R_i = 2 \Big[ \text{ReLU}(z_{i,1}) - \text{ReLU}(z_{i,2}) + \text{ReLU}(z_{i,3}) - \text{ReLU}(z_{i,4}) + \text{ReLU}(z_{i,5}) - \text{ReLU}(z_{i,6}) \Big] - 3$$
-
-Because each antagonistic pair $\text{ReLU}(u + 1) - \text{ReLU}(u)$ forms an exact unit step transition over $[-1, 0]$, this 6-unit combination evaluates the local difference bit and resolves MSB-to-LSB borrow propagation simultaneously across all $N$ bits. Including $4N$ auxiliary neurons to clear temporary staging registers, the entire $N$-bit subtractor requires exactly **$10N$ hidden neurons** ($320$ hidden units for $N = 32$, or $640$ for $N = 64$).
-
-### 3.3 Opcode-as-Operand Routing
-Rather than instantiating parallel ALU layers for each opcode, all arithmetic, bitwise, shift, and comparison instructions are algebraically reduced in Layer 2's FFN into **operand staging** for Layer 4's single shared subtraction core (`scr_min - scr_sub`):
-* **Addition (`ADD`):** Staged as $A - (-B)$. Layer 2 computes two's complement negation $-B$ using $2N$ hidden units for bit inversion and $2N$ units for increment carry propagation, placing $-B$ into `scr_sub`.
-* **Bitwise `AND`:** In bipolar encoding, $A_i \land B_i = +1 \iff A_i = +1 \text{ and } B_i = +1$. Layer 2 stages `scr_min` $= A$ and activates $N$ correction units that place $+1$ into `scr_sub` at bit $i$ if and only if $A_i = +1$ and $B_i = -1$, causing the subtractor to pull bit $i$ down to $-1$.
-* **Bitwise `OR` and `XOR`:** Staged identically using $N$ hidden units (`OR`, correcting when $A_i = -1, B_i = +1$) and $2N$ hidden units (`XOR`, detecting directional mismatches).
-* **Bit Shifts (`SHL`, `SHR`) & Rotations:** Performed via fixed index-permutation matrices in Layer 2's linear projection with zero non-linear neuron overhead.
-
-### 3.4 Resolving the Bipolar-vs-Scalar Multiplication Mismatch (Limb-Chunked SwiGLU)
-A critical mathematical pitfall in naive hybrid specifications is mixing bit-sliced bipolar vectors ($b \in \{-1, +1\}^N$) with scalar bilinear `SwiGLU` multiplication ($\text{Mul}(A, B) = \text{ReLU}(A) \odot B$). Applying element-wise $\text{ReLU}(A) \odot B$ directly to bipolar vectors only performs per-bit gating rather than integer multiplication, while projecting a full 32-bit or 64-bit integer into a single scalar overflows the exact integer mantissa of `bf16` ($2^8 = 256$) or `fp32` ($2^{24} = 16,777,216$).
-
-To execute hardware-accurate multiplication without multi-cycle software loops (while retaining `MULACC` as a fallback), our ALU implements a **Limb-Chunked DAC-SwiGLU-ADC Pipeline**:
-1. **8-Bit Bipolar-to-Scalar DAC (Input Projection $W_{\text{DAC}}$):** Each 32-bit bipolar operand is partitioned into four 8-bit limbs $L_m \in \{-1, +1\}^8$ ($m \in \{0, 1, 2, 3\}$). A linear projection converts each bipolar byte into an exact unsigned scalar integer in $[0, 255]$:
-   $$u_m = \sum_{k=0}^{7} 2^{k-1} \left(L_{m,k} + 1\right) \in \{0, 1, \dots, 255\}$$
-2. **Bilinear SwiGLU Partial Products:** For all 16 byte pairs $(m, n) \in \{0..3\}^2$, a gated linear unit computes the exact partial product:
-   $$P_{m,n} = \text{ReLU}(u_m^{(A)}) \odot u_n^{(B)} \in [0, 65025]$$
-   Because $65,025 < 2^{16}$, every partial product and limb accumulation is 100% exact in `fp32` (and within 16-bit integer precision).
-3. **Scalar-to-Bipolar ADC (Binary Decomposition):** The accumulated limb sums are decomposed back into bipolar bits $\{-1, +1\}$ using a periodic sawtooth/step ReLU threshold bank before entering the residual stream.
-
-### 3.5 Deterministic Addressing Mechanics: Coordinate Argmax, Parabolic Keys, and Sum-Attention
-Neural virtual machines employ three complementary attention mechanisms depending on the memory topology:
-
-1. **Symmetric Coordinate Argmax (Looped State Tensor $X$):**
-   Each column $j \in \{0, \dots, n-1\}$ of $X$ stores a static $\ell$-bit bipolar address encoding $\text{pos}_j \in \{-1, +1\}^\ell$ ($\ell = \lceil \log_2 n \rceil$). Using symmetric projections $Q = K$, matching a target pointer $p \in \{-1, +1\}^\ell$ against all columns yields:
-   $$\text{Score}(j) = p^T \text{pos}_j = \ell - 2 \, d_{\text{Hamming}}(p, \text{pos}_j)$$
-   This score attains a strict global maximum of $+\ell$ if and only if $\text{pos}_j = p$ (and $\le \ell - 2$ for all $j \neq p$). Passing scores through hard-max/argmax (or high-$\beta$ softmax followed by deadzone snapping) routes column $j$ with zero dispersive cross-talk.
-
-2. **Parabolic Key-Query Matching (Scalar Address Indices):**
-   When addresses are represented as scalar integers $i, j \in \mathbb{Z}_{\ge 0}$, exact associative lookup is achieved via 2D parabolic projections:
-   $$Q_i = \begin{bmatrix} i \\ 1 \end{bmatrix}, \quad K_j = \begin{bmatrix} 2j \\ -j^2 \end{bmatrix} \implies Q_i^T K_j = 2ij - j^2 = -(i - j)^2 + i^2$$
-   For any query index $i$, the quantity $-(i - j)^2 + i^2$ peaks uniquely at $j = i$ with a margin of at least $1$ over adjacent addresses $j = i \pm 1$.
-
-3. **Unnormalized Causal `SumAttn` (Dynamic Stack Depth Tracking):**
-   For stack-based bytecode execution, removing the softmax denominator over a causal mask $M_{tk} = \mathbb{I}(k \le t)$ computes an exact prefix sum of stack pointer deltas $\Delta_k \in \{-1, 0, +1\}$:
-   $$\text{SP}_t = \sum_{k=1}^{t} M_{tk} \Delta_k$$
-
----
-
-## 4. Memory Sub-Architectures: Bipolar State Columns and Banked Gated DeltaNet-2 RAM
-
-To combine zero-latency register/scratchpad access with scalable 64 KB–1 MB random-access memory, the Unified NeuroVM pairs a **2D Bipolar State Tensor** (L1 Scratchpad & Register File) with **Multi-Head Banked Gated DeltaNet-2 Fast Weights** (L2 Main RAM & Firmware ROM).
-
-| Memory Characteristic | Standard Softmax KV Cache | Loom 2D Bipolar Tensor ($X \in \{-1, +1\}^{d \times n}$) | Multi-Head Banked Gated DeltaNet-2 ($\alpha=1, b=1, w=1$) |
+| Paradigm | Representative Systems | Empirical Profile | Architectural Verdict |
 | :--- | :--- | :--- | :--- |
-| **Spatial Footprint** | $O(L \cdot d)$ (Grows unboundedly with trace length $L$) | $O(d \times n)$ (Fixed SRAM-resident matrix) | $O(H \cdot d_v \cdot d_k)$ (Fixed fast-weight tensor across $H$ heads) |
-| **Lookup Complexity** | $O(L)$ per step / $O(L^2)$ total | $O(n)$ hard-max column match | $O(d_v \cdot d_k)$ matrix-vector product per active bank |
-| **Write Mechanism** | Append-only sequence concatenation | Single-cycle column overwrite (Layer 5) | Exact in-place rank-one row erase & overwrite |
-| **Drift & Retention** | Degrades as context window overflows | Infinite retention via Layer-3 deadzone snapping | Infinite retention ($\alpha_t = 1.0$) with orthonormal basis keys |
-| **Optimal Role in NeuroVM** | Outer LLM natural language conversation only | CPU Registers, ALU Staging, L1 Scratchpad, MMIO Ports | Scalable 64 KB–1 MB Main RAM, Heap, and `qcc` Compiler ROM |
+| **(A) Running a compiler binary inside neural VM weights** | `Qwenx86` (`qcc` firmware in GDN ROM) | Compiling and running a C program printing `6 * 7` takes **169,293 machine trace tokens (71.2 s)**. Host `tcc -run` takes **1.7 ms**; `wasmtime` compiles in **0.64–0.75 ms**. | **$4\times 10^4\text{–}10^5\times$ slower** than host silicon; no latency or accuracy upside when a CPU is present. |
+| **(B) The LLM *is* the compiler from intent to executable program** | Tool-Integrated Reasoning (`PAL`, `ToRA`, `ReTool`, `rStar2`), **Primary `neural-compiler` Path** | Real interpreter vs. LM self-execution raises GSM8K from 23.2% to 72.0% (`PAL`). In our `E3` Part C benchmark, `Qwen3.5-4B` achieved **6/6 correct final answers** with host execution taking **0.13%** of generation time. | **Primary production path.** Maximizes accuracy and minimizes wall time per correct answer. |
+| **(C) Specializing a single program into FFN weights** | `Percepta` ("First Futamura Projection" mode) | Specializes WebAssembly bytecode directly into feed-forward parameters for fast in-network trace streaming (>30k tok/s on CPU). | Useful only when execution must remain inside neural forward passes. |
+| **(D) Parallel/blockwise emission of IR/bytecode from hidden states** | Multi-Token Prediction (MTP) heads (`Qwen3.5` ships 1 MTP layer) | Reduces sequential decode steps via speculative drafting verified by the base model. | Orthogonal decode accelerator; compatible with Paradigm (B). |
 
-### 4.1 L1 Spatial Partitioning in the Bipolar State Tensor $X$
-Within the 8-layer looped execution core, the working state tensor $X \in \{-1, +1\}^{d \times n}$ is partitioned across spatial columns and feature rows:
-* **Columns $0 \le j < s$ ($s = 32$):** L1 Scratchpad Workspace, Architecturally Visible Registers (`R0`–`R15`), Program Counter (`PC`), and Hardware MMIO Trap Registers (`REG_MMIO_*`).
-* **Columns $s \le j < s + m$:** L1 Tightly Coupled Data Memory (fast local stack/data words).
-* **Columns $s + m \le j < n$:** L1 Instruction Cache / Micro-Op ROM storing 4-tuple instructions $I_k = [\text{Op}, a, b, c]$.
-* **Row Allocation ($d$ features):** Row $0$ holds the immutable scratchpad mask ($+1$ for $j < s$, $0$ otherwise); Rows $1 \dots \ell$ store the immutable $\ell$-bit binary column coordinates $\text{pos}_j$; Rows $\ell+1 \dots \ell+N$ store the $N$-bit signed bipolar data word; and Rows $\ell+N+1 \dots d-1$ provide transient instruction decode, pointer dereference, and ALU staging buses.
+### 1.2 Verified Comparison of Weight-Compiled Neural Computers
 
-### 4.2 Resolving the Orthonormality Bottleneck: Multi-Head Banked Gated DeltaNet-2 RAM
-In a single Gated DeltaNet head, the recurrent fast-weight state $S_t \in \mathbb{R}^{d_v \times d_k}$ updates via:
+A primary-source audit of existing weight-compiled execution engines establishes their exact layer topologies, numerical constraints, and measured throughputs:
 
-$$S_t = S_{t-1} \left(\alpha_t I - \beta_t k_t k_t^T\right) + \beta_t v_t k_t^T$$
-
-Setting $\alpha_t = 1.0$, $\beta_t = 1.0$, and restricting keys/queries to standard basis vectors $e_i \in \{0, 1\}^{d_k}$ yields exact row erasure and overwrite: $S_t = S_{t-1}(I - e_i e_i^T) + v_t e_i^T$ and readout $y_t = S_t e_i = v_t$. However, because $e_i$ must be strictly orthonormal ($e_i^T e_j = \delta_{ij}$) to prevent rank-one erasure cross-talk across addresses, a single head with key dimension $d_k = 256$ can address **at most 256 memory words**.
-
-To scale deterministic RAM to 128 KB (or more) without inflating $d_k$ to $16,384$, we incorporate **Gated DeltaNet-2's decoupled channel-wise erase ($b_t$) and write ($w_t$) gates** across **$H = 64$ parallel RAM heads** ($d_k = 256$ rows per head, $d_v = 64$ bits per word $\implies 64 \times 256 \times 8\text{ B} = 128\text{ KB}$ per RAM layer):
-
-$$S_t^{(h)} = S_{t-1}^{(h)} \Big(I - k_t \left(b_t^{(h)} \odot k_t\right)^T\Big) + \left(w_t^{(h)} \odot v_t\right) k_t^T$$
-
-A 14-bit word address $A \in [0, 16383]$ (covering 128 KB at 64-bit word granularity) is split into:
-* **6-Bit Bank Selector:** $h_{\text{target}} = (A \gg 8) \in \{0, \dots, 63\}$
-* **8-Bit Intra-Bank Row Key:** $i = (A \mathbin{\&} \text{0xFF}) \in \{0, \dots, 255\} \implies k_t = e_i \in \{0, 1\}^{256}$
-
-A SwiGLU bank-decoder checks whether head $h$ matches $h_{\text{target}}$ during a `STORE` operation, setting the erase and write gates to:
-
-$$b_t^{(h)} = w_t^{(h)} = \mathbb{I}\left(h = h_{\text{target}} \land \text{Op} = \text{STORE}\right) \cdot \mathbf{1}$$
-
-Thus, on any memory write cycle, only the targeted head $h_{\text{target}}$ erases and overwrites row $i$, while all other 63 heads preserve their state identically ($S_t^{(h)} = S_{t-1}^{(h)}$). On a `LOAD` cycle, all gates remain $0$ and the output projection selects $y_t = \sum_{h=0}^{63} \mathbb{I}(h = h_{\text{target}}) S_t^{(h)} e_i$.
+| System | Base Model / Architecture | Target ISA & Scope | Topology & Head Layout | Memory Substrate | Primary-Source Verified Throughput & Fidelity |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Qwenputer** | `Qwen3.5-4B` (32 native layers, $d=2560$, vocab 248,320) | 32-bit RISC-V (`RV32IM` + `Zba` + Bignum unit) | 11 prepended chip layers (~1,400 extra residual dims); chip tokens **skip Qwen's 32 layers** | Gated DeltaNet state ($\alpha=1, \beta=1$, key dim 128) | **1.0–1.55 trace tok/instr**; **3,699 instr/s** at B=1 (13.9k at B=32; ~24k tok/s in latest executor) on L4; text **KL = $6.1\times 10^{-4}$** (noise floor $5\times 10^{-4}$) |
+| **Qwenx86** | `Qwen3.5-4B` | 64-bit x86 (MSVC integer subset + flag $\mu$-ops) + `qcc` | 13 prepended chip layers; v2/v3 offload memory & calls to a **host Python bridge** | 64 GDN RAM heads (64 KB RAM, 256 KB ROM, 128 KB rodata) | 169,293 machine tokens in **71.2 s** (~2,377 tok/s) for `qcc` compile+run of `6*7`; GSM8K-28: 26/28 vs. 23/28 base |
+| **qwenGPU** | `Qwen3.5-2B` (24 native layers) | 4-lane SIMT GPU (NVIDIA PTX subset, predicates, barriers) | 45 prepended chip layers (69 layers total) | Gated DeltaNet state (15 regs/lane, shared RAM, ROM) | 10–15 trace tokens/s (Apple Silicon MPS); text **KL $\approx 7\times 10^{-4}$** |
+| **Loom** | Standalone Looped Transformer (`arXiv:2604.08816`) | 22-opcode single-cycle ISA (`SUBLEQ` + 21 extended ops) | **8 layers** iterated cyclically; active heads per layer: **$[1, 3, 2, 0, 2, 0, 0, 0]$** | Bipolar matrix $X \in \{-1, +1\}^{d \times n}$, **$N=8$-bit words**, $m \in [64, 224]$ data words | 1 instruction per 8-layer pass ($d=146, 155, 164$ at $n=512, 1024, 2048$); paper validates up to 1,000 steps (README: millions with **argmax**); Alveo U200 FPGA |
+| **WASM Interpreter** | Standalone Autoregressive Transformer | WebAssembly subset (25 **`i32`-only** opcodes, no `call`/`return`, loops $\le 256$) | 8 heterogeneous layers ($d=100$, 30 heads: $[13, 1, 0, 8, 2, 1, 1, 4]$), **`ReGLU` FFN** | Causal `SumAttn` + parabolic keys + **host-precomputed** program positional encodings | 112/112 compliance tests on its supported subset |
+| **Percepta WASM** | Standalone Autoregressive (`Percepta-Core/transformer-vm`) | WebAssembly stack VM (35 opcodes, call-depth tracking, Futamura projection) | 2D attention heads with **`HullKVCache` ($O(\log t)$ lookup)** + **`ReGLU` FFN** (`ReLU(b)*a`) | Token-embedded execution history + convex-hull KV cache | **>30,000 trace tokens/s** (C++ CPU streaming engine) |
 
 ---
 
-## 5. Control Flow, Indirect Addressing, and Folded Invariant Preservation
+## Part I: LLM-as-Compiler + Native CPU Execution Bridge
 
-### 5.1 Single-Cycle Indirect Pointer Dereferencing (`LOAD` / `STORE` / `FIND`)
-Direct-addressing OISC machines (`SUBLEQ`) require self-modifying code to index arrays, inflating program lengths by $4\times$. In our 8-layer looped core:
-* **`LOAD` (Indirect Read):** Layer 2 fetches the pointer address from memory column $a$; Layer 3's attention head uses that fetched value as the query coordinate to read the target data word in the same instruction cycle.
-* **`STORE` (Indirect Write):** Layer 2 fetches the destination pointer from column $b$ and overwrites the scratchpad's write-address register (`scr_write_addr`). When Layer 5's writeback attention executes, it routes the ALU output directly to the dynamically dereferenced column. This reduces compiled instruction counts on pointer-heavy benchmarks (such as a $9\times 9$ Sudoku solver) by **73.8%** (from 1,085 instructions down to 284).
+### 2. Empirical Analysis of Representations, Bridge Latency, and Cache Resumption
 
-### 5.2 Folded Layer-3 Deadzone Snapping (Zero Drift in 8 Layers)
-In trained looped transformers (e.g., Universal Transformers, Ouro), non-unit Jacobian eigenvalues cause continuous activations to explode or collapse over long horizons ($T \gg T_{\text{train}}$), even when mitigated by contrastive latent regularizers like `LoopCD`. Conversely, allocating a standalone 9th or 8th FFN layer solely to error clamping wastes depth.
+To ground architectural decisions in measured hardware performance rather than speculation, four experiments (`E1`, `E2`, `E3`, `E3b` in `docs/review/experiments/`) were executed on `Qwen/Qwen3.5-4B` across 12 representative algorithmic and number-theoretic tasks (`primes_sum`, `collatz`, `lcm_1_25`, `fib_mod`, `divisors`, `binomial`, `digits_2_100`, `modpow`, `lcg_median`, `double_palindromes`, `lattice_paths`, `char_Checksum`).
 
-Following `Loom`'s verified circuit optimization, **folded scratchpad correction** merges the bipolar deadzone snapping filter directly into **Layer 3's FFN** alongside indirect `LOAD`/`FIND` resolution. For every persistent bipolar bit $x \in \{-1, +1\}$ and tolerance $\epsilon = 0.1$, a 6-threshold ReLU filter applies:
+#### 2.1 Experiment E1: Token Cost Across Target Representations
+Every token emitted by a 4B model requires a full forward pass reading ~8 GB of `bf16` weights from GPU HBM ($\ge 2.5$ ms/token on an H100; 63–137 ms/token on an RTX A3000). Token count is therefore the dominant multiplier on total wall-clock latency.
 
-$$\text{Snap}_\epsilon(x) = \begin{cases} +1.0 & \text{if } x \in [1 - \epsilon, 1 + \epsilon] \\ -1.0 & \text{if } x \in [-1 - \epsilon, -1 + \epsilon] \\ x & \text{otherwise} \end{cases}$$
+| Emitted Representation | Total Tokens (12 Tasks, Qwen3.5 Tokenizer) | Relative to Idiomatic Python | Relative to Full C Program |
+| :--- | ---: | ---: | ---: |
+| **Python, idiomatic** (`math`, stdlib, native bignum) | **530** | **1.00×** | 0.32× |
+| **Python, plain loops** (no stdlib / no bignum) | 1,036 | 1.95× | 0.62× |
+| **x86-64 machine code, raw bytes** (1 tok/byte, unlinked `.text+.rodata+.data`) | 1,288 | 2.43× | 0.77× |
+| **C, full program** (`main` + `printf`, freestanding body) | 1,673 | 3.16× | **1.00×** |
+| **WAT with 1-token-per-opcode vocabulary** (estimate) | 1,844 | 3.48× | 1.10× |
+| **WebAssembly binary**, raw bytes (1 tok/byte) | 2,246 | 4.24× | 1.34× |
+| **x86-64 machine code as hex text** (unlinked object) | 2,482 | 4.68× | 1.48× |
+| **x86-64 assembly text** (`gcc -O2`) | 3,676 | 6.94× | 2.20× |
+| **WAT text** (`clang --target=wasm32 -Oz` + `wasm2wat`) | 6,281 | 11.85× | 3.75× |
 
-Any floating-point rounding drift $|\delta| < 0.1$ accumulated during `fp32`/`bf16` matrix multiplications is algebraically erased on every single clock cycle, enabling millions of recurrent iterations with **zero bit divergence**.
+**Key Insight:** Even compiler-optimized raw x86-64 machine code requires **2.43× more tokens** than idiomatic Python (and Wasm binary requires **4.24× more**). Idiomatic Python's brevity comes from high-level primitives (`math.comb`, `math.lcm`, modular `pow`, arbitrary-precision integers). Consequently, **token efficiency is determined by abstraction level and available host intrinsics**, not by binary versus text encoding.
 
-### 5.3 Merged Layer-6 Branch Evaluation, PC+1 Carry Chain, and Coordinate-Zero Halting
-In Layer 6 (an FFN-only layer with $Q = K = V = 0$), two spatially disjoint FFN sub-blocks execute in parallel:
-1. **Sub-block 1 (Condition Flag Evaluation):** Inspects the $N$-bit subtraction result $R$ produced by Layer 4. Under signed two's-complement bipolar encoding, $R \le 0$ holds if and only if either the MSB sign bit $R_0 = +1$ (negative) or all bits $R_0 = R_1 = \dots = R_{N-1} = -1$ (zero). A single threshold gate combines these conditions to set $\text{Flag}_{\text{branch}} \in \{-1, +1\}$.
-2. **Sub-block 2 ($\text{PC} + 1$ Carry-Chain Increment):** Simultaneously increments the $\ell$-bit program counter $\text{PC}^{(t)}$ using the direct carry-chain ReLU pattern.
+#### 2.2 Experiment E2: Host Bridge Compilation and Execution Latency
 
-In Layer 7, a multiplexer updates the program counter:
+| Host Bridge Operation (Medians Across 12 Tasks) | Measured Latency | Comparison to 1 LLM Decode Step |
+| :--- | ---: | :--- |
+| **Warm Python worker inside `bubblewrap` jail** (trivial program) | **0.07 ms** (0.21 ms unjailed) | $< 0.03\times$ of an H100 decode step |
+| **`wasmtime` instantiate / instantiate + run** (with fuel metering) | **12 µs / 54 µs** (max 4.3 ms) | $< 0.02\times$ of an H100 decode step |
+| **`wasmtime` Cranelift compile** (from binary / from WAT text) | **0.64 ms / 0.75 ms** | $\approx 0.3\times$ of an H100 decode step |
+| **`tcc` C compile-only / `tcc -run`** | **1.6 ms / 1.7 ms** | $\approx 0.7\times$ of an H100 decode step |
+| **Loop-heavy task (`double_palindromes`):** Native C / Wasm / CPython | **1.5 ms / 4.3 ms / 30–75 ms** | C/Wasm is **7–32× faster** than CPython on tight loops |
+| **Cold process spawn:** `python3 -c` / cold `bubblewrap` | 10 ms / 16 ms | Eliminated by pre-warmed worker pool |
+| **Heavy optimizing compile:** `gcc -O2` / `clang --target=wasm32 -O2` | 31.4 ms / 45.8 ms | Use `tcc` (1.6 ms) for fast C or Cranelift (0.7 ms) for Wasm |
 
-$$\text{PC}^{(t+1)} = \begin{cases} C & \text{if } \text{Flag}_{\text{branch}} = +1 \\ \text{PC}^{(t)} + 1 & \text{if } \text{Flag}_{\text{branch}} = -1 \end{cases}$$
+**Key Insight:** With pre-warmed workers, `tcc`, or `wasmtime`, host compilation and execution take **0.07 ms to 1.7 ms**—less than the time required to decode a single token. Furthermore, sampled token IDs (`8 bytes/token`) already reach host CPU memory at every decode step; custom GPU-to-CPU pinned-memory (`cudaHostAllocMapped`) polling saves at most a few microseconds against millisecond-scale decode steps while introducing severe security and GPU occupancy problems.
 
-Instead of stochastic Adaptive Computation Time (ACT)—which blends intermediate states and corrupts discrete registers—halting is triggered deterministically when control branches to **Address 0** ($\text{PC}^{(t+1)} = 0$) or when Layer 6 asserts an MMIO hardware trap (`REG_MMIO_CMD != 0`).
+#### 2.3 Experiment E3: Zero-Shot Model Emission and In-Decode-Loop Bridge (`Qwen3.5-4B`)
+
+| Target Representation | Zero-Shot Accuracy ($n=12$, Greedy) | Mean Emitted Tokens | Observed Failure Modes |
+| :--- | :--- | ---: | :--- |
+| **Python 3** | **10 / 12** (83.3%) | **70** | 2 algorithmic logic errors (e.g., printed prime count instead of sum) |
+| **C (C99)** | **10 / 12** (`gcc`) · **9 / 12** (`clang`/`tcc`) · **8 / 12** (strict C99 + ASan/UBSan) | **257** | 1 `int` overflow, 1 token cap truncation, 1 GCC nested function extension, 1 ASan out-of-bounds write |
+| **WebAssembly Text (WAT)** | **0 / 12** (0.0%) | 852 | Hallucinated opcodes (`i32.sqrt`), `i32`/`i64` stack-type mismatches, infinite `(local $tempN ...)` loops |
+| **x86-64 Assembly (GAS)** | **0 / 12** (0.0%) | 653 | Mixed NASM/GAS directives, operand-size mismatches, undefined labels |
+| **Raw x86-64 Machine Code Hex** | **0 / 12** (0.0%) | 600 (cap) | 7 invalid hex strings; 5 segfaulted on unmapped addresses / bad `rel32` offsets |
+
+In **Part C (In-Decode-Loop Bridge)** across 6 tasks (`double_palindromes`, `lcg_median`, `collatz`, `digits_2_100`, `lattice_paths`, `modpow`), `Qwen3.5-4B` emitted Python code, paused decoding at the closing fence, executed the program in the warm jailed worker, prefilled the output into the **same live KV + Gated DeltaNet cache**, and resumed decoding:
+- **6 / 6 final answers were correct** (5 / 6 programs exact; 1 LCG off-by-one index happened to share the same median).
+- Total host execution time across all 6 tasks was **180 ms** versus **138.7 s** of token generation (**0.13% overhead**).
+
+#### 2.4 Experiment E3b: Return-Path Prefill Cost (Live Hybrid Cache vs. Full Re-Prefill)
+`Qwen3.5-4B` is a hybrid architecture containing **24 Gated DeltaNet layers and 8 full-attention layers**. Measuring prefill latency with warm kernels and `logits_to_keep=1` (computing logits only for the final token, as in production serving) reveals why stateful cache continuation is critical:
+
+| Context Length ($N$) | 1 Decode Step | Incremental Prefill of 16–64 Result Tokens into Live Cache | Stateless Full-Context Re-Prefill ($N + k$ Tokens, No Prefix Cache) |
+| ---: | ---: | ---: | ---: |
+| **256 tokens** | 63 ms | **78–81 ms** ($\approx 1.25\times$ decode) | 157–179 ms ($2.2\times$ slower) |
+| **1,024 tokens** | 66 ms | **82–84 ms** ($\approx 1.25\times$ decode) | 440–449 ms ($5.3\times$ slower) |
+| **4,096 tokens** | 63 ms | **99–123 ms** ($\approx 1.7\times$ decode) | **1,489–1,514 ms** (**$12\text{–}15\times$ slower**) |
+
+Because Gated DeltaNet recurrent states $S_t$ cannot be arbitrarily sliced backward like standard softmax KV caches, stateless tool-calling without hybrid state checkpointing forces full sequence recomputation (which consumes 37–40% of forward time in serving benchmarks such as InferCept, `arXiv:2402.01869`). Resuming directly from the live in-memory KV + GDN state (or using hybrid prefix-cache checkpoints at tool-call boundaries, as in SGLang's `extra_buffer` mode and vLLM's hybrid prefix caching) reduces result-injection overhead to **1.2–2 decode steps**.
 
 ---
 
-## 6. Intermediate Representation and Dual-Tier Compiler Architecture
-
-### 6.1 ISA & IR Trade-Off Analysis
-
-| Architectural Criterion | RISC-V (`RV32IM`) | WebAssembly (`WASM`) | 64-bit `eBPF` Bytecode | NeuroVM Quad-Tuple ISA (Loom-22 + Mul/MMIO) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Execution Paradigm** | Load-Store Register Machine (32 regs) | Stack Machine with Structured Frames | Bounded Register Machine (11 regs) | Memory-to-Memory + Scratchpad Register Hybrid |
-| **Instruction Encoding** | 32-bit packed bitfields | Variable-length (1–5 bytes) | Fixed 64-bit bitfields | Pre-unpacked 4-tuple $[\text{Op}, a, b, c]$ |
-| **Neural Decode Cost** | High (bitfield extraction layers) | Medium (requires `SumAttn` stack head) | Low-Medium (fixed 64-bit fields) | Minimal (1-layer symmetric coordinate fetch) |
-| **Pointer & Array Efficiency** | High (native base+offset load/store) | Medium (linear memory index calc) | High (register offset dereference) | High (single-cycle indirect `LOAD`/`STORE`) |
-| **Loop Depth Footprint** | 11–13 Layers (`Qwenputer`) | 7–8 Layers (`Percepta` / `WASM`) | 8–10 Layers | **Strictly 8 Layers** |
-
-To minimize neural circuit depth while supporting full C and Rust toolchains, NeuroVM uses a two-layer IR strategy: high-level languages compile either to **eBPF / RV32IM** (for external toolchains) or directly to **unpacked 4-tuple micro-instructions** $I_k = [\text{Op}_k, a, b, c]$ (22 core Loom opcodes plus limb-chunked `MUL` and `MMIO_TRAP`), which execute in exactly one 8-layer pass.
-
-### 6.2 Dual-Tier Compilation Pipeline
-To satisfy both self-contained in-weights autonomy and industrial compiler optimization, NeuroVM provides two compilation tiers:
-* **Tier 1: In-Weights Compiler Firmware (`qcc`-Class Autonomous Compilation):**
-  Following `Qwenx86`, a compact recursive-descent C/DSL compiler binary is pre-compiled into quad-tuple machine code and permanently baked into the read-only Gated DeltaNet ROM banks. When the host LLM generates C source code inside a `<compile_and_run>` tag, the 8-layer looped processor boots directly into the in-weights `qcc` firmware, parses the source tokens from the input buffer, emits compiled quad-tuple instructions into the writeable RAM columns, and branches to the newly compiled entry point—executing the entire edit-compile-run cycle inside the model's weights.
-* **Tier 2: Host Clang/LLVM Lowering & State Serializer:**
-  For large multi-file Rust or C++ workloads, an external Clang/LLVM pass lowers source code to eBPF/RV32I, legalizes control flow, translates instructions into quad-tuple vectors $I_k = [\text{Op}_k, a, b, c]$, and injects them directly into the ROM columns of $X^{(0)}$ and Gated DeltaNet RAM banks via zero-copy memory mapping.
-
----
-
-## 7. Unified Master Blueprint: The Orthogonal Looped NeuroVM
+### 3. Production System Architecture: The `neural-compiler` Bridge
 
 ```
-+-----------------------------------------------------------------------------------+
-|                        HOST / HYBRID FOUNDATION MODEL                             |
-|  Residual Stream Width: d_total = d_llm (2560) + d_vm (164) = 2724 Channels       |
-+-----------------------------------------------------------------------------------+
-         │ (Normal Text Tokens: d_vm == 0, 0.0 KL Divergence)
-         ▼
-+-----------------------------------------------------------------------------------+
-|  FUSED IN-SRAM TRITON LOOP (8 Compiled Layers, 4.7M-14M Params Pinned in L2)      |
-|                                                                                   |
-|  Layer 1: Instruction Fetch       [1 Argmax Head (Q=K) + FFN]                     |
-|           Matches PC to column pos_j; loads [Op, a, b, c] into scratchpad.        |
-|                                                                                   |
-|  Layer 2: Operand Fetch & Route   [2 Argmax Heads + Banked GDN-2 Read + FFN]      |
-|           Fetches operands A, B from L1 columns or 64-head GDN-2 RAM;             |
-|           FFN performs opcode-as-operand staging (-B, AND/OR/XOR masks, shifts).  |
-|                                                                                   |
-|  Layer 3: Indirect Dereference    [2 Argmax Heads + Folded Deadzone Snap FFN]     |
-|           Executes LOAD/FIND pointer dereference; FFN folds 6-threshold ReLU      |
-|           deadzone snap filter (eps = 0.1) over persistent state rows.            |
-|                                                                                   |
-|  Layer 4: Combinational ALU Core  [0 Heads (FFN Only)]                            |
-|           Sub-block A: 10N-unit 6-threshold ReLU direct borrow-chain subtractor.  |
-|           Sub-block B: 8-bit DAC -> SwiGLU partial products -> ADC multiplier.    |
-|                                                                                   |
-|  Layer 5: Memory Writeback        [1 Argmax Head + 64-Head GDN-2 Write + FFN]     |
-|           Writes ALU result to direct column a, dereferenced STORE pointer,       |
-|           or targeted Gated DeltaNet-2 bank h_target via rank-one update.         |
-|                                                                                   |
-|  Layer 6: Branch, PC+1 & Trap     [0 Heads (FFN Only)]                            |
-|           Disjoint FFN sub-blocks compute Flag_branch (R <= 0), PC + 1 carry      |
-|           chain, and inspect REG_MMIO_CMD != 0 for host hardware traps.           |
-|                                                                                   |
-|  Layer 7: PC Multiplexer          [1 Argmax Head + FFN]                           |
-|           Updates PC^{(t+1)} = C (if Flag_branch == +1) else PC^{(t)} + 1.        |
-|                                                                                   |
-|  Layer 8: Loop Boundary & Bridge  [0 Heads (FFN Only)]                            |
-|           Finalizes scratchpad output buffers; checks Halt (PC == 0) or Trap.     |
-+-----------------------------------------------------------------------------------+
-         │                                                   │
-         │ (REG_MMIO_CMD != 0)                               │ (PC == 0: Halt)
-         ▼                                                   ▼
-+-----------------------------------------+   +-------------------------------------+
-| ZERO-COPY PINNED MMIO HARDWARE BRIDGE   |   | RESUME DOWNSTREAM LLM LAYERS        |
-| cudaHostAllocMapped Shared Flag & Args  |   | Project VM output register into     |
-| -> Host CPU POSIX Syscalls              |   | LLM residual stream & continue      |
-| -> Native CUDA / cuBLAS / NPU Dispatch  |   | natural language generation.        |
-+-----------------------------------------+   +-------------------------------------+
+ GPU: Inference Engine (Qwen3.5-4B, Fine-Tuned)         Host CPU: Hardened Execution Bridge (Out-of-Process)
+┌──────────────────────────────────────────────┐  IDs  ┌────────────────────────────────────────────────────┐
+│ ... <tool_call>  (single token ID 248058)    │──────►│ Per-Sequence Token Stream Monitor                  │
+│ <function=run><parameter=code> program ...   │ 8 B / │  • Detects token 248058..248059 in O(1)            │
+│ </tool_call>     (single token ID 248059)    │ token │  • Optional XGrammar / validator mask on logits    │
+│   └─► Pause THIS sequence (batch continues)  │       ├────────────────────────────────────────────────────┤
+│                                              │       │ Pre-Warmed Jailed Executor Pool (Fork-per-Request) │
+│ Prefill turn boundary + <tool_response>...   │◄──────│  • Python: CPython in bwrap/nsjail + seccomp       │
+│ (tokens 248066..248067) into SAME live       │  IDs  │  • C: tcc or clang->wasm32 COMPILED INSIDE JAIL    │
+│ KV + Gated DeltaNet state & resume decoding  │       │  • Wasm / DSL: wasmtime + Cranelift (fuel + epoch) │
+└──────────────────────────────────────────────┘       │  • Dedicated control pipe + hard kill/reap timer   │
+                                                       └────────────────────────────────────────────────────┘
 ```
 
-### 7.1 Complete 8-Layer Mathematical Specification
+#### 3.1 Native Protocol and Turn Boundaries
+Instead of ad-hoc markdown fences, the bridge uses `Qwen3.5`'s native tool tokens, which are single vocabulary IDs: `<tool_call>` (`248058`), `</tool_call>` (`248059`), `<tool_response>` (`248066`), and `</tool_response>` (`248067`). When the stream monitor observes `248059`, it pauses the sequence, executes the payload, and prefills the complete chat-template turn transition (`<|im_end|>\n<|im_start|>user\n<tool_response>\n...\n</tool_response><|im_end|>\n<|im_start|>assistant\n`) directly into the live cache.
 
-| Layer | Active Heads | Functional Domain | Exact Mathematical Operation |
-| :--- | :--- | :--- | :--- |
-| **Layer 1** | 1 Head (Argmax $Q=K$) | **Instruction Fetch** | $\text{Score}(0, j) = p_{\text{PC}}^T \text{pos}_j$; transfers $I_{\text{PC}} = [\text{Op}, a, b, c]$ into scratchpad column $X_0$. |
-| **Layer 2** | 2 Argmax Heads + $H=64$ GDN-2 Read | **Operand Fetch & Opcode-as-Operand Staging** | Reads $[a], [b]$ from $X$ or $S_t^{(h)} e_i$; FFN stages `scr_min`, `scr_sub`, and `STORE` pointer override. |
-| **Layer 3** | 2 Argmax Heads | **Indirect Dereference & Folded Snap Filter** | Dereferences `LOAD` (`[[b]]`) and `FIND`; FFN applies $\text{Snap}_{0.1}(x)$ across all persistent bipolar rows. |
-| **Layer 4** | 0 Heads ($Q=K=V=0$) | **Hybrid Combinational ALU** | Evaluates $R_i = 2\sum_{k=1}^3 (\text{ReLU}(z_{i,2k-1}) - \text{ReLU}(z_{i,2k})) - 3$ and limb-chunked SwiGLU product. |
-| **Layer 5** | 1 Argmax Head + $H=64$ GDN-2 Write | **Direct/Indirect Memory Writeback** | Updates column $X_{\text{target}}$ or GDN-2 bank $S_t^{(h)} = S_{t-1}^{(h)}(I - \mathbb{I}_{h} e_i e_i^T) + \mathbb{I}_{h} v_t e_i^T$. |
-| **Layer 6** | 0 Heads ($Q=K=V=0$) | **Branch Flag, $\text{PC}+1$ & Trap Detect** | Parallel FFN sub-blocks compute $\text{Flag}_{\text{branch}} = \mathbb{I}(R \le 0)$, $\text{PC}+1$, and $\text{Trap} = \mathbb{I}(\text{CMD} \neq 0)$. |
-| **Layer 7** | 1 Head (Argmax) | **Program Counter Update** | Multiplexes $\text{PC}^{(t+1)} = C$ if $\text{Flag}_{\text{branch}} = +1$ else $\text{PC}^{(t)} + 1$. |
-| **Layer 8** | 0 Heads ($Q=K=V=0$) | **Terminal Snap & Host Bus Interface** | Cleans scratchpad staging buses and exposes `REG_MMIO_*` and halt status to the Triton loop controller. |
+#### 3.2 Multi-Tier Language & Intermediate Representation Strategy
+1. **Tier 1 — Curated Python (Default):** Provides arbitrary-precision arithmetic, `math`, `fractions`, `itertools`, and `collections` at $1.0\times$ token cost. Ideal for symbolic math, combinatorics, and rapid prototyping.
+2. **Tier 2 — Jailed C (`tcc` / `clang --target=wasm32`):** Used when algorithmic time complexity requires native loop speed ($7\text{–}32\times$ faster than CPython on nested loops).
+3. **Research Track — The "Middle-Level" IR (`R1` vs. `R2`):**
+   - **R1 (Compact Typed Surface DSL + Host Intrinsics):** A statically typed Pythonic/AST subset with built-in bignum and math intrinsics that lowers to native code or Wasm via Cranelift in $<2$ ms—combining Python's low token count with native loop speed and static safety.
+   - **R2 (Validator-Constrained `LLM-WAT`):** Normalized WebAssembly text emitted under an incremental stack-and-type validator mask (XGrammar / SynCode style, $\mu\text{s/token}$ overhead), guaranteeing 100% parse-and-validate success by construction.
 
-### 7.2 Zero-Copy Pinned MMIO Hardware Bridge
-To bridge the neural execution core with physical host CPUs, CUDA Tensor Cores, and NPUs without device-to-host tensor serialization overhead, rows within Scratchpad Column $0$ (mirrored to Bank 0, Rows 250–255 of Gated DeltaNet-2) are mapped to page-locked Unified Memory (`cudaHostAllocMapped`):
-* `REG_MMIO_STATUS` (`Row 250`): `0x0 = RUNNING`, `0x1 = TRAP_PENDING`, `0x2 = HALTED`
-* `REG_MMIO_CMD` (`Row 251`): `0x10 = POSIX_READ`, `0x11 = POSIX_WRITE`, `0x20 = CUBLAS_GEMM`, `0x30 = LLVM_JIT_COMPILE`, `0x40 = NPU_DISPATCH`
-* `REG_MMIO_ADDR` (`Row 252`): 64-bit virtual/physical buffer descriptor
-* `REG_MMIO_LEN` (`Row 253`): Payload byte length or matrix dimension tuple
-* `REG_MMIO_ARG0..1` (`Rows 254–255`): Scalar arguments and return status code
-
-When Layer 6 detects `REG_MMIO_CMD != 0`, the fused Triton loop sets `REG_MMIO_STATUS = 0x1` and enters a lightweight GPU spin-wait (`__nanosleep`) or yields the stream. A host C++/Rust worker thread polling the cache-coherent pinned memory pointer immediately executes the native OS syscall or dispatches the asynchronous cuBLAS/NPU kernel on the physical hardware, writes the resulting payload directly into the mapped memory columns, clears `REG_MMIO_CMD = 0x0`, and sets `REG_MMIO_STATUS = 0x0`—allowing the SRAM-resident Triton loop to resume on the very next microsecond cycle.
+#### 3.3 Security Model and Sandbox Hardening
+Giving LLM-generated code direct host access (`POSIX_READ/WRITE`, `LLVM_JIT_COMPILE`, or raw pointers) is a critical remote code execution (RCE) vulnerability, underscored by recent CVSS 9.8–10.0 sandbox escapes in LLM frameworks (LangChain, LlamaIndex, `smolagents`) and JIT compiler advisories (e.g., Wasmtime Winch `CVE-2026-34987`). In `neural-compiler`, **the host bridge is the security boundary**:
+- **Defense-in-Depth Isolation:** Every execution runs out-of-process inside Linux user/PID/mount/network/IPC namespaces (`bubblewrap` / `nsjail`) with a strict `seccomp-bpf` syscall allowlist, `rlimits`/`cgroups` memory and PID caps, a read-only root filesystem, and an empty `tmpfs` scratch directory.
+- **In-Jail Compilation:** C and assembly are **compiled inside the jail**, preventing compile-time file exfiltration via `#include "/path/to/secret"` or `.incbin`.
+- **Unreachable Control Channel & Hard Deadlines:** To prevent guest code from forging JSON status replies on `stdout` or hanging after printing a single byte, the supervisor forks per request (or per session from a pre-warmed template process), communicates over a dedicated control descriptor closed before `exec` (or after guest completion), and enforces an outer wall-clock deadline that sends `SIGKILL` to the entire process group and reaps all children.
+- **Structured Outcomes & Optional REPL Persistence:** Returns structured `(status, payload)` tuples (`ok`, `compile_error`, `runtime_error`, `timeout`) with concise, line-localized diagnostics to enable self-correction, and supports per-session state retention so the model can define helper functions once and invoke them across turns.
 
 ---
 
-## 8. References
+### 4. Fine-Tuning Recipe (SFT + RL) and Phased Engineering Roadmap
 
-1. **Qwenputer:** *A fully functioning, deterministic RISC-V CPU compiled into Qwen3.5-4B weights*, `divagr.com/blog/qwenputer` & `github.com/divagr18/qwenputer`.
-2. **Qwenx86:** *Qwenx86-4B-compact: 64-bit x86 CPU and in-weights C compiler (`qcc`) in 13 prepended layers*, `huggingface.co/Quazim0t0/Qwenx86-4B-compact`.
+Untrained 4B models under-utilize tools or lose accuracy when prompted naively (`Trice`, `arXiv:2605.06326`). Following the converged literature recipe (`ToRA` `arXiv:2309.17452`, `ReTool` `arXiv:2504.11536`, `ToRL` `arXiv:2503.23383`, `SimpleTIR` `arXiv:2509.02479`, `rStar2-Agent` `arXiv:2508.20722`), training proceeds in two stages:
+1. **Supervised Cold-Start (SFT):** 3k–16k **real, bridge-executed** trajectories in `Qwen3.5`'s native `<tool_call>` / `<tool_response>` format across held-out task families with randomized parameters (preventing memorization and catching lucky-answering bugs), mixed with 10–30% general text data. Real executed trajectories substantially outperform stitched synthetic traces (`AIME24` 33.2% vs. 4.4%, `arXiv:2510.11701`).
+2. **Reinforcement Learning (GRPO with Execution Outcome Reward):** Group Relative Policy Optimization using binary verification rewards, **masking `<tool_response>` tokens from the policy loss**, filtering void turns, and enforcing a 5–10 call budget under the exact production bridge timeouts.
+
+#### Phased Roadmap and Go/No-Go Gates
+The primary evaluation metric across all phases is **wall-clock time (and GPU-seconds) per correct answer** with confidence intervals on held-out task families:
+
+| Phase | Deliverable | Quantitative Go/No-Go Gate |
+| :--- | :--- | :--- |
+| **P0** | **Production Bridge MVP & Serving Spike:** Port `experiments/` into `src/neural_compiler/bridge/` (`protocol`, `monitor`, `sandbox`, `executors/{python,c,wasm}`) and `src/neural_compiler/eval/` (~200 randomized tasks). Benchmark live pause/resume vs. hybrid prefix-cached resubmission. | Host bridge overhead $\le 1$ decode step at p95; result return $\le 2$ decode steps; zero duplicate-token or turn-boundary bugs. |
+| **P1** | **Sandbox Hardening & Red-Team Suite:** `bwrap`/`nsjail` + `seccomp` + `cgroups`, in-jail C/Wasm compilation, unreachable control pipe, outer kill+reap timer. | **100% containment** against fork bombs, memory bombs, infinite loops, `#include`/`.incbin` exfiltration, `/proc` reads, and forged stdout replies. |
+| **P2** | **SFT Cold Start (`Qwen3.5-0.8B/2B/4B`):** LoRA/QLoRA training on verified multi-turn execution trajectories, including compile/runtime error recovery. | Wall time per correct answer and accuracy beat both no-tool and zero-shot Python baselines (CI-separated); no text KL regression beyond noise. |
+| **P3** | **Execution-Rewarded RL (GRPO):** Rollouts via vLLM/SGLang with live bridge execution and masked tool-output loss. | Statistically significant improvement over P2 on wall time per correct answer and multi-step error recovery. |
+| **P4** | **Middle-Level IR Research Track (`R1` Typed DSL / `R2` Constrained `LLM-WAT`):** Matched SFT/RL budget + constrained decoding + repair rounds vs. Python/C tiers. | Must beat Python/C tiers on **wall time per correct answer** at equal or higher accuracy on at least one task class; otherwise archive. |
+| **P5** | **Serving Engine Integration:** Production vLLM/SGLang plugin with `Qwen3.5` MTP speculative decoding and continuous batching. | p95 tool-call round-trip overhead $\le 2$ decode steps under concurrent batch load. |
+
+---
+
+## Part II: Audited Mathematical Reference for Weight-Compiled Neural Virtual Machines
+
+When the engineering goal is instead a **self-contained neural artifact** (shipping a deterministic state machine or ISA interpreter entirely inside `.safetensors` weights for interpretability, formal verification, or FPGA synthesis), every circuit equation must respect floating-point mantissa bounds and piecewise-linear representability. Below is the mathematically verified specification correcting all issues identified in Round 1 (`M1`–`M14`, `F1`–`F15`, `A1`–`A8`) and Round 2 (`N1`–`N13`, `C1`–`C4`).
+
+### 5. Corrected Combinational ALU and Precision Ceilings
+
+#### 5.1 Direct Borrow-Chain Subtraction: MSB-First Indexing with LSB Borrow Summation
+In `Loom` (`arXiv:2604.08816`), two $N$-bit signed two's-complement integers $a, b$ are represented as MSB-first bipolar vectors $a_i, b_i \in \{-1, +1\}$ for $i \in \{0, \dots, N-1\}$ ($+1 \equiv 1$, $-1 \equiv 0$). Because arithmetic borrows propagate from **less significant bits ($j > i$) into bit $i$**, the weighted partial difference $D_i$ must sum from $j = i$ down to the LSB $N - 1$:
+
+$$D_i = \sum_{j=i}^{N-1} 2^{N-2-j} \left(a_j - b_j\right)$$
+
+*(Audit note `M1`: Summing over $j < i$ instead of $j \ge i$ inverted the borrow direction and failed on 64,255 / 65,536 input pairs at $N=8$; Loom's $j \ge i$ summation above achieves **0 / 65,536 errors**.)*
+
+With $P_i = 2^{N-1-i}$, a single two-layer ReLU feed-forward network ($\text{FFN}(x) = W_2\,\text{ReLU}(W_1 x + b_1) + b_2$) evaluates six thresholded pre-activations per bit:
+
+$$z_{i,1} = D_i + P_i + 1, \quad z_{i,2} = D_i + P_i, \quad z_{i,3} = -D_i, \quad z_{i,4} = -D_i - 1, \quad z_{i,5} = D_i - P_i + 1, \quad z_{i,6} = D_i - P_i$$
+
+$$R_i = 2 \Big[ \big(\text{ReLU}(z_{i,1}) - \text{ReLU}(z_{i,2})\big) + \big(\text{ReLU}(z_{i,3}) - \text{ReLU}(z_{i,4})\big) + \big(\text{ReLU}(z_{i,5}) - \text{ReLU}(z_{i,6})\big) \Big] - 3 \in \{-1, +1\}$$
+
+#### 5.2 Exact Floating-Point Word-Width Limits ($N_{\max}$ per Data Type)
+Because the pre-activations $z_{i,1}$ reach $\approx 3 \cdot 2^{N-1}$ while the step transition width is $1.0$, the unit offset $+1$ is lost to floating-point rounding as soon as $3 \cdot 2^{N-1}$ exceeds the format's exact integer mantissa ($2^{M+1}$):
+
+| Floating-Point Format | Mantissa Bits ($M$) | Max Exact Integer | Single-Layer Subtractor Word Limit ($N_{\max}$) | Measured Failure Rate (`verify_whitepaper.py`) |
+| :--- | ---: | ---: | :--- | :--- |
+| **`bfloat16`** | 7 bits | $256$ | **$N \le 6$** (Fails at $N=8$) | $N=8$: **13.4% wrong**; $N=16$: **99.6% wrong** |
+| **`TF32` (TensorCore)** | 10 bits | $2,048$ | **$N \le 9$** | Must disable TF32 (`torch.backends.cuda.matmul.allow_tf32 = False`) for $N > 9$ |
+| **`float32`** | 23 bits | $16,777,216$ | **$N \le 23$** (Safe for $N=8, 16$) | $N=16$: **0% wrong**; $N=24$: **13.0% wrong**; $N=32$: **100% wrong** |
+| **`float64`** | 52 bits | $9.0 \times 10^{15}$ | **$N \le 51$** (Safe for $N=32$) | $N=32$: **0% wrong**; $N=64$: **100% wrong** |
+
+**Architectural Consequence (`M2`, `A4`):** `Loom` uses **$N = 8$** in `fp32` ($d = 9\ell + 8N + 1 = 155$ at $\ell = 10, n = 1024$). Supporting 32-bit integers in `fp32` requires either multi-limb execution ($2 \times 16$-bit limbs with carry ripple across layers/cycles) or `fp64` weights.
+
+#### 5.3 Bitwise Operations, Shifts, and Multiplication (`M3`–`M5`, `C4`)
+- **Minuend Rewriting for `OR` and `XOR` (`M3`):** Because subtracting a positive correction can only clear bits ($+1 \to -1$), `OR` cannot be staged as a subtrahend adjustment (which fails on 56,788 / 65,536 pairs at $N=8$). Instead, Layer 2's FFN computes bitwise `OR` and `XOR` directly into the **minuend register (`scr_min`)** and sets the subtrahend **`scr_sub = 0`** so Layer 4's subtractor passes the result through unchanged.
+- **Inversion and Gated Shifts (`M4`):** In bipolar encoding, bitwise `NOT` is a weight sign flip $\times(-1)$ requiring zero hidden units; opcode-gated 1-bit shifts require $2N$ (`SHL`) and $2N-1$ (`SHR`) gating neurons in Layer 2.
+- **Why Single-Layer 32-Bit Multiplication Fails (`M5`, `C4`):**
+  1. *Gate Activation:* `SwiGLU` uses $\text{SiLU}(x) = x\sigma(x)$, which is non-linear for positive inputs ($\text{SiLU}(1)\cdot 7 = 5.12 \neq 7$). Exact bilinear multiplication requires a **ReLU-gated GLU (`ReGLU`)**: $\text{ReGLU}(a, b) = \text{ReLU}(a) \odot b$, as used in both `wasm-interpreter-transformer` and `Percepta`.
+  2. *Mantissa Overflow:* Even with 8-bit limb chunking ($255 \times 255 = 65,025$), `bf16` rounds $65,025 \to 65,024$; `fp32` is mandatory.
+  3. *ADC Exponential Neuron Cost:* Accumulating four 8-bit partial products yields an 18-bit column sum. Decomposing an $K=18$-bit scalar back into bipolar bits inside a single 1-layer FFN requires a periodic step function with $\sum_{j=0}^{17} 4 \cdot 2^{17-j} = \mathbf{1,048,572}$ ReLU units (or 18 sequential layers). Therefore, compact looped VMs implement multiplication iteratively via the `MULACC` instruction across $N$ clock cycles.
+
+---
+
+### 6. Addressing, Error Correction, and Memory Topologies in Analytical VMs
+
+#### 6.1 Continuous Restoring Clamp and Dual-Stage Snapping (`M6`, `M8`, `M9`)
+When using softmax attention with inverse temperature $\lambda = 10$ over Hamming-margin-2 bipolar coordinates ($\text{Score}(j) = \ell - 2\,d_{\text{Hamming}}(p, \text{pos}_j)$), off-target columns leak up to $(n-1)e^{-2\lambda} \approx 2.1 \times 10^{-6}$ at $n=1024$. A discontinuous step function cannot be represented by a finite ReLU layer (`M6`). Instead, drift is erased using a **continuous piecewise-linear restoring clamp** with slope $k = \frac{1}{1 - \epsilon}$ ($\epsilon = 0.1 \implies k = \frac{10}{9}$):
+
+$$\text{Clamp}_\epsilon(x) = \text{ReLU}(k x + 1) - \text{ReLU}(k x - 1) - 1 = \begin{cases} -1.0 & \text{if } x \le -(1 - \epsilon) \\ k x & \text{if } x \in (-(1 - \epsilon), 1 - \epsilon) \\ +1.0 & \text{if } x \ge 1 - \epsilon \end{cases}$$
+
+In `Loom`'s verified 8-layer pipeline (head layout $[1, 3, 2, 0, 2, 0, 0, 0]$), error correction occurs at **two** stages (`M9`, `F2`):
+- **Layer 3 (2 Heads):** Resolves indirect `LOAD`/`FIND` pointers and folds scratchpad clamping into its FFN.
+- **Layer 5 (2 Heads):** Executes direct/indirect memory writes and dual-column `SWAP`.
+- **Layer 8 (0 Heads, Dedicated Error-Correction FFN):** Applies the restoring clamp across all persistent memory and `PC` rows so that softmax writeback leakage from Layer 5 is eliminated before Layer 1 of the next cycle. (When run with exact **argmax** attention, drift is zero by construction.)
+
+#### 6.2 Parabolic Addressing Limits vs. 2D Convex-Hull Lookup (`M7`, `F14`)
+Parabolic key-query matching ($Q_i = [i, 1]^T, K_j = [2j, -j^2]^T \implies Q_i^T K_j = 2ij - j^2$) relies on a unit margin between $j = i$ ($i^2$) and $j = i \pm 1$ ($i^2 - 1$). Numerical testing confirms that floating-point rounding erases this unit margin at address **$i = 100$ in `bf16`** and **$i \approx 5,000$ in `fp32`**. For long execution traces, `Percepta` (`Percepta-Core/transformer-vm`) replaces 1D parabolic scaling with **2D attention heads backed by a convex-hull KV cache (`HullKVCache`)**, achieving exact $O(\log t)$ lookup across millions of steps.
+
+#### 6.3 Banked Matrix RAM vs. Gated DeltaNet Fast Weights (`M10`, `M11`, `A1`, `A2`)
+- **Token-Driven Co-Processors (`Qwenputer`):** Because `Qwenputer` runs inside a stock `Qwen3_5ForCausalLM` graph, it repurposes `Qwen3.5`'s native Gated DeltaNet heads ($\alpha_t = 1$, per-head write gate $\beta_t^{(h)} \in \{0, 1\}$, orthonormal basis keys $e_i \in \{0, 1\}^{128}$) as addressable RAM. Note that standard Gated DeltaNet (`arXiv:2412.06464`) already supports per-head gating via scalar $\beta_t^{(h)}$; `Gated DeltaNet-2` (`arXiv:2605.22791`) channel gates are unnecessary when gates are uniform across channels (`M10`).
+- **Standalone Depth-Looped VMs (`Loom`):** Because a Loom layer uses non-causal masks, symmetric $Q=K$, ReLU FFNs, and per-column biases $b_1 \in \mathbb{R}^{r \times n}$ (which are 99.9% sparse—~8,000 nonzeros out of 4.7M entries at $n=1024$), it cannot execute inside stock causal RMSNorm+SiLU LLM layers without custom kernels (`A1`, `F4`). Inside a custom depth loop, external memory is most efficiently implemented as a **direct one-hot-addressed tensor bank** `RAM[bank, row] = val` rather than storing 1 bit per float in a $64 \times 256 \times 64$ GDN state (which consumes 4 MiB in `fp32` to store 128 KiB of bits, `M11`).
+
+---
+
+## 7. References
+
+1. **Qwenputer:** *A deterministic 32-bit RISC-V CPU compiled into Qwen3.5-4B weights*, `divagr.com/blog/qwenputer` & `github.com/divagr18/qwenputer` (`experimental/riscv/docs/rv32.md`).
+2. **Qwenx86:** *Qwenx86-4B-compact: 64-bit x86 CPU and `qcc` compiler in 13 prepended layers*, `huggingface.co/Quazim0t0/Qwenx86-4B-compact`.
 3. **qwenGPU:** *4-lane SIMT PTX GPU compiled into 45 layers ahead of Qwen3.5-2B*, `emergent.sh/news/qwengpu-qwen3-5-2b-runs-cuda-45-compiled-gpu`.
-4. **Loom:** *Loom: A Scalable Analytical Neural Computer Architecture*, Mehmet Kerem Turkcan et al., `arXiv:2604.08816v1` & `github.com/mkturkcan/Loom`.
-5. **WASM Interpreter Transformer:** *Analytical WebAssembly bytecode execution in 8 heterogeneous layers*, `huggingface.co/eastlondoner/wasm-interpreter-transformer`.
-6. **Chipformer:** *Framework for compiling digital circuits into transformer weights*, `huggingface.co/divagr1925/chipformer`.
-7. **Looped Transformers as Programmable Computers:** Angeliki Giannou et al., *ICML 2023*, `proceedings.mlr.press/v202/giannou23a/giannou23a.pdf`.
-8. **Gated Delta Networks:** *Improving Mamba2 with Delta Rule*, Songlin Yang et al., `arXiv:2412.06464`.
-9. **Gated DeltaNet-2:** *Decoupling Erase and Write in Linear Attention*, `researchgate.net/publication/405132211`.
-10. **LoopKV & LoopSpec:** *Non-uniform KV cache compression and pipelined self-speculative decoding for looped transformers*, `alphaxiv.org/abs/2611.04137` & `researchgate.net/publication/414357704`.
-11. **LoopCD:** *Contrastive latent decoding for recurrent depth models*, `arXiv:2610.02185v1`.
+4. **Loom:** Mehmet Kerem Turkcan et al., *Loom: A Scalable Analytical Neural Computer Architecture*, `arXiv:2604.08816` & `github.com/mkturkcan/Loom`.
+5. **Percepta Transformer VM:** *WebAssembly execution via 2D attention heads, `HullKVCache`, and Futamura projection*, `github.com/Percepta-Core/transformer-vm`.
+6. **WASM Interpreter Transformer:** *Analytical WebAssembly subset interpreter*, `huggingface.co/eastlondoner/wasm-interpreter-transformer`.
+7. **Looped Transformers as Programmable Computers:** Angeliki Giannou et al., *ICML 2023*, `arXiv:2301.13196`.
+8. **Gated Delta Networks:** Songlin Yang et al., *Improving Mamba2 with Delta Rule*, `arXiv:2412.06464`.
+9. **Gated DeltaNet-2:** *Decoupling Erase and Write in Linear Attention*, `arXiv:2605.22791`.
+10. **LoopKV & LoopSpec:** *Non-uniform KV cache compression and pipelined self-speculative decoding for looped transformers*, `arXiv:2611.04137` & `arXiv:2609.17184`.
+11. **LoopCD:** *Training-free contrastive latent decoding for looped language models*, `arXiv:2610.02185`.
+12. **Tool-Integrated Reasoning & SFT/RL Recipes:** `PAL` (`arXiv:2211.10435`), `ToRA` (`arXiv:2309.17452`), `InferCept` (`arXiv:2402.01869`), `ToRL` (`arXiv:2503.23383`), `ReTool` (`arXiv:2504.11536`), `rStar2-Agent` (`arXiv:2508.20722`), `SimpleTIR` (`arXiv:2509.02479`), `Trice` (`arXiv:2605.06326`).
+13. **Neural Compilation & Constrained Decoding:** Armengol-Estapé et al. (`arXiv:2108.07639`), `SynCode` (`arXiv:2403.01632`), `XGrammar` (`arXiv:2411.15100`), Mündler et al. type-constrained decoding (`arXiv:2504.09246`), `SuperCoder` (`arXiv:2505.11480`), `LEGO-Compiler` (`arXiv:2505.20356`), `arXiv:2506.14606`, `arXiv:2511.04132`.
