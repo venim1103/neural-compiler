@@ -7,7 +7,7 @@ Part C: an in-decode-loop bridge. Greedy decoding stops at the end of a
         ```python block, the program runs in a warm jailed worker, its output is
         prefilled into the *same* KV/recurrent cache, and decoding resumes.
 
-Run: PYTHONPATH=/tmp/exppkgs python exp_loop.py
+Run (devcontainer): python exp_loop.py
 """
 
 import json

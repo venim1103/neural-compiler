@@ -4,7 +4,7 @@ For each task in tasks.py: verify all implementations agree, compile the C
 version to wasm32 (clang) and x86-64 (gcc), run the wasm with wasmtime, then
 count Qwen3.5 tokens for every representation an LLM could emit.
 
-Run: PYTHONPATH=/tmp/exppkgs python exp_tokens.py
+Run (devcontainer): python exp_tokens.py
 """
 
 import json

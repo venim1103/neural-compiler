@@ -279,27 +279,28 @@ intervals, on held-out task families.
   `src/neural_compiler/bridge/` (protocol, monitor, sandbox, `executors/{python,c,wasm}`) and
   `src/neural_compiler/eval/`. The prototypes in `experiments/` are the starting point; they are
   **not hardened**.
-- **New dependencies:**
-  - `wasmtime` (pip);
-  - `bubblewrap`/`nsjail`, `clang` and `lld` (apt);
-  - `flash-linear-attention` + `fla-core` for Qwen3.5 speed. HF falls back to slow reference
-    kernels without them.
+- **New dependencies:** now part of the devcontainer (see
+  [.devcontainer/README.md](../../.devcontainer/README.md#compile-and-execute-toolchain)):
+  - `wasmtime` and `unicorn` in all locks;
+  - `bubblewrap`, `clang`, `lld`, `tcc` and `wabt` via apt;
+  - `flash-linear-attention` + `fla-core` in the CUDA lock, for Qwen3.5 speed. HF falls back to slow
+    reference kernels without them.
+  - `nsjail` is not packaged for Ubuntu 24.04; add it in P1 if chosen over bubblewrap.
 
 ---
 
 ## Appendix — reproducing the experiments
 
+All dependencies are part of the devcontainer; see
+[.devcontainer/README.md](../../.devcontainer/README.md#compile-and-execute-toolchain). The GPU
+experiments need a CUDA profile, which provides the fla kernels.
+
 ```bash
-sudo apt-get install -y tcc wabt clang lld bubblewrap
-pip install --target /tmp/exppkgs wasmtime unicorn einops
-pip install --no-deps --target /tmp/fla-core fla-core==0.6.0
-pip install --no-deps --target /tmp/fla flash-linear-attention==0.6.0
-# merge: copy /tmp/fla-core/* into /tmp/exppkgs, then add /tmp/fla/fla/{layers,models} into /tmp/exppkgs/fla
 cd docs/review/experiments
-PYTHONPATH=/tmp/exppkgs python exp_tokens.py    # E1 (+ writes exp_tokens_results.json used by E3)
-PYTHONPATH=/tmp/exppkgs python exp_bridge.py    # E2
-PYTHONPATH=/tmp/exppkgs python exp_loop.py      # E3 (GPU, downloads Qwen/Qwen3.5-4B, ~25 min here)
-PYTHONPATH=/tmp/exppkgs python exp_prefill.py   # E3b (GPU)
+python exp_tokens.py    # E1 (+ writes exp_tokens_results.json used by E3)
+python exp_bridge.py    # E2
+python exp_loop.py      # E3 (CUDA profile; downloads Qwen/Qwen3.5-4B, ~25 min on an RTX A3000)
+python exp_prefill.py   # E3b (CUDA profile)
 ```
 
 Notes:

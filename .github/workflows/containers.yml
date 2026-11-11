@@ -85,6 +85,6 @@ jobs:
             --workdir /workspace "$IMAGE_TAG" bash -e -o pipefail -c '
               python -m pip check
               python -c "import os, torch; actual = torch.version.cuda or \"none\"; expected = os.environ[\"EXPECTED_CUDA\"]; print(\"Torch:\", torch.__version__, \"CUDA build:\", actual); assert actual == expected, (actual, expected)"
-              python .devcontainer/smoke.py --tests
+              python .devcontainer/smoke.py --tests --toolchain
               ruff check --no-cache src tests .devcontainer/smoke.py
             '

@@ -4,7 +4,7 @@ Measures, per task: wasmtime compile (from WAT and from binary), instantiate and
 call with fuel metering; Python in a fresh subprocess vs a warm worker; C via
 `tcc -run` and gcc -O2 + exec; native execution time of each program.
 
-Run: PYTHONPATH=/tmp/exppkgs python exp_bridge.py
+Run (devcontainer): python exp_bridge.py
 """
 
 import json

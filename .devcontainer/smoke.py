@@ -96,6 +96,94 @@ def check_tests() -> None:
     )
 
 
+TOOLCHAIN_BINARIES = ("bwrap", "clang", "tcc", "wasm-ld", "wasm2wat", "wat2wasm")
+
+
+def check_toolchain(device: str) -> dict:
+    """Verify the compile-and-execute toolchain used by the execution-bridge experiments."""
+    import shutil
+    import tempfile
+
+    import wasmtime
+    from unicorn import UC_ARCH_X86, UC_MODE_64, Uc
+    from unicorn.x86_const import UC_X86_REG_RAX
+
+    missing = [name for name in TOOLCHAIN_BINARIES if shutil.which(name) is None]
+    if missing:
+        raise RuntimeError(f"Missing toolchain binaries: {', '.join(missing)}")
+
+    with tempfile.TemporaryDirectory() as directory:
+        work = Path(directory)
+        source = work / "triangle.c"
+        source.write_text(
+            "long long triangle(void) {\n"
+            "    long long total = 0;\n"
+            "    for (int i = 1; i <= 100; i++) total += i;\n"
+            "    return total;\n"
+            "}\n"
+        )
+        module_path = work / "triangle.wasm"
+        subprocess.run(
+            ["clang", "--target=wasm32", "-O2", "-nostdlib", "-Wl,--no-entry",
+             "-Wl,--export=triangle", "-o", str(module_path), str(source)],
+            check=True,
+        )
+        config = wasmtime.Config()
+        config.consume_fuel = True
+        engine = wasmtime.Engine(config)
+        store = wasmtime.Store(engine)
+        store.set_fuel(1_000_000)
+        instance = wasmtime.Instance(store, wasmtime.Module.from_file(engine, str(module_path)), [])
+        if instance.exports(store)["triangle"](store) != 5050:
+            raise RuntimeError("clang -> wasm32 -> wasmtime check failed")
+
+        text = subprocess.run(
+            ["wasm2wat", str(module_path)], check=True, capture_output=True, text=True
+        ).stdout
+        (work / "roundtrip.wat").write_text(text)
+        subprocess.run(
+            ["wat2wasm", str(work / "roundtrip.wat"), "-o", str(work / "roundtrip.wasm")],
+            check=True,
+        )
+
+        program = work / "answer.c"
+        program.write_text('#include <stdio.h>\nint main(void) { printf("%d\\n", 6 * 7); return 0; }\n')
+        output = subprocess.run(
+            ["tcc", "-run", str(program)], check=True, capture_output=True, text=True
+        ).stdout
+        if output.strip() != "42":
+            raise RuntimeError("tcc -run check failed")
+
+    emulator = Uc(UC_ARCH_X86, UC_MODE_64)
+    emulator.mem_map(0x100000, 0x1000)
+    emulator.mem_write(0x100000, bytes.fromhex("b82a000000"))  # mov eax, 42
+    emulator.emu_start(0x100000, 0x100005)
+    if emulator.reg_read(UC_X86_REG_RAX) != 42:
+        raise RuntimeError("unicorn x86-64 emulation check failed")
+
+    # bubblewrap needs unprivileged user namespaces, which depend on the container runtime
+    # (they work under rootless Podman; Docker's default seccomp profile may block them).
+    sandbox = subprocess.run(
+        ["bwrap", "--ro-bind", "/", "/", "--unshare-all", "--die-with-parent", "true"],
+        capture_output=True,
+        text=True,
+    )
+    results = {
+        "clang_wasm32_wasmtime_verified": True,
+        "wabt_roundtrip_verified": True,
+        "tcc_verified": True,
+        "unicorn_verified": True,
+        "bubblewrap_namespaces": sandbox.returncode == 0,
+        "versions": {package: version(package) for package in ("wasmtime", "unicorn")},
+    }
+    if device == "cuda":
+        from fla.ops.gated_delta_rule import chunk_gated_delta_rule  # noqa: F401
+
+        results["versions"]["fla-core"] = version("fla-core")
+        results["fla_kernels_verified"] = True
+    return results
+
+
 def check_network() -> None:
     import requests
 
@@ -114,9 +202,16 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--network", action="store_true")
     parser.add_argument("--tests", action="store_true")
+    parser.add_argument(
+        "--toolchain",
+        action="store_true",
+        help="verify clang->wasm32, wasmtime, wabt, tcc, unicorn, bubblewrap (and fla on CUDA)",
+    )
     options = parser.parse_args()
     check_certificates()
     results = check_neurovm_pipeline()
+    if options.toolchain:
+        results["toolchain"] = check_toolchain(results["device"])
     if options.network:
         check_network()
     results["versions"] = {

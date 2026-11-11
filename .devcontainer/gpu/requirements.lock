@@ -1,7 +1,7 @@
 accelerate==1.15.0 \
     --hash=sha256:5654f8c5eaa0d4fa68b33e287a97765da6849bf6d51dcac874e73fbbddfb6134 \
     --hash=sha256:97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec
-    # via -r .devcontainer/requirements.in
+    # via -r .devcontainer/gpu/../requirements.in
 annotated-doc==0.0.5 \
     --hash=sha256:117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101 \
     --hash=sha256:c7e58ce09192557605d8bbd92836d7e1d520ac9580096042c0bfd197efacf1bb
@@ -9,7 +9,7 @@ annotated-doc==0.0.5 \
 antlr4-python3-runtime==4.13.2 \
     --hash=sha256:fe3835eb8d33daece0e799090eda89719dbccee7aa39ef94eed3818cafa5a7e8
     # via
-    #   -r .devcontainer/requirements.in
+    #   -r .devcontainer/gpu/../requirements.in
     #   latex2sympy2-extended
 anyio==4.16.0 \
     --hash=sha256:59bb03251907983d1603d27c3087ddb1e93299ea2163adcdba37899a4fb12ffb \
@@ -54,12 +54,26 @@ cuda-bindings==12.9.4 \
 cuda-pathfinder==1.8.6 \
     --hash=sha256:bf6b3b06323cf95a11d671818392da5da23ddbbb4dfc4b77ca10622783c25980
     # via cuda-bindings
+einops==0.8.2 \
+    --hash=sha256:54058201ac7087911181bfec4af6091bb59380360f069276601256a76af08193 \
+    --hash=sha256:609da665570e5e265e27283aab09e7f279ade90c4f01bcfca111f3d3e13f2827
+    # via fla-core
 filelock==4.2.9 \
     --hash=sha256:96530b7c538d4ea08493ab067247aab7948c54d8cd622cce711c97cccc5d9896 \
     --hash=sha256:a379c50a729e5b68c8519a4d26489f755d9769960a236ecd838190e2a78db2e9
     # via
     #   huggingface-hub
     #   torch
+fla-core==0.6.0 \
+    --hash=sha256:b0708b70e0b119cd58a0a5146ea56cb175cef6ed969d8ac60267e3e077ce3ebd \
+    --hash=sha256:cdd5b7ff6d5c0e5c08fde73f2624d76e0b506f8684af4e316bc7f2d8bfd9a623
+    # via
+    #   -r .devcontainer/gpu/requirements.in
+    #   flash-linear-attention
+flash-linear-attention==0.6.0 \
+    --hash=sha256:4110ff0f94ca54b76fc5499f0c169f5cbd44738d875e0199adc3a11ab0e241fa \
+    --hash=sha256:6dec9735f8454523c13553622e98aff30152dde6586b4ac7d88010fbb7a06b5f
+    # via -r .devcontainer/gpu/requirements.in
 fsspec==2026.9.0 \
     --hash=sha256:0f08147951c8cb31d844c3547d631053b127863b60be04cf06e121333ee0e2fe \
     --hash=sha256:8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f
@@ -101,7 +115,7 @@ huggingface-hub==1.33.0 \
     --hash=sha256:04e434b06e100eddbce9a6e817d72693a7884b10a79bd67ab48080d5c07eb899 \
     --hash=sha256:367be21a201db9523eddf8aeac7048f2602c1b308691c97640d5e72ed188007e
     # via
-    #   -r .devcontainer/requirements.in
+    #   -r .devcontainer/gpu/../requirements.in
     #   accelerate
     #   tokenizers
     #   transformers
@@ -281,7 +295,7 @@ markupsafe==3.0.4 \
     # via jinja2
 math-verify==0.9.0 \
     --hash=sha256:3703e7c4885354027fa84409d762a596a2906d1fd4deb78361876bd905a76194
-    # via -r .devcontainer/requirements.in
+    # via -r .devcontainer/gpu/../requirements.in
 mdurl==0.1.2 \
     --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8 \
     --hash=sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba
@@ -351,7 +365,7 @@ numpy==2.2.6 \
     --hash=sha256:fe27749d33bb772c80dcd84ae7e8df2adc920ae8297400dabec45f0dedb3f6de \
     --hash=sha256:fee4236c876c4e8369388054d02d0e9bb84821feb1a64dd59e137e6511a551f8
     # via
-    #   -r .devcontainer/requirements.in
+    #   -r .devcontainer/gpu/../requirements.in
     #   accelerate
     #   scipy
     #   transformers
@@ -480,7 +494,7 @@ pygments==2.21.0 \
 pytest==8.4.2 \
     --hash=sha256:86c0d0b93306b961d58d62a4db4879f27fe25513d4b969df351abdddb3c30e01 \
     --hash=sha256:872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79
-    # via -r .devcontainer/requirements.in
+    # via -r .devcontainer/gpu/../requirements.in
 pyyaml==6.0.3 \
     --hash=sha256:00c4bdeba853cc34e7dd471f16b4114f4162dc03e6b7afcc2128711f0eca823c \
     --hash=sha256:0150219816b6a1fa26fb4699fb7daa9caf09eb1999f3b70fb6e786805e80375a \
@@ -714,7 +728,7 @@ ruff==0.17.4 \
     --hash=sha256:e3b84eb74f260d1c2dbd236fd9d4c011d4fdd0a52bdf8aea57a10e3a1b71fca5 \
     --hash=sha256:f32d178b50e826e00f6c6c1be3f56333068acb9b67fe167143527fa9b81e890d \
     --hash=sha256:f99e95a1515161138be3cbd1b06c06e739d8feb38ade35564556999fffc3686e
-    # via -r .devcontainer/requirements.in
+    # via -r .devcontainer/gpu/../requirements.in
 safetensors==0.8.0 \
     --hash=sha256:040070828e36dc8e122178bbbd5830ff9e97920affb84cbe0f46442497bed358 \
     --hash=sha256:096ec1a98435df7beb08853bb5aa9081a84f23d0adc67ed1a0a10550f608373f \
@@ -734,7 +748,7 @@ safetensors==0.8.0 \
     --hash=sha256:fcdd41ec4628fee5799f807c73c353629130fbd942aa23d83c623dd6c9d52d78 \
     --hash=sha256:fd6f3f93c9a0a7cc2788ee63fb763353d4bd2e89b0751bc78fcf7dda00bea774
     # via
-    #   -r .devcontainer/requirements.in
+    #   -r .devcontainer/gpu/../requirements.in
     #   accelerate
     #   transformers
 scipy==1.15.3 \
@@ -784,7 +798,7 @@ scipy==1.15.3 \
     --hash=sha256:eae3cf522bc7df64b42cad3925c876e1b0b6c35c1337c93e12c0f366f55b0eaf \
     --hash=sha256:ed7284b21a7a0c8f1b6e5977ac05396c0d008b89e05498c8b7e8f4a1423bba0e \
     --hash=sha256:f77f853d584e72e874d87357ad70f44b437331507d1c311457bed8ed2b956126
-    # via -r .devcontainer/requirements.in
+    # via -r .devcontainer/gpu/../requirements.in
 setuptools==84.2.1 \
     --hash=sha256:3ff8b3b5492a0aa66960f4419365a86b84e013070d4313e4d4a6894f5d64d6bc \
     --hash=sha256:ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2
@@ -848,7 +862,7 @@ torch==2.10.0+cu128 \
     --hash=sha256:f1f8b840c64b645a4bc61a393db48effb9c92b2dc26c8373873911f0750d1ea7 \
     --hash=sha256:fbde8f6a9ec8c76979a0d14df21c10b9e5cab6f0d106a73ca73e2179bc597cae
     # via
-    #   -r .devcontainer/requirements.in
+    #   -r .devcontainer/gpu/../requirements.in
     #   accelerate
 tqdm==4.70.1 \
     --hash=sha256:c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73 \
@@ -859,7 +873,9 @@ tqdm==4.70.1 \
 transformers==5.22.1 \
     --hash=sha256:bed9fd76d6f43b4a1a9fc5d0c565ace7c77edbd029784f8cbcdf772cb5e924d8 \
     --hash=sha256:c940b4bf98de4f568723895f330ba1460a398bd83061b93b70238c3fe32e4389
-    # via -r .devcontainer/requirements.in
+    # via
+    #   -r .devcontainer/gpu/../requirements.in
+    #   flash-linear-attention
 triton==3.6.0 \
     --hash=sha256:0075039ff27765480083b1a109999bf27110f3542f1f9fad95f0f9065a36da79 \
     --hash=sha256:20ed2f770f7217b8a994cba99e7cac37e7be735a3991344990b80ab4fea964c4 \
@@ -887,3 +903,40 @@ typing-extensions==4.16.0 \
     #   anyio
     #   huggingface-hub
     #   torch
+unicorn==2.1.4 \
+    --hash=sha256:00567a70e323f749b419cd86bee4f9115beab7ebba32194581c090cbb7c59cff \
+    --hash=sha256:01d744ba01c5cc68f1d7afe3d183f1868720fd440ec4eaedc4d1d5d9bf54b84c \
+    --hash=sha256:02630b1693f265d53cb6463334f81f23d96f5f58dd0602334e891302af738159 \
+    --hash=sha256:2a6f738fab5fabffa56af1e7bbf16ea1e91466c342f8dc64f125bd70f36c6b80 \
+    --hash=sha256:35ac021ead8c992b15a511be73bf703429e5d346136ae38e6307c3d852655341 \
+    --hash=sha256:6c9fffa46935bbd2d30db7f7ac6c5c809d3b512bcbdb53ced9796e27b27d6157 \
+    --hash=sha256:73d2eb557cc0255f18c55b15951c46dff1c07f996588df4cea1b1bdc5d69b184 \
+    --hash=sha256:7eed9406a0503e91a2fecb250937aeb55291b2a3b9b51d23a39e7fc0be9a30d7 \
+    --hash=sha256:8687ec8f83cd40201ac7de3c52f7538754e61b5245c651a019711c7289ee26a4 \
+    --hash=sha256:8a7a94e67ce277c63112afa06640862b6c7395b8d42aec38f7a61a96c4b1658e \
+    --hash=sha256:8f4e63b76ac4faa7cd32a4c436e96eabc24b91d52e73bde7699ec886bddf9277 \
+    --hash=sha256:9be89e69be5e2631299f39a7fb8e47b8d3bfaa70ae746e9c4c5f9476a2df9778 \
+    --hash=sha256:9d6e6dea140560de4ebd8446661f7ef84a357d428c14a3ef09dacd306ec8c239 \
+    --hash=sha256:a445476fff91e636b812d35ff1b0fb07f39ceaec0b3a86d246f7d431ff7766b3 \
+    --hash=sha256:bd1fb0c9af5f57e356d8a96928b4fe045b2e18f308ef23b481d5f970008aa722 \
+    --hash=sha256:c1d53d2416d270cf8a6a6e38c2530ca436494d6c7f4377a03d5eb07b25d8dc27 \
+    --hash=sha256:ce5c3bfd05f2a5749a0d8a960e1dfc26519a2d09377dc01cfa1378b936a953f8 \
+    --hash=sha256:cec2b7d3c407140ca9816e050c881b3fde7bf553e38169b7c52a2ce6719c9f43 \
+    --hash=sha256:d348a90ee90219d141cb115ef8ed7e3fd1af42afaee105f7580761d775b25e32 \
+    --hash=sha256:d6c93e0f60328d8f4a1792af3f834137a28050fcc2305f2ec01efe8558a9844e \
+    --hash=sha256:d7107500c64ce5c168fbff6bef9485b5db1350050036f4cea568650cf8bdbdf5
+    # via -r .devcontainer/gpu/../requirements.in
+wasmtime==50.0.1 \
+    --hash=sha256:13fe813b922712a9e10fe0f48b2c56da06432eea4b24269bb7cd3a6b2720560b \
+    --hash=sha256:612ebd1874eeab5f3eb3f18e529ab8af4bff885b7450c58593e3c3889868406b \
+    --hash=sha256:62e4d9b9371b4766a3deb044618c17adad3983ab3333d1598df0e981ec88206f \
+    --hash=sha256:675484e525c028dc02762b777f1db4477ea70caa3fec6775426daff4d64edfb1 \
+    --hash=sha256:83ddab2358ebde392a065581f2c66995a711ccc25ad0aee7b1d20f8c688075d2 \
+    --hash=sha256:a8999581230471f4ff62073b1111eff3a01d45ccec0a908da3f2ae3a499d459c \
+    --hash=sha256:cc14c3a17654e0394e0225b11813532ef0cd7bd1e222a0c5494cdedaabeddac4 \
+    --hash=sha256:d174cad86f66dd819b0c3a77f27e375ca1f106d3858be221ce924d57d3856050 \
+    --hash=sha256:d9a1eb530e5c4a55853784ae6bff0053db3cad89299097ad00e352e3d48c3cc1 \
+    --hash=sha256:e3e2051b02b8a47e2418f569e380843e87c1d74c40cd843bfa14c223245d420b \
+    --hash=sha256:f9c6973ae735946b3387b7a8e812ecd350eac3152c4b73998a57899dd9c4345c \
+    --hash=sha256:ff4fc58ed3cbdb919d056accd4d280be13962a542754aaefd8a9b4654efa9bd9
+    # via -r .devcontainer/gpu/../requirements.in

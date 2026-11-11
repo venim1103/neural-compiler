@@ -4,7 +4,7 @@ For context lengths N, compares (a) one decode step, (b) prefilling k result
 tokens on top of the live cache (in-engine bridge), and (c) re-prefilling the
 whole N+k context from scratch (stateless tool-call API without prefix cache).
 
-Run: PYTHONPATH=/tmp/exppkgs python exp_prefill.py
+Run (devcontainer): python exp_prefill.py
 """
 
 import json

@@ -29,7 +29,7 @@
   "mounts": [
     "source=neural-compiler-cache-${devcontainerId},target=/home/vscode/.cache,type=volume"
   ],
-  "postCreateCommand": ["/opt/venv/bin/python", "${containerWorkspaceFolder}/.devcontainer/smoke.py"],
+  "postCreateCommand": ["/opt/venv/bin/python", "${containerWorkspaceFolder}/.devcontainer/smoke.py", "--toolchain"],
   "waitFor": "postCreateCommand",
   "customizations": {
     "vscode": {

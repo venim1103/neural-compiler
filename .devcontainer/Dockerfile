@@ -30,15 +30,18 @@ ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
 RUN sed -i 's|^URIs: http://|URIs: https://|' /etc/apt/sources.list.d/ubuntu.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
+        bubblewrap \
         build-essential \
         ca-certificates \
         ccache \
+        clang \
         cmake \
         curl \
         g++ \
         git \
         git-lfs \
         jq \
+        lld \
         make \
         ninja-build \
         pkg-config \
@@ -46,7 +49,9 @@ RUN sed -i 's|^URIs: http://|URIs: https://|' /etc/apt/sources.list.d/ubuntu.sou
         python3-dev \
         python3-venv \
         shellcheck \
+        tcc \
         unzip \
+        wabt \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m venv /opt/venv \
