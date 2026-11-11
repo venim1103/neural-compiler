@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neural-compiler"
+version = "0.1.0"
+description = "Weight-compiled looped neural virtual machines, in-weights compilers, and zero-copy hardware bridges"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.10,<2.11",
+    "transformers>=5.17,<6",
+    "numpy>=2.2.6,<3",
+    "safetensors>=0.8,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4.2,<9",
+    "ruff>=0.13,<1",
+]
+evaluation = [
+    "math-verify==0.9.0",
+    "antlr4-python3-runtime==4.13.2",
+]
+
+[project.scripts]
+neural-compiler = "neural_compiler.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
