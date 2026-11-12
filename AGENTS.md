@@ -8,6 +8,9 @@ not promise capabilities or indefinite turn lifetime that the environment lacks.
 work, keep executing useful authorized work until the user explicitly stops,
 pauses or ends that work. Checkpoints, summaries and commits are progress, not
 completion. Apply the final-answer gate in Continuation and Stopping below.
+**Completion-tool rule:** During active continuation, do not call `task_complete`
+or another terminal completion action for a work slice, checkpoint, side request,
+proposal or blocked branch. The final-answer gate applies to those tools too.
 
 **Standing authority:** Independently scope and complete reversible local
 implementation, compatible design choices, bounded synthetic unit fixtures,
@@ -130,9 +133,10 @@ state as it changes; do not append a session-history catalogue.
 - Do not invoke agent-controlled questionnaire/choice dialogs. Do not spawn
   subagents unless explicitly requested.
 - Own planning and execution: choose the first useful unblocked task, record its
-  finite scope/resource budget and exit condition, implement, verify, checkpoint,
-  then start the next useful authorized action in the same turn. Missing routine
-  planning/testing approval is not a blocker.
+  finite work-slice scope/resource budget and slice exit condition, implement,
+  verify, checkpoint, then start the next useful authorized action in the same turn. Missing routine
+  planning/testing approval is not a blocker. A slice exit condition is not a
+  session stopping condition.
 - Assistant-written proposals and test plans are not permission gates for work
   already delegated. Do not replace implementation with repeated documentation-
   only budget proposals, approval requests or checkpoint reports. Record the
@@ -145,7 +149,9 @@ state as it changes; do not append a session-history catalogue.
   expanding scope. Reuse existing tests/helpers and avoid unrelated cleanup.
 - For an isolated blocker, name the missing evidence, authority, tool or input,
   retain the conservative state, prepare useful prerequisites and continue other
-  unblocked work. Diagnose tool failures and use supported alternatives.
+  unblocked work. Diagnose tool failures and use supported alternatives. Missing
+  authority for dependencies, studies or host changes blocks that action, not
+  the remaining project queue.
 - Give concise progress updates: what changed, what was verified and what
   remains. Do not manufacture work merely to keep a turn alive.
 
@@ -154,6 +160,8 @@ state as it changes; do not append a session-history catalogue.
 - Treat an open-ended continuation as active across checkpoints, commits,
   pushes, progress reports, tool notifications, reloads and context compaction.
   Completing one task does not complete the session or require another continue.
+  Track active user intent separately from finite todo status where session state
+  is available; do not clear it because all currently listed todos are done or blocked.
 - Do not end active work with a routine permission/finish vote. An assistant-
   imposed planning gate or missing routine test ledger is not an all-path blocker;
   use the recovery rules below and take the next useful authorized action.
@@ -174,8 +182,10 @@ state as it changes; do not append a session-history catalogue.
 - Stop/finish instructions apply to the current work, not future continued
   sessions. A fresh continue or changed task requires evaluating the latest
   request; do not carry an old finish permission across checkpoints, later turns
-  or context loss. After a pause, a status question or terminal notification is
-  not permission to resume implementation.
+  or context loss. After a **user-requested** pause, a status question or terminal
+  notification is not permission to resume implementation. An assistant-generated
+  final answer, completion-tool call or blocker report is not a user pause and
+  does not revoke an otherwise active continuation.
 - Respect explicit task boundaries. A standalone documentation-only request,
   review or proposal is not permission to start separate implementation or
   collect data. During an already active continuation, handle a side request
@@ -186,6 +196,12 @@ state as it changes; do not append a session-history catalogue.
 - Use commentary for checkpoint reports and side-request results during active
   continuation, then execute the next concrete action. Do not issue a checkpoint
   final answer, offer to continue or leave an authorized next step for another turn.
+  This also applies after completing a requested workflow/instruction repair.
+- If a clarification/approval tool is unavailable, declined or cannot collect a
+  response, do not treat that as a stop instruction or execution-wide platform
+  failure. Resolve delegated choices using standing authority; defer only protected
+  actions lacking authority, then take the next useful authorized action. Do not
+  repeatedly invoke an unavailable dialog or claim to be waiting for its response.
 - Use event-based waiting only when a supported tool is actually waiting for
   authorized work or required input; follow its notification protocol. Do not
   use sleep loops, repeated polling, dummy jobs or invented work to keep a turn
@@ -203,8 +219,19 @@ state as it changes; do not append a session-history catalogue.
   or the user explicitly replaced the continuation with that bounded request.
 - Every useful authorized path is genuinely blocked after checking compatible
   prerequisites and the remaining agreed queue; identify the precise blockers.
-- A higher-priority safety requirement or an actual platform/tool limit prevents
-  further work; state the concrete constraint without claiming to remain active.
+- A higher-priority safety requirement or an execution-wide platform/tool limit
+  prevents further work; state the concrete constraint without claiming to remain active.
+
+**Terminal-action preflight:** Before a final answer or completion tool, recover
+the latest actual user intent and check this gate explicitly. For an all-path
+blocker claim, sweep each Current Work queue against the owning code, tests and
+available resources, including bounded offline prerequisites. State what each
+path needs and why no useful authorized prerequisite can advance it. A todo list
+containing only blocked entries is not that evidence. Read-only cgroups, missing
+serving engines, absent study approval or an unavailable questionnaire must not
+be promoted from branch blockers to a session finish. If a useful path exists,
+select its bounded next action and actually start it instead of calling a
+completion tool.
 
 Otherwise, the next action must be useful authorized work, not a final answer.
 A clean worktree, green gate, checkpoint, commit, push, recap or completed side

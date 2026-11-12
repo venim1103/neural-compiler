@@ -662,3 +662,37 @@ and compatible local correctness work remain separate from those permissions.
 [vllm-033-metadata]: https://pypi.org/pypi/vllm/0.33.0/json
 [vllm-017-metadata]: https://pypi.org/pypi/vllm/0.17.1/json
 [vllm-hybrid-design]: https://docs.vllm.ai/en/latest/design/hybrid_kv_cache_manager/
+
+### 2026-11-12: repeated stopping diagnosis and continuation safeguards
+
+The current session log confirms the second ending was an assistant completion
+decision: after the approval tool reported it could not collect a response, the
+assistant recorded dependency integration as blocked and called `task_complete`.
+The preceding source gate passed 132 tests and the source/documentation pushes
+were verified; no user stop/pause instruction caused that ending.
+
+[The project guide][project-guide] already required active continuation. It now
+explicitly applies the final-answer gate to terminal completion tools, distinguishes
+slice exit conditions from session stopping, and separates user-requested pauses
+from assistant-generated endings. An unavailable approval tool defers only the
+protected action, not other authorized work. An all-path blocker claim requires
+a concrete sweep of each queue and its offline prerequisites; a self-selected
+blocked todo list is not sufficient evidence. Workflow/documentation repairs are
+checkpoints during an already active continuation, not a new permission to finish.
+
+Protected study/data/dependency/host boundaries remain unchanged. This strengthens
+agent behavior within available tools; it does not promise unlimited runtime,
+invent background monitoring or authorize bypassing safety/platform limits.
+
+**Documentation ledger:** ASCII guide content, all 11 local guide reference targets,
+the direction-to-guide link and whitespace passed. Protected Boundaries and Rules
+sections were checked unchanged against the preceding revision. The first literal
+wording check falsely failed on an existing line wrap; the validator was corrected
+to normalize whitespace and propagate failures, then passed. No code suite was
+rerun; its latest unchanged result remains 132 passing tests.
+
+Next actual authorized action after this documentation checkpoint: inspect the
+CPU hybrid checkpoint's eval-mode consistency guard and use bounded existing-style
+fixtures if a concrete gap is reproduced, rather than ending at a dependency approval.
+
+[project-guide]: ../../AGENTS.md
