@@ -10,21 +10,30 @@ Based on empirical benchmarking on `Qwen/Qwen3.5-4B` and a two-round mathematica
 
 1. **The LLM as the Intent-to-Program Compiler:** Rather than running a software compiler inside neural weights (`Qwenx86`'s in-weights `qcc` requires 169,293 machine trace tokens and 71.2 s to compile and run `6 * 7`), the model directly emits compact executable programs:
    - **Default Tier (Python):** Idiomatic Python with a curated standard library (`math`, `itertools`, `fractions`, arbitrary-precision integers). Achieves **1.00× token cost** (530 tokens across our 12-task benchmark) and **10/12 zero-shot accuracy** on `Qwen3.5-4B`.
-   - **Compute Tier (Freestanding / C99):** Compiled inside an isolated sandbox via `tcc` (**1.6 ms** compile) or `clang --target=wasm32 -O2` (**45.8 ms** compile), delivering **7–32× faster execution** than CPython on loop-intensive tasks with **8–10/12 zero-shot accuracy**.
+   - **Compute Tier (Freestanding / C99, planned fast path):** Reference `tcc` (**1.6 ms** compile) and `clang --target=wasm32 -O2` (**45.8 ms** compile) measurements motivate this tier. Reference C/Wasm execution was **7–32× faster** than CPython on loop-intensive tasks, with **8–10/12 zero-shot C accuracy**. These are not end-to-end hardened-jail timings.
    - **Research Track (Middle-Level IRs):** (R1) A compact, statically typed surface DSL with host intrinsics lowered to native/Wasm via Cranelift, compared against (R2) grammar/validator-constrained `LLM-WAT` emission.
-2. **The Host Execution Bridge as the Program-to-Silicon Compiler:** A hardened, out-of-process host bridge intercepts Qwen3.5's native `<tool_call>` (`248058`) / `</tool_call>` (`248059`) delimiters from the token stream, compiles and runs the code inside a namespace + `seccomp` + resource-limited jail (`bubblewrap` / `nsjail` and fuel-metered `wasmtime`), and prefills the `<tool_response>` turn directly into the **same live KV + Gated DeltaNet recurrent cache**.
+2. **The Host Execution Bridge as the Program-to-Silicon Compiler (target architecture):** The planned hardened bridge will intercept Qwen3.5's native tool delimiters, execute in an out-of-process namespace + `seccomp` + resource-limited jail, and prefill the response into the **same live KV + Gated DeltaNet recurrent cache**. The recorded decode-loop prototype uses markdown fences, not native tool turns.
+
+## Implementation Status
+
+The project is at **P0**, not production-ready. [The Python bridge foundation](./src/neural_compiler/bridge/execution.py) now provides fresh per-request namespaces, wall-clock supervision, process-group kill/reap, resource limits, separate stdout/stderr, and a 64 KiB program/output budget. It fails explicitly if bubblewrap is unavailable; it never falls back to host execution.
+
+The experimental C/assembly executors compile **inside** the jail; Wasm and x86 emulation run in separate jailed processes. **Seccomp, per-request cgroups/PID caps, a curated-import policy, native tool framing, and serving-engine integration remain unfinished. Do not expose these executors to untrusted workloads.**
+
+The 12 fixed tasks and 6 forced-tool examples are preliminary evidence, not proof of autonomous tool use, generalization, or production latency. See [the implementation audit and next gates](./docs/review/PROJECT_DIRECTION.md#implementation-audit-2026-11-12).
 
 ## Key Empirical Findings (`Qwen3.5-4B`)
 
 | Metric / Experiment | Measured Result | Architectural Implication |
 | :--- | :--- | :--- |
 | **Token Efficiency (E1, 12 tasks)** | Python: **530 tokens** (`1.00x`) vs. C: **1,673** (`3.16x`), raw x86-64 bytes: **1,288** (`2.43x`), Wasm binary: **2,246** (`4.24x`), WAT text: **6,281** (`11.85x`) | Token cost is governed by abstraction level and standard-library intrinsics (`math.comb`, `pow`, bignum), not binary vs. text encoding. |
-| **Bridge Latency (E2, medians)** | Warm jailed Python: **0.07 ms**; `wasmtime` compile: **0.64–0.75 ms**; `wasmtime` run: **54 µs**; `tcc -run`: **1.7 ms** | Host compilation + execution takes less time than generating a **single decode token** ($\ge 2.5$ ms on H100; 63–137 ms on RTX A3000). |
+| **Bridge Latency (historical E2 prototype medians)** | Warm jailed Python: **0.07 ms**; `wasmtime` compile: **0.64–0.75 ms**; `wasmtime` run: **54 µs**; `tcc -run`: **1.7 ms** | Warm/in-process microbenchmarks motivate a bridge; they exclude the new per-request isolation costs and do not establish hardened p95 latency. |
 | **Zero-Shot Emission Accuracy (E3)** | Python: **10/12**; C: **10/12** (`gcc`) / **8/12** (strict C99 + ASan/UBSan); WAT, x86-64 asm, raw x86-64 hex: **0/12** | Base 4B models reliably emit high-level code but fail on register allocation, stack typing, and relative offsets in raw IR/assembly without SFT/RL and constrained decoding. |
 | **Return-Path Prefill Cost (E3b, 4k ctx)** | Live KV + GDN cache prefill (16–64 tokens): **99–123 ms** ($\approx 1.5\text{–}2$ decode steps) vs. full re-prefill: **1,489–1,514 ms** | Preserving the live hybrid KV + Gated DeltaNet state (or using hybrid prefix caching) is the primary latency lever, saving $>1.3$ s per tool call at 4k context. |
 
 ## Repository Structure
 
+- [**`src/neural_compiler/bridge/`**](./src/neural_compiler/bridge/) — Supervised per-request execution foundation; Python public API and standalone experimental runtime harness.
 - [**`WHITEPAPER.md`**](./WHITEPAPER.md) — Revised technical whitepaper covering (1) the LLM-as-compiler + native CPU bridge architecture, empirical benchmarks (E1–E3b), security model, and SFT/RL training recipe, and (2) the mathematically corrected analytical reference for weight-compiled neural virtual machines (`Loom`, `Qwenputer`, `Qwenx86`, `Percepta`).
 - [**`docs/review/PROJECT_DIRECTION.md`**](./docs/review/PROJECT_DIRECTION.md) — Architecture decision record, literature synthesis, and phased roadmap (`P0`–`P5`) with quantitative go/no-go gates.
 - [**`docs/review/WHITEPAPER_REVIEW.md`**](./docs/review/WHITEPAPER_REVIEW.md) & [**`WHITEPAPER_REVIEW_ROUND2.md`**](./docs/review/WHITEPAPER_REVIEW_ROUND2.md) — Two-round technical and numerical audit of the initial NeuroVM draft, backed by [`docs/review/verify_whitepaper.py`](./docs/review/verify_whitepaper.py).
@@ -33,19 +42,31 @@ Based on empirical benchmarking on `Qwen/Qwen3.5-4B` and a two-round mathematica
 
 ## Quick Start
 
-Verify the container environment, unit tests, and compile-and-execute toolchain:
+Inside the prepared devcontainer, install the local package without changing its locked dependencies,
+then verify the environment, unit tests, and compile-and-execute toolchain:
 
 ```bash
+python -m pip install --no-deps --no-build-isolation -e .
 python .devcontainer/smoke.py --tests --toolchain
 python docs/review/verify_whitepaper.py
 ```
+
+Execute a local Python program through the P0 bridge (Linux with working bubblewrap namespaces):
+
+```bash
+neural-compiler --run-python path/to/program.py
+```
+
+This prints JSON with `status`, `stdout`, `stderr`, and `returncode`; the CLI exits nonzero for failed execution.
+On the audit host, 30 calls to the already-loaded Python API measured **23.92 ms p50 / 25.38 ms p95**,
+including fresh jail/interpreter startup. This excludes CLI/model startup and is not a production SLO.
 
 Reproduce the representation, bridge latency, and live-cache prefill benchmarks (see [`docs/review/PROJECT_DIRECTION.md`](./docs/review/PROJECT_DIRECTION.md#appendix--reproducing-the-experiments)):
 
 ```bash
 cd docs/review/experiments
 python exp_tokens.py    # E1: Token cost across 9 representations
-python exp_bridge.py    # E2: Host compilation and sandbox execution latency
+python exp_bridge.py    # E2: Trusted-reference host compilation and execution microbenchmarks
 python exp_loop.py      # E3: Qwen3.5-4B zero-shot & in-decode-loop bridge (CUDA)
 python exp_prefill.py   # E3b: Live KV+GDN cache resume vs. full re-prefill (CUDA)
 ```

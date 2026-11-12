@@ -310,3 +310,54 @@ Notes:
   runs out), which never triggered in the recorded run.
 - E3b was re-run with `logits_to_keep=1`. The first version computed full-vocabulary logits for every
   prefix position, which inflated all timings.
+
+## Implementation audit (2026-11-12)
+
+The architecture above is a **target**, not a description of a completed product. The revised
+whitepaper and README previously overstated the implemented protocol, isolation, and latency.
+
+### Verified issues and repairs
+
+| Finding | Evidence | Repair |
+|---|---|---|
+| Python exceptions were reported as success | `raise ValueError(...)` returned `("ok", "ValueError: ...")` | Host-supervised process exit determines status; stdout is never a control reply |
+| Warm-worker timeout covered only the first byte | A partial response took 301 ms despite a 50 ms timeout, then raised `JSONDecodeError` | Replace the guest-sharing worker with per-request execution; deadline covers all output and process exit; kill and reap on timeout |
+| Compilation could read host files and was unbounded | C/asm invoked host gcc before entering bubblewrap | Compile in a writable private work directory inside the jail; compile and execution share one wall-clock budget; C uses strict C99 |
+| Wasm/unicorn ran inside the supervisor | Fuel/instruction limits did not bound native runtime memory or compilation time | Separate jailed processes with an outer deadline and resource limits; Wasm linear memory and tables are bounded |
+| Invalid hex was silently rewritten | `b82a000000c3xyz` was accepted as a program returning 42 | Reject non-hex text; permit whitespace only between bytes; require the emulator actually reaches the return sentinel |
+| Experimental result handling assumed the old statuses | New resource/isolation failures could not be counted | E3 now records `output_limit`/`sandbox_error` and requires successful execution for program correctness |
+
+The reusable Python API and CLI are in [execution.py](../../src/neural_compiler/bridge/execution.py)
+and [cli.py](../../src/neural_compiler/cli.py). Regression coverage includes deadlines with partial
+output/closed pipes, process reaping, output caps, explicit failures, host-file isolation, strict C99,
+and Wasm fuel/memory/signature errors.
+
+**Deliberate tradeoff:** cold per-request isolation replaces the unsafe warm Python worker.
+The historical 0.07 ms measurement does **not** describe this executor. Recorded JSON results are
+kept unchanged as historical evidence; E3 reruns use the new executors and last-position logits.
+The E2 trusted-reference microbenchmarks are not a hardened-bridge latency gate.
+On the audit host, 30 `print(6 * 7)` calls through the already-loaded Python API measured
+**23.92 ms p50 / 25.38 ms p95**, including jail/interpreter startup. A partial-output timeout
+returned `timeout` in 101.46 ms against a 100 ms deadline, instead of blocking for the guest's
+whole response. These shared-host measurements exclude CLI/model startup and do not establish
+an H100 or concurrent-serving SLO.
+
+### Approach risks and the next development gates
+
+1. **Keep Python first, but keep the conclusion provisional.** E1 compares handwritten programs
+   with compiler output and unmatched libraries. Twelve fixed tasks and six prompted tool calls
+   do not establish autonomous tool selection, held-out-family accuracy, or an advantage over
+   the no-tool model. Use randomized instances, matched intrinsics/budgets, and both baselines.
+2. **Finish containment before training or exposing a service.** Namespaces and rlimits alone
+   are insufficient: seccomp, per-request cgroups/PID caps, an import policy, and an independent
+   containment review remain prerequisites. A finite test suite cannot prove universal containment.
+3. **Next P0 slice: native protocol and cache-correct continuation.** Use the installed tokenizer's
+   chat template, validate complete calls, preserve the pending sampled token exactly once, and
+   prove multi-call continuation against full-prefill reference logits on a small hybrid model.
+   A prefix-cache serving spike is still outstanding; do not assume live pause/resume wins.
+4. **Measure the real objective.** Record full prompt-to-answer time, including isolation startup,
+   compilation, result prefill, failed attempts, and repair turns; report p50/p95 and time per
+   correct answer with uncertainty. Add warm pooling only after correctness and containment.
+5. **Defer DSL/RL investment until these gates pass.** A typed DSL with arbitrary-precision host
+   intrinsics is research, not an implemented low-latency compiler. Grammar/type validity is not
+   semantic correctness.

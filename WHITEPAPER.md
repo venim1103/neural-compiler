@@ -12,6 +12,13 @@ This whitepaper presents a two-part synthesis grounded in empirical measurements
 
 ---
 
+**Implementation status (2026-11-12):** Part I describes the target architecture, not a
+production implementation. The repository now contains a supervised, per-request execution
+foundation with in-jail C/assembly compilation and isolated Wasm/unicorn harnesses. Native tool
+turns, seccomp/cgroup hardening, warm pooling, and serving integration remain unfinished.
+Historical warm/in-process microbenchmarks exclude these isolation costs; the six-task E3 bridge
+used markdown fences. See [the implementation audit](./docs/review/PROJECT_DIRECTION.md#implementation-audit-2026-11-12).
+
 ## 1. Taxonomy of "In-Weights Compilation" and Precedent Systems
 
 ### 1.1 Four Meanings of Compiling Within Model Weights
@@ -42,7 +49,7 @@ A primary-source audit of existing weight-compiled execution engines establishes
 
 ### 2. Empirical Analysis of Representations, Bridge Latency, and Cache Resumption
 
-To ground architectural decisions in measured hardware performance rather than speculation, four experiments (`E1`, `E2`, `E3`, `E3b` in `docs/review/experiments/`) were executed on `Qwen/Qwen3.5-4B` across 12 representative algorithmic and number-theoretic tasks (`primes_sum`, `collatz`, `lcm_1_25`, `fib_mod`, `divisors`, `binomial`, `digits_2_100`, `modpow`, `lcg_median`, `double_palindromes`, `lattice_paths`, `char_Checksum`).
+To ground architectural decisions in measured hardware performance rather than speculation, four experiments (`E1`, `E2`, `E3`, `E3b` in `docs/review/experiments/`) were executed on `Qwen/Qwen3.5-4B` across 12 representative algorithmic and number-theoretic tasks (`primes_sum`, `collatz`, `lcm_1_25`, `fib_mod`, `divisors`, `binomial`, `digits_2_100`, `modpow`, `lcg_median`, `double_palindromes`, `lattice_paths`, `vowels`).
 
 #### 2.1 Experiment E1: Token Cost Across Target Representations
 Every token emitted by a 4B model requires a full forward pass reading ~8 GB of `bf16` weights from GPU HBM ($\ge 2.5$ ms/token on an H100; 63–137 ms/token on an RTX A3000). Token count is therefore the dominant multiplier on total wall-clock latency.
@@ -182,10 +189,16 @@ Because the pre-activations $z_{i,1}$ reach $\approx 3 \cdot 2^{N-1}$ while the 
 
 | Floating-Point Format | Mantissa Bits ($M$) | Max Exact Integer | Single-Layer Subtractor Word Limit ($N_{\max}$) | Measured Failure Rate (`verify_whitepaper.py`) |
 | :--- | ---: | ---: | :--- | :--- |
-| **`bfloat16`** | 7 bits | $256$ | **$N \le 6$** (Fails at $N=8$) | $N=8$: **13.4% wrong**; $N=16$: **99.6% wrong** |
+| **`bfloat16`** | 7 bits | $256$ | **$N \le 7$** (Fails at $N=8$) | $N=8$: **13.4% wrong**; $N=16$: **99.6% wrong** |
 | **`TF32` (TensorCore)** | 10 bits | $2,048$ | **$N \le 9$** | Must disable TF32 (`torch.backends.cuda.matmul.allow_tf32 = False`) for $N > 9$ |
 | **`float32`** | 23 bits | $16,777,216$ | **$N \le 23$** (Safe for $N=8, 16$) | $N=16$: **0% wrong**; $N=24$: **13.0% wrong**; $N=32$: **100% wrong** |
-| **`float64`** | 52 bits | $9.0 \times 10^{15}$ | **$N \le 51$** (Safe for $N=32$) | $N=32$: **0% wrong**; $N=64$: **100% wrong** |
+| **`float64`** | 52 bits | $9.0 \times 10^{15}$ | **$N \le 52$** (Safe for $N=32$) | $N=32$: **0% wrong**; $N=64$: **100% wrong** |
+
+The rates above are historical measurements, not backend-independent constants. The
+2026-11-12 CPU rerun produced 385/3004 failures at `bf16`, $N=8$, and 3004/3004 at
+$N=16$. Boundary checks (1,003 seeded/adversarial pairs per width) found no failures at
+`bf16` $N=7$ or `fp64` $N=52$, and 128 failures at each next width. The precision ceiling
+is $N_{\max}=M$, since the largest pre-activation is $3\cdot2^{N-1}$.
 
 **Architectural Consequence (`M2`, `A4`):** `Loom` uses **$N = 8$** in `fp32` ($d = 9\ell + 8N + 1 = 155$ at $\ell = 10, n = 1024$). Supporting 32-bit integers in `fp32` requires either multi-limb execution ($2 \times 16$-bit limbs with carry ripple across layers/cycles) or `fp64` weights.
 

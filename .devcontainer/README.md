@@ -1,12 +1,12 @@
 # Development Container (`neural-compiler`)
 
-This setup adapts the multi-profile Dev Container and certificate-trust architecture from `llm-loop-fix`, `micro_classifier`, and `embedded-jev`. It provides hash-locked Python 3.12 CPU/CUDA inputs and offline numerical/wiring checks for the **NeuroVM** weight-compiled looped neural virtual machine and compiler stack.
+This setup adapts the multi-profile Dev Container and certificate-trust architecture from `llm-loop-fix`, `micro_classifier`, and `embedded-jev`. It provides hash-locked Python 3.12 CPU/CUDA inputs and offline checks for the **LLM-as-compiler execution bridge** and the retained NeuroVM reference primitives.
 
 ## Profiles
 
 | Configuration | Use |
 | --- | --- |
-| [CPU](devcontainer.json) | Default; weight-compiled ALU/RAM circuit synthesis, unit tests, and looped state verification without a GPU requirement |
+| [CPU](devcontainer.json) | Default; execution-bridge development, unit tests, and reference ALU/RAM checks without a GPU requirement |
 | [CUDA / Docker](gpu/devcontainer.json) | NVIDIA host with Docker and NVIDIA Container Toolkit |
 | [CUDA / Podman / WSL](gpu-podman/devcontainer.json) | WSL2 passthrough with Podman and NVIDIA CDI (`--device nvidia.com/gpu=all`, `/dev/dxg`) |
 

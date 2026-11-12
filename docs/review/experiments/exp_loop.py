@@ -4,7 +4,7 @@ Part B: zero-shot, batched over 12 tasks, one batch per target representation
         (Python, C, WAT, x86-64 asm, raw x86-64 machine-code hex). Every program
         is executed in a sandbox (sandbox.py) and checked against the reference.
 Part C: an in-decode-loop bridge. Greedy decoding stops at the end of a
-        ```python block, the program runs in a warm jailed worker, its output is
+        ```python block, the program runs in a supervised per-request jail, its output is
         prefilled into the *same* KV/recurrent cache, and decoding resumes.
 
 Run (devcontainer): python exp_loop.py
@@ -96,7 +96,8 @@ def part_b():
         prompts = [f"{LANG_SPEC[lang][1]}\n\nTask: {TASKS[n]['prompt']}\n\nReply with only the code in a single "
                    f"```{fence} block." for n in names]
         outs, dt, steps = batch_generate(prompts, MAX_NEW[lang])
-        stats = {"ok": 0, "compile_error": 0, "runtime_error": 0, "timeout": 0, "wrong": 0}
+        stats = {"ok": 0, "compile_error": 0, "runtime_error": 0, "timeout": 0,
+                 "output_limit": 0, "sandbox_error": 0, "wrong": 0}
         toks = []
         for n, (text, ntok) in zip(names, outs):
             code = extract(text)
@@ -114,7 +115,7 @@ def part_b():
 
 @torch.no_grad()
 def forward(ids, cache):
-    out = model(input_ids=ids, past_key_values=cache, use_cache=True)
+    out = model(input_ids=ids, past_key_values=cache, use_cache=True, logits_to_keep=1)
     return out.logits[:, -1, :], out.past_key_values
 
 
@@ -145,8 +146,6 @@ def program_done(text):
 
 @torch.no_grad()
 def part_c(names):
-    worker = sb.JailedPyWorker()
-    worker.run("print(0)")
     rows = {}
     for n in names:
         prompt = chat_text([{"role": "system", "content": TIR_SYSTEM}, {"role": "user", "content": TASKS[n]["prompt"]}])
@@ -159,7 +158,7 @@ def part_c(names):
         t_prog = time.perf_counter()
 
         code = extract(text1) if program_done(text1) else ""
-        status, out = worker.run(code) if code else ("no_program", "")
+        status, out = sb.run_python(code) if code else ("no_program", "")
         t_exec = time.perf_counter()
         res_ids = tok(f"\n```output\n{out}\n```\n", return_tensors="pt")["input_ids"].cuda()
         # If the phase ended on the closing fence, that token was sampled but not yet fed; feed it
@@ -187,7 +186,7 @@ def part_c(names):
         final = m.group(1).replace(",", "") if m else None
         rows[n] = dict(
             program_tokens=len(ids1), exec_status=status, exec_output=out[-80:],
-            program_correct=judge(out, EXPECTED[n]), final_answer=final,
+            program_correct=status == "ok" and judge(out, EXPECTED[n]), final_answer=final,
             final_correct=final == str(EXPECTED[n]),
             decode_ms_per_token=round(statistics.median(lat1 + lat2), 1),
             gen_program_ms=round((t_prog - t_start) * 1e3), exec_ms=round((t_exec - t_prog) * 1e3, 2),
@@ -197,7 +196,6 @@ def part_c(names):
             transcript=text1 + f"\n```output\n{out}\n```\n" + text2,
         )
         print(n, {k: v for k, v in rows[n].items() if k != "transcript"}, flush=True)
-    worker.close()
     return rows
 
 

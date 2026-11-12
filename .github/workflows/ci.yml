@@ -50,7 +50,7 @@ jobs:
           python -m pip install --no-deps -e '.[dev]'
           python -m pip check
       - name: Ruff
-        run: ruff check src tests .devcontainer/smoke.py
+        run: ruff check src tests docs/review/experiments .devcontainer/smoke.py
       - name: Pytest
         run: python -m pytest -q
       - name: Shellcheck

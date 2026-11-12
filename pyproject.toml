@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "neural-compiler"
 version = "0.1.0"
-description = "Weight-compiled looped neural virtual machines, in-weights compilers, and zero-copy hardware bridges"
+description = "LLM-as-compiler research and a supervised native CPU execution bridge"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
