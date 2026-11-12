@@ -4,16 +4,26 @@ from __future__ import annotations
 
 import random
 from dataclasses import replace
+from fractions import Fraction
 
 import pytest
 
 from neural_compiler.bridge import ExecutionResult, run_python
 from neural_compiler.bridge.session import LiveSession
+from neural_compiler.eval import (
+    ALL_OUTCOMES,
+    SYNTHETIC_FAMILIES,
+    generate_family_tasks,
+    generate_matched_suite,
+)
 from neural_compiler.eval.harness import (
     Budgets,
+    CallRecord,
     CaseResult,
     EvaluationHarness,
     IntegerChecker,
+    IntegerSequenceChecker,
+    RationalChecker,
     Task,
     matched_report,
     run_matched,
@@ -434,3 +444,215 @@ def test_matched_runner_produces_all_three_report_paths(
 def test_invalid_time_cannot_produce_a_success_shaped_cost(elapsed):
     with pytest.raises(ValueError, match="finite and nonnegative"):
         CaseResult("a", "unit", "no_tool", "correct", "", "42", elapsed, 3, 0, ())
+
+
+@pytest.mark.parametrize(
+    "expected,answer,correct,valid",
+    [
+        (Fraction(11, 6), "Work.\nFinal answer: 11/6", True, True),
+        (Fraction(11, 6), "Final answer: +22 / +12", True, True),
+        (Fraction(-5, 1), "Final answer: -5", True, True),
+        (Fraction(11, 6), "Final answer: 10/6", False, True),
+        (Fraction(11, 6), "Final answer: 11/0", False, False),
+        (Fraction(11, 6), "Final answer: 11/6\nFinal answer: 10/6", False, True),
+        (Fraction(11, 6), "Final answer: 11/6 trailing", False, False),
+    ],
+)
+def test_rational_checker_validates_exact_fractions_on_last_line(
+    expected, answer, correct, valid
+):
+    checked = RationalChecker(expected)(answer)
+    assert (checked.correct, checked.valid) == (correct, valid)
+    if not correct:
+        assert checked.diagnostic
+
+
+def test_rational_checker_handles_large_numbers_and_rejects_booleans():
+    big = 10**4500 + 1
+    digits = "1" + "0" * 4499 + "1"
+    checked = RationalChecker(Fraction(big, 3))(f"Final answer: {digits}/3")
+    assert checked.correct and checked.valid
+    with pytest.raises(ValueError, match="boolean"):
+        RationalChecker(True)
+
+
+@pytest.mark.parametrize(
+    "expected,answer,correct,valid",
+    [
+        ((3, -1, 0, 42), "Steps.\nFinal answer: 3, -1, 0, +042", True, True),
+        ((3, -1, 0, 42), "Final answer: 3, -1, 42, 0", False, True),
+        ((3, -1, 0, 42), "Final answer: 3, -1, 0", False, False),
+        ((3, -1, 0, 42), "Final answer: 3, -1, 0, 42\n3, -1, 0, 42", False, False),
+        ((3, -1, 0, 42), "Final answer: 3, a, 0, 42", False, False),
+    ],
+)
+def test_integer_sequence_checker_validates_exact_tuples(
+    expected, answer, correct, valid
+):
+    checked = IntegerSequenceChecker(expected)(answer)
+    assert (checked.correct, checked.valid) == (correct, valid)
+    if not correct:
+        assert checked.diagnostic
+
+
+def test_integer_sequence_checker_rejects_empty_or_boolean_references():
+    with pytest.raises(ValueError, match="non-empty tuple"):
+        IntegerSequenceChecker(())
+    with pytest.raises(ValueError, match="non-empty tuple"):
+        IntegerSequenceChecker((1, True))
+
+
+def test_synthetic_family_generators_are_deterministic_and_self_consistent():
+    assert len(SYNTHETIC_FAMILIES) == 5
+    for family in SYNTHETIC_FAMILIES:
+        batch_a = generate_family_tasks(family, count=4, seed=17)
+        batch_b = generate_family_tasks(family, count=4, seed=17)
+        batch_c = generate_family_tasks(family, count=4, seed=99)
+        assert batch_a == batch_b
+        assert [t.prompt for t in batch_a] != [t.prompt for t in batch_c]
+        assert len({t.case_id for t in batch_a}) == 4
+        assert len({t.prompt for t in batch_a}) == 4
+        for task in batch_a:
+            assert task.family == family
+            checker = task.checker
+            if isinstance(checker, IntegerChecker):
+                assert checker(f"Final answer: {checker.expected}").correct
+                assert not checker(f"Final answer: {checker.expected + 1}").correct
+            elif isinstance(checker, RationalChecker):
+                num, den = checker.expected.numerator, checker.expected.denominator
+                assert checker(f"Final answer: {num}/{den}").correct
+                assert not checker(f"Final answer: {num + 1}/{den}").correct
+            elif isinstance(checker, IntegerSequenceChecker):
+                formatted = ", ".join(str(x) for x in checker.expected)
+                wrong = ", ".join(str(x + 1) for x in checker.expected)
+                assert checker(f"Final answer: {formatted}").correct
+                assert not checker(f"Final answer: {wrong}").correct
+
+
+@pytest.mark.parametrize(
+    "fn,args,kwargs",
+    [
+        (generate_family_tasks, ("unknown_family", 2), {}),
+        (generate_family_tasks, ("binomial_coefficient", 0), {}),
+        (generate_family_tasks, ("binomial_coefficient", True), {}),
+        (generate_matched_suite, (), {"families": ()}),
+        (
+            generate_matched_suite,
+            (),
+            {"families": ("binomial_coefficient", "binomial_coefficient")},
+        ),
+    ],
+)
+def test_family_generator_validation(fn, args, kwargs):
+    with pytest.raises(ValueError):
+        fn(*args, **kwargs)
+
+
+def test_matched_report_aggregates_tokens_calls_and_outcome_matrix():
+    c1 = CaseResult(
+        "c1",
+        "binomial_coefficient",
+        "python_tool",
+        "correct",
+        "",
+        "Final answer: 10",
+        1.5,
+        generated_tokens=20,
+        injected_tokens=8,
+        calls=(CallRecord("ok", 0.25, 8),),
+    )
+    c2 = CaseResult(
+        "c2",
+        "harmonic_partial_sum",
+        "python_tool",
+        "protocol_error",
+        "Malformed tool call",
+        "",
+        0.5,
+        generated_tokens=12,
+        injected_tokens=0,
+        calls=(),
+    )
+    summary = summarize([c1, c2])
+    assert summary["generated_tokens"] == 32
+    assert summary["injected_tokens"] == 8
+    assert summary["total_tokens"] == 40
+    assert summary["tool_calls"] == 1
+    assert summary["execution_seconds"] == pytest.approx(0.25)
+    assert summary["outcomes"]["correct"] == 1
+    assert summary["outcomes"]["protocol_error"] == 1
+    assert set(summary["outcomes"]) == set(ALL_OUTCOMES)
+
+    rows = []
+    for path in ("no_tool", "python_tool", "current_best"):
+        rows.extend([replace(c1, path=path), replace(c2, path=path)])
+    report = matched_report(rows)
+    assert report["paired_cases"] == 2
+    assert report["by_outcome"]["correct"]["python_tool"] == 1
+    assert report["by_outcome"]["protocol_error"]["no_tool"] == 1
+    assert report["by_family"]["harmonic_partial_sum"]["current_best"]["tool_calls"] == 0
+
+
+def test_end_to_end_multi_family_suite_on_tiny_cpu_model(
+    tokenizer, hybrid_model, monkeypatch
+):
+    suite = generate_matched_suite(per_family=1, seed=5)
+    seen_system_prompts: dict[str, str] = {}
+
+    def format_expected(task: Task) -> str:
+        checker = task.checker
+        if isinstance(checker, IntegerChecker):
+            return str(checker.expected)
+        if isinstance(checker, RationalChecker):
+            return f"{checker.expected.numerator}/{checker.expected.denominator}"
+        if isinstance(checker, IntegerSequenceChecker):
+            return ", ".join(str(x) for x in checker.expected)
+        raise AssertionError("Unexpected checker")
+
+    def make_runner(path_name: str) -> EvaluationHarness:
+        def factory(ids):
+            decoded_prompt = tokenizer.decode(ids, skip_special_tokens=False)
+            matching = [t for t in suite if t.prompt in decoded_prompt]
+            assert len(matching) == 1
+            task = matching[0]
+            seen_system_prompts[task.family] = decoded_prompt.split("<|im_end|>")[0]
+            expected_str = format_expected(task)
+            if path_name == "no_tool":
+                reply = f"Final answer: {expected_str}<|im_end|>"
+            else:
+                reply = (
+                    call_text(f"print({expected_str!r})")
+                    + f"Final answer: {expected_str}<|im_end|>"
+                )
+            scripted = iter(tokenizer.encode(reply, add_special_tokens=False))
+            session = LiveSession(hybrid_model, ids)
+            monkeypatch.setattr(session, "_next_token", lambda: next(scripted))
+            return session
+
+        return EvaluationHarness(
+            tokenizer,
+            factory,
+            lambda: None,
+            executor=lambda code, timeout: ExecutionResult("ok", "42\n"),
+        )
+
+    rows = run_matched(
+        suite,
+        {
+            "no_tool": make_runner("no_tool"),
+            "python_tool": make_runner("python_tool"),
+            "current_best": make_runner("current_best"),
+        },
+    )
+    report = matched_report(rows)
+    assert report["paired_cases"] == len(SYNTHETIC_FAMILIES)
+    assert "<numerator>/<denominator>" in seen_system_prompts["harmonic_partial_sum"]
+    assert "<n1>, <n2>, ..." in seen_system_prompts["recurrence_prefix"]
+    assert "<integer>" in seen_system_prompts["binomial_coefficient"]
+    assert report["by_path"]["no_tool"]["tool_calls"] == 0
+    assert report["by_path"]["python_tool"]["tool_calls"] == len(SYNTHETIC_FAMILIES)
+    assert report["by_path"]["python_tool"]["injected_tokens"] > 0
+    assert all(
+        report["by_path"][p]["correct"] == len(SYNTHETIC_FAMILIES)
+        for p in ("no_tool", "python_tool", "current_best")
+    )

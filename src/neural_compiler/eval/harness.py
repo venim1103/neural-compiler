@@ -7,6 +7,7 @@ import re
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 from typing import Literal, Protocol
 
 from transformers import PreTrainedTokenizerBase
@@ -30,8 +31,32 @@ Outcome = Literal[
     "timeout",
     "sandbox_error",
 ]
-_SYSTEM = "Solve the task. End your response with Final answer: <integer>."
+ALL_OUTCOMES: tuple[Outcome, ...] = (
+    "correct",
+    "wrong_answer",
+    "invalid_answer",
+    "protocol_error",
+    "budget_exhausted",
+    "timeout",
+    "sandbox_error",
+)
 _FINAL = re.compile(r"Final answer:\s*([+-]?[0-9]+)\s*")
+_FINAL_RATIONAL = re.compile(
+    r"Final answer:\s*([+-]?[0-9]+)(?:\s*/\s*([+-]?[0-9]+))?\s*"
+)
+_FINAL_SEQUENCE = re.compile(
+    r"Final answer:\s*([+-]?[0-9]+(?:\s*,\s*[+-]?[0-9]+)*)\s*"
+)
+
+
+def _parse_decimal_int(raw: str) -> int:
+    magnitude = raw.lstrip("+-").lstrip("0") or "0"
+    parsed = 0
+    # Small decimal chunks preserve the interpreter's global conversion limit.
+    for offset in range(0, len(magnitude), 9):
+        chunk = magnitude[offset : offset + 9]
+        parsed = parsed * 10 ** len(chunk) + int(chunk)
+    return -parsed if raw.startswith("-") else parsed
 
 
 @dataclass(frozen=True)
@@ -64,18 +89,88 @@ class IntegerChecker:
                 False,
                 "Expected a complete final integer answer on the last line",
             )
-        value = match.group(1)
-        magnitude = value.lstrip("+-").lstrip("0") or "0"
-        parsed = 0
-        # Small decimal chunks preserve the interpreter's global conversion limit.
-        for offset in range(0, len(magnitude), 9):
-            chunk = magnitude[offset : offset + 9]
-            parsed = parsed * 10 ** len(chunk) + int(chunk)
-        if value.startswith("-"):
-            parsed = -parsed
+        parsed = _parse_decimal_int(match.group(1))
         correct = parsed == self.expected
         return CheckResult(
             correct, True, "" if correct else "Final integer differs from the reference"
+        )
+
+
+@dataclass(frozen=True)
+class RationalChecker:
+    expected: Fraction
+
+    def __init__(self, expected: Fraction | int) -> None:
+        if type(expected) is bool or not isinstance(expected, (Fraction, int)):
+            raise ValueError(
+                "RationalChecker requires a Fraction or integer reference, not a boolean"
+            )
+        object.__setattr__(self, "expected", Fraction(expected))
+
+    def __call__(self, answer: str) -> CheckResult:
+        lines = answer.rstrip().splitlines()
+        match = _FINAL_RATIONAL.fullmatch(lines[-1]) if lines else None
+        if match is None:
+            return CheckResult(
+                False,
+                False,
+                "Expected a complete final rational answer on the last line",
+            )
+        numerator = _parse_decimal_int(match.group(1))
+        denominator = (
+            1 if match.group(2) is None else _parse_decimal_int(match.group(2))
+        )
+        if denominator == 0:
+            return CheckResult(
+                False,
+                False,
+                "Rational denominator must not be zero",
+            )
+        parsed = Fraction(numerator, denominator)
+        correct = parsed == self.expected
+        return CheckResult(
+            correct,
+            True,
+            "" if correct else "Final rational differs from the reference",
+        )
+
+
+@dataclass(frozen=True)
+class IntegerSequenceChecker:
+    expected: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.expected, tuple)
+            or not self.expected
+            or any(type(item) is not int for item in self.expected)
+        ):
+            raise ValueError(
+                "IntegerSequenceChecker requires a non-empty tuple of integers"
+            )
+
+    def __call__(self, answer: str) -> CheckResult:
+        lines = answer.rstrip().splitlines()
+        match = _FINAL_SEQUENCE.fullmatch(lines[-1]) if lines else None
+        if match is None:
+            return CheckResult(
+                False,
+                False,
+                "Expected a complete final integer sequence on the last line",
+            )
+        parts = [part.strip() for part in match.group(1).split(",")]
+        parsed = tuple(_parse_decimal_int(part) for part in parts)
+        if len(parsed) != len(self.expected):
+            return CheckResult(
+                False,
+                False,
+                f"Expected {len(self.expected)} integers, got {len(parsed)}",
+            )
+        correct = parsed == self.expected
+        return CheckResult(
+            correct,
+            True,
+            "" if correct else "Final integer sequence differs from the reference",
         )
 
 
@@ -85,6 +180,7 @@ class Task:
     family: str
     prompt: str
     checker: Checker
+    answer_format: str = "<integer>"
 
     def __post_init__(self) -> None:
         if (
@@ -93,6 +189,8 @@ class Task:
             or not self.prompt.strip()
         ):
             raise ValueError("Task identity, family and prompt must not be empty")
+        if not self.answer_format.strip():
+            raise ValueError("Task answer_format must not be empty")
 
 
 @dataclass(frozen=True)
@@ -231,9 +329,12 @@ class EvaluationHarness:
             return call is not None
 
         try:
+            system_prompt = (
+                f"Solve the task. End your response with Final answer: {task.answer_format}."
+            )
             prompt = self.tokenizer.apply_chat_template(
                 [
-                    {"role": "system", "content": _SYSTEM},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": task.prompt},
                 ],
                 tools=None if path == "no_tool" else [RUN_TOOL],
@@ -346,7 +447,7 @@ class EvaluationHarness:
         )
 
 
-def summarize(results: Sequence[CaseResult]) -> dict[str, int | float | None | str]:
+def summarize(results: Sequence[CaseResult]) -> dict[str, object]:
     """Failure-inclusive aggregate; zero successes have no finite cost ratio."""
     if len({result.path for result in results}) > 1:
         raise ValueError("Summarize one evaluation path at a time")
@@ -354,12 +455,28 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, int | float | None | s
         raise ValueError("Duplicate case IDs cannot be counted as independent attempts")
     correct = sum(result.outcome == "correct" for result in results)
     elapsed = sum(result.elapsed_seconds for result in results)
+    generated_tokens = sum(result.generated_tokens for result in results)
+    injected_tokens = sum(result.injected_tokens for result in results)
+    tool_calls = sum(len(result.calls) for result in results)
+    execution_seconds = sum(
+        call.execution_seconds for result in results for call in result.calls
+    )
+    outcomes = {
+        outcome: sum(result.outcome == outcome for result in results)
+        for outcome in ALL_OUTCOMES
+    }
     return {
         "cases": len(results),
         "correct": correct,
         "elapsed_seconds": elapsed,
+        "execution_seconds": execution_seconds,
         "seconds_per_correct": elapsed / correct if correct else None,
         "ratio_status": "defined" if correct else "no_correct_answers",
+        "generated_tokens": generated_tokens,
+        "injected_tokens": injected_tokens,
+        "total_tokens": generated_tokens + injected_tokens,
+        "tool_calls": tool_calls,
+        "outcomes": outcomes,
     }
 
 
@@ -379,7 +496,7 @@ def run_matched(
     return tuple(runners[path].run(task, path) for task in tasks for path in paths)
 
 
-def matched_report(results: Sequence[CaseResult]) -> dict[str, dict]:
+def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
     """Require complete paired coverage; retain per-family costs and failures.
 
     Coverage alone does not establish matched hardware, prompts, accepted splits,
@@ -403,6 +520,7 @@ def matched_report(results: Sequence[CaseResult]) -> dict[str, dict]:
             raise ValueError(f"Family identity differs between paths for {case_id}")
     families = sorted({result.family for result in results})
     return {
+        "paired_cases": len(paired),
         "by_path": {
             path: summarize([result for result in results if result.path == path])
             for path in paths
@@ -419,5 +537,16 @@ def matched_report(results: Sequence[CaseResult]) -> dict[str, dict]:
                 for path in paths
             }
             for family in families
+        },
+        "by_outcome": {
+            outcome: {
+                path: sum(
+                    result.outcome == outcome
+                    for result in results
+                    if result.path == path
+                )
+                for path in paths
+            }
+            for outcome in ALL_OUTCOMES
         },
     }

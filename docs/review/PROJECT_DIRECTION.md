@@ -774,3 +774,24 @@ downloads, model/GPU jobs or host-security changes occurred. The user requested 
 local WIP commit and a pause; no further implementation or push is part of this checkpoint.
 
 [ci-failure-wip]: https://github.com/venim1103/neural-compiler/actions/runs/43236827251
+
+### 2026-11-12: CI repair and multi-family offline evaluation prerequisites
+
+Four no-launch cgroup and seccomp unit tests (`tests/test_cgroups.py`, `tests/test_seccomp.py`)
+were isolated from ambient `bubblewrap` availability by stubbing `shutil.which("bwrap")`
+(`c2c9b27`), restoring green Python 3.10 and 3.12 CI runs (117 passed, 27 skipped).
+
+The offline evaluation package (`src/neural_compiler/eval/`) now includes:
+- `RationalChecker` and `IntegerSequenceChecker` alongside `IntegerChecker`, sharing bounded
+  chunked decimal parsing and propagating `Task.answer_format` into the system prompt.
+- Deterministic parameterized synthetic task-family generators (`src/neural_compiler/eval/families.py`:
+  `modular_exponentiation`, `binomial_coefficient`, `linear_congruence`, `harmonic_partial_sum`,
+  `recurrence_prefix`) for offline harness and reporting verification.
+- Enriched `summarize()` and `matched_report()` metrics (`generated_tokens`, `injected_tokens`,
+  `total_tokens`, `tool_calls`, `execution_seconds`, `paired_cases`, and canonical per-`Outcome`
+  breakdowns), verified end-to-end on the tiny CPU hybrid Qwen fixture.
+
+These generators remain synthetic unit fixtures, not accepted benchmark splits or pretrained
+model accuracy evidence. Next: advance Queue 2 (bounded CPU checkpoint manager/eviction and
+resubmission comparison harness) or Queue 3 (promoting C jail compilation and candidate
+import/seccomp profiles).
