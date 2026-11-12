@@ -9,7 +9,17 @@ from .imports import (
     evaluate_import_policy,
     inspect_imports,
 )
-from .native import run_asm, run_c, run_hex, run_wat
+from .native import (
+    ALL_LANGUAGES,
+    BridgePolicy,
+    CCompiler,
+    Language,
+    execute_program,
+    run_asm,
+    run_c,
+    run_hex,
+    run_wat,
+)
 from .seccomp import (
     CANDIDATE_PYTHON_COMPUTE_SYSCALLS,
     SeccompError,
@@ -20,20 +30,25 @@ from .seccomp import (
 from .session import CheckpointStore, DecodeResult, LiveSession, SessionCheckpoint
 
 __all__ = [
+    "ALL_LANGUAGES",
+    "BridgePolicy",
     "CANDIDATE_MATH_MODULES",
     "CANDIDATE_PYTHON_COMPUTE_SYSCALLS",
+    "CCompiler",
     "CheckpointStore",
     "DecodeResult",
     "ExecutionResult",
     "ImportInventory",
     "ImportPolicyReport",
     "ImportSite",
+    "Language",
     "LiveSession",
     "SeccompError",
     "SeccompPolicy",
     "SessionCheckpoint",
     "candidate_python_compute_policy",
     "evaluate_import_policy",
+    "execute_program",
     "export_filter",
     "inspect_imports",
     "run_asm",

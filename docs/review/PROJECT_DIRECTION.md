@@ -864,3 +864,16 @@ separate hardware/host gates.
   before launching `bwrap`.
 - Updated `AGENTS.md` `Current Work` to reflect completed offline prerequisites across Queues 1–3
   and remaining privileged-Linux / CUDA-GPU gates.
+
+### 2026-11-12: unified BridgePolicy dispatcher and red-team contract suite
+
+- Added `BridgePolicy` and `execute_program()` (`src/neural_compiler/bridge/native.py`,
+  exported from `neural_compiler.bridge`) unifying `"python"`, `"c"` (`gcc`/`tcc`), `"asm"`,
+  `"wat"`, and `"hex"` execution under a single validated policy configuration suitable for
+  `EvaluationHarness` `current_best` path wiring.
+- Added `tests/test_red_team_contracts.py` verifying adversarial protocol delimiter smuggling
+  and re-feed safety, runaway stdout flood containment (`output_limit` + `SIGKILL` process-group
+  reaping), static import-policy evasion vectors, and `BridgePolicy` parameter bounds.
+- All offline prerequisites across Queues 1–3 are implemented and verified in CI; further
+  empirical/qualification work requires a privileged Linux host (namespaces, kernel `seccomp`,
+  writable `cgroup2`) or a CUDA GPU (`Qwen/Qwen3.5-4B`).
