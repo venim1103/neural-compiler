@@ -492,3 +492,32 @@ Read-only containment inspection found installed `libseccomp.so.2` and a cgroup-
 with CPU/memory/PID controllers, but the mount is **read-only**. Do not remount it or change
 host privileges. Next: implement opt-in seccomp-filter plumbing with bounded trusted
 fixtures; policy acceptance and writable delegated per-request cgroups remain separate.
+
+### 2026-11-12: opt-in syscall-filter plumbing
+
+Added [explicit seccomp-policy export](../../src/neural_compiler/bridge/seccomp.py) and
+bubblewrap filter-descriptor plumbing in [the executor](../../src/neural_compiler/bridge/execution.py).
+Callers may supply `SeccompPolicy(allowed_syscalls=(...))` to `run_python` or `run_jailed`.
+Unlisted calls receive `EPERM`; unknown syscall names, missing libraries and export/setup
+failures produce explicit isolation errors without an unfiltered fallback.
+
+**No production allowlist is selected, and default execution behavior is unchanged.**
+The policy in tests is a trusted interpreter/launcher fixture only. It permits launcher
+execution and required I/O, and deliberately excludes process creation and sockets.
+The kernel fixture performs one bounded fork attempt (reaping any unexpected child) and
+one socket-creation attempt. Both were denied with `EPERM`; ordinary arithmetic still
+ran under that same filter. Descriptors are private, passed only to bubblewrap, and closed
+after execution/export scope. These checks do not prove complete containment.
+
+**Routine ledger:** the focused filter/executor/runtime check passed 40 cases, then the
+root gate passed 96 tests, with real bubblewrap/filter checks rather than skips on this host.
+Ruff lint, scoped format and whitespace passed. Pylance found a deprecated contextmanager
+return annotation; it was corrected to `Generator` without changing runtime behavior.
+No failed execution checks, downloads, dependency installs, privileged host changes,
+fork/memory bombs or untrusted services were used.
+
+Remaining externally gated work: the cgroup-v2 mount is read-only, and neither vLLM nor
+SGLang is installed. Do not remount/change privileges or install serving engines under
+routine test authority. Product syscall/import-policy acceptance and independent containment
+evidence, accepted held-out datasets/splits and exact pinned model-study budgets remain
+outstanding. Offline infrastructure is not renewed authority for those actions.

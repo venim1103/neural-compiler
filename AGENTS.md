@@ -41,8 +41,9 @@ not approval for a model run or evidence of resource fit.
 This is a **P0 prototype, not a production security boundary**. Supervised
 per-request execution, in-jail C/assembly compilation, isolated Wasm/unicorn
 harnesses, native protocol framing and single-sequence cache continuation exist.
-Seccomp, per-request cgroups/PID caps, a curated-import policy and production
-serving integration remain unfinished. Do not expose it to untrusted workloads.
+Opt-in seccomp plumbing exists, but a production syscall policy, per-request
+cgroups/PID caps, a curated-import policy and production serving integration
+remain unfinished. Do not expose it to untrusted workloads.
 The numerical NeuroVM helpers and Part II of [WHITEPAPER.md][whitepaper] are
 retained research/reference material, not the active CPU-bridge execution path.
 

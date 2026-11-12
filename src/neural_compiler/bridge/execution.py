@@ -1,7 +1,7 @@
 """Per-request Linux namespace execution.
 
-This is a P0 foundation, not a production security boundary: seccomp and
-per-request cgroups are still required before accepting untrusted workloads.
+This is a P0 foundation, not a production security boundary: an accepted syscall
+policy and per-request cgroups are still required before accepting untrusted workloads.
 """
 
 from __future__ import annotations
@@ -15,8 +15,11 @@ import subprocess
 import tempfile
 import time
 from dataclasses import dataclass
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Literal
+
+from .seccomp import SeccompError, SeccompPolicy, export_filter
 
 Status = Literal["ok", "runtime_error", "timeout", "output_limit", "sandbox_error"]
 
@@ -49,12 +52,21 @@ def validate_code(code: str) -> None:
         raise ValueError(f"Program exceeds {MAX_CODE_BYTES} UTF-8 bytes")
 
 
-def _supervise(command: list[str], timeout: float, output_limit: int) -> ExecutionResult:
+def _supervise(
+    command: list[str],
+    timeout: float,
+    output_limit: int,
+    pass_fds: tuple[int, ...] = (),
+) -> ExecutionResult:
     deadline = time.monotonic() + timeout
     try:
         process = subprocess.Popen(
-            command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, start_new_session=True,
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+            pass_fds=pass_fds,
         )
     except OSError as exc:
         return ExecutionResult("sandbox_error", stderr=str(exc))
@@ -78,10 +90,13 @@ def _supervise(command: list[str], timeout: float, output_limit: int) -> Executi
                     if not chunk:
                         selector.unregister(key.fileobj)
                         continue
-                    buffers[key.data].extend(chunk[:max(0, output_limit - total)])
+                    buffers[key.data].extend(chunk[: max(0, output_limit - total)])
                     total += len(chunk)
                     if total > output_limit:
-                        status, diagnostic = "output_limit", f"Output exceeds {output_limit} bytes"
+                        status, diagnostic = (
+                            "output_limit",
+                            f"Output exceeds {output_limit} bytes",
+                        )
                         break
                 if status != "ok":
                     break
@@ -127,6 +142,7 @@ def run_jailed(
     writable: bool = False,
     output_limit: int = MAX_OUTPUT_BYTES,
     runtime_prefix: Path | None = None,
+    seccomp: SeccompPolicy | None = None,
 ) -> ExecutionResult:
     """Run a trusted command specification against guest files in a private jail.
 
@@ -141,26 +157,82 @@ def run_jailed(
     if bwrap is None:
         return ExecutionResult("sandbox_error", stderr="bubblewrap (bwrap) is required")
     args = [
-        bwrap, "--ro-bind", "/usr", "/usr",
-        "--symlink", "usr/lib", "/lib", "--symlink", "usr/lib64", "/lib64",
-        "--symlink", "usr/bin", "/bin", "--proc", "/proc", "--dev", "/dev",
-        "--tmpfs", "/tmp", "--unshare-all", "--die-with-parent", "--clearenv",
-        "--setenv", "PATH", "/usr/bin:/bin",
+        bwrap,
+        "--ro-bind",
+        "/usr",
+        "/usr",
+        "--symlink",
+        "usr/lib",
+        "/lib",
+        "--symlink",
+        "usr/lib64",
+        "/lib64",
+        "--symlink",
+        "usr/bin",
+        "/bin",
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        "--tmpfs",
+        "/tmp",
+        "--unshare-all",
+        "--die-with-parent",
+        "--clearenv",
+        "--setenv",
+        "PATH",
+        "/usr/bin:/bin",
     ]
     if runtime_prefix is not None and runtime_prefix != Path("/usr"):
         args += ["--ro-bind", str(runtime_prefix), str(runtime_prefix)]
     args += [
-        "--bind" if writable else "--ro-bind", str(workdir.resolve()), "/work",
-        "--chdir", "/work", "/usr/bin/python3", "-I", "-c", _LAUNCHER,
-        str(MEMORY_BYTES), str(math.ceil(timeout)), *command,
+        "--bind" if writable else "--ro-bind",
+        str(workdir.resolve()),
+        "/work",
+        "--chdir",
+        "/work",
     ]
-    return _supervise(args, timeout, output_limit)
+    try:
+        with (
+            export_filter(seccomp)
+            if seccomp is not None
+            else nullcontext(None) as filter_fd
+        ):
+            if filter_fd is not None:
+                args += ["--seccomp", str(filter_fd)]
+            args += [
+                "/usr/bin/python3",
+                "-I",
+                "-c",
+                _LAUNCHER,
+                str(MEMORY_BYTES),
+                str(math.ceil(timeout)),
+                *command,
+            ]
+            return _supervise(
+                args,
+                timeout,
+                output_limit,
+                pass_fds=() if filter_fd is None else (filter_fd,),
+            )
+    except SeccompError as exc:
+        return ExecutionResult("sandbox_error", stderr=str(exc))
 
 
-def run_python(code: str, timeout: float = 20) -> ExecutionResult:
+def run_python(
+    code: str,
+    timeout: float = 20,
+    *,
+    seccomp: SeccompPolicy | None = None,
+) -> ExecutionResult:
     """Execute Python in fresh globals with bounded output and a hard deadline."""
     validate_code(code)
     with tempfile.TemporaryDirectory(prefix="neural-compiler-") as directory:
         work = Path(directory)
         (work / "prog.py").write_text(code, encoding="utf-8")
-        return run_jailed(["/usr/bin/python3", "-I", "-u", "/work/prog.py"], work, timeout)
+        return run_jailed(
+            ["/usr/bin/python3", "-I", "-u", "/work/prog.py"],
+            work,
+            timeout,
+            seccomp=seccomp,
+        )
