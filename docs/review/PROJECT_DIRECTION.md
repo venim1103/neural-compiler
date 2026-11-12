@@ -622,3 +622,43 @@ dependency integration scope. Public-source research and offline implementation 
 require resolving all qualification gates first.
 
 [evaluation-harness]: ../../src/neural_compiler/eval/harness.py
+
+### 2026-11-12: serving dependency compatibility prerequisite
+
+Read-only metadata inspection found the current base environment has Torch
+`2.10.0+cu128` and Transformers `5.22.1`; neither vLLM nor SGLang is installed.
+Workspace free space was 364.16 GiB at inspection, not a guarantee of future download
+headroom or GPU fit.
+
+Primary package metadata rules out silently installing either inspected vLLM candidate
+into this environment:
+
+| Candidate | Declared Python | Declared Torch | Declared Transformers |
+| --- | --- | --- | --- |
+| [vLLM 0.33.0 metadata][vllm-033-metadata] | `>=3.11,<3.15` | `==2.14.0` | `>=5.16.1,<5.21.0` |
+| [vLLM 0.17.1 metadata][vllm-017-metadata] | `>=3.10,<3.14` | `==2.10.0` | `>=4.56.0,<5` |
+
+These are inspected candidates, **not adopted pins or resolver-verified environments**.
+Both declare Apache-2.0 metadata; that is not transitive licence review.
+The [developer-preview hybrid-cache design][vllm-hybrid-design] describes full-attention/
+Mamba prefix intersection and recurrent-state caching at block boundaries. It explicitly
+warns about its implementation basis; it does not establish Qwen3.5 exact tool-boundary
+state, live pause/resume support, numerical equivalence or measured serving speedup.
+
+**Research ledger:** one broad search failed with HTTP 504. Six bounded primary requests
+were spent: release metadata, hybrid-cache documentation, two SGLang documentation URLs
+(both 404), and two projected PyPI metadata responses. The original four-request plan was
+narrowly extended to six after the first SGLang 404 and incompatible latest-vLLM metadata;
+failed attempts were retained, not refunded. SGLang compatibility remains unverified;
+no further guessed documentation routes were retried. No wheels, weights or datasets were
+downloaded, no environment changed and no model/GPU/server jobs ran.
+
+The concrete next protected scope is **isolated serving-dependency integration**, keeping
+the default Python 3.10/3.12 project requirements and environment intact. It needs explicit
+authority for new dependencies/optional environment setup; it does not imply dataset
+acceptance, pretrained-model runs or writable cgroup delegation. Public-source research
+and compatible local correctness work remain separate from those permissions.
+
+[vllm-033-metadata]: https://pypi.org/pypi/vllm/0.33.0/json
+[vllm-017-metadata]: https://pypi.org/pypi/vllm/0.17.1/json
+[vllm-hybrid-design]: https://docs.vllm.ai/en/latest/design/hybrid_kv_cache_manager/
