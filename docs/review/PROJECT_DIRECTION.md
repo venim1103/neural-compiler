@@ -837,3 +837,14 @@ Queue 3 offline/bridge prerequisites are implemented and verified:
 Real kernel containment qualification (`bwrap` user namespaces, kernel `seccomp` enforcement,
 writable `cgroup2` delegation) and GPU/serving-engine runs on `Qwen/Qwen3.5-4B` remain
 separate hardware/host gates.
+
+### 2026-11-12: unified jailed Wasm/x86 bridge wrappers and CLI policy/native entry points
+
+- Added `run_wat()` and `run_hex()` (`src/neural_compiler/bridge/native.py`, exported from
+  `neural_compiler.bridge`) wrapping the isolated `runtime.py` Wasmtime/Unicorn worker in
+  `run_jailed` with `ExecutionResult` status mapping (`2 -> compile_error`, `3 -> timeout`),
+  pre-jail hex/budget validation, and optional `seccomp`/`cgroup` forwarding.
+- Extended `neural-compiler` CLI (`src/neural_compiler/cli.py`) with `--run-c`, `--run-asm`,
+  `--check-imports` (static candidate import-policy triage), and `--timeout`.
+- Verified with runner-independent unit tests in `tests/test_native_bridge.py` and
+  `tests/test_smoke.py`.

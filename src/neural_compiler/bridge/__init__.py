@@ -9,7 +9,7 @@ from .imports import (
     evaluate_import_policy,
     inspect_imports,
 )
-from .native import run_asm, run_c
+from .native import run_asm, run_c, run_hex, run_wat
 from .seccomp import (
     CANDIDATE_PYTHON_COMPUTE_SYSCALLS,
     SeccompError,
@@ -38,6 +38,8 @@ __all__ = [
     "inspect_imports",
     "run_asm",
     "run_c",
+    "run_hex",
     "run_jailed",
     "run_python",
+    "run_wat",
 ]

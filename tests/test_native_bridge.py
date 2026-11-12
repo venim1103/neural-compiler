@@ -12,7 +12,9 @@ from neural_compiler.bridge import (
     SeccompPolicy,
     run_asm,
     run_c,
+    run_hex,
     run_python,
+    run_wat,
 )
 from neural_compiler.bridge.cgroups import CgroupLimits
 from neural_compiler.bridge.execution import MAX_CODE_BYTES
@@ -141,3 +143,83 @@ def test_native_bridge_real_jail_when_toolchain_available() -> None:
     assert c_res.status == "ok" and c_res.stdout.strip() == "42"
     asm_res = run_asm(".intel_syntax noprefix\n.global solve\nsolve:\nmov eax, 42\nret")
     assert asm_res.status == "ok" and asm_res.stdout.strip() == "42"
+
+
+def test_run_wat_and_run_hex_jail_contract_and_exit_mapping(
+    monkeypatch, tmp_path: Path
+) -> None:
+    import sys
+    from neural_compiler.bridge import native
+
+    seen: list[dict[str, object]] = []
+
+    def fake_run_jailed(
+        command,
+        workdir,
+        timeout=20,
+        *,
+        writable=False,
+        output_limit=65536,
+        runtime_prefix=None,
+        seccomp=None,
+        cgroup=None,
+    ):
+        work = Path(workdir)
+        seen.append(
+            {
+                "command": list(command),
+                "writable": writable,
+                "runtime_prefix": runtime_prefix,
+                "program": (work / "program").read_text(encoding="utf-8"),
+                "has_runtime": (work / "runtime.py").is_file(),
+                "seccomp": seccomp,
+                "cgroup": cgroup,
+            }
+        )
+        return ExecutionResult("ok", stdout="42\n", returncode=0)
+
+    monkeypatch.setattr(native, "run_jailed", fake_run_jailed)
+    policy = SeccompPolicy(("read", "write", "exit_group"))
+    limits = CgroupLimits(tmp_path, 4096, 16)
+
+    wat_res = run_wat('(module (func (export "solve") (result i64) (i64.const 42)))', fuel=5000, seccomp=policy, cgroup=limits)
+    assert wat_res.status == "ok" and wat_res.stdout.strip() == "42"
+    assert seen[-1]["command"] == [
+        sys.executable,
+        "-I",
+        "/work/runtime.py",
+        "wat",
+        "/work/program",
+        "5000",
+    ]
+    assert seen[-1]["writable"] is False
+    assert seen[-1]["runtime_prefix"] == Path(sys.prefix)
+    assert seen[-1]["has_runtime"] is True
+    assert seen[-1]["seccomp"] is policy and seen[-1]["cgroup"] is limits
+
+    hex_res = run_hex("b8 2a 00 00 00 c3", max_insns=1000)
+    assert hex_res.status == "ok"
+    assert seen[-1]["command"][3:] == ["hex", "/work/program", "1000"]
+
+    # Exit codes 2 and 3 map to compile_error and timeout; invalid hex fails before jail.
+    monkeypatch.setattr(
+        native,
+        "run_jailed",
+        lambda *a, **kw: ExecutionResult("runtime_error", stderr="parse failed", returncode=2),
+    )
+    assert run_wat("bad wat").status == "compile_error"
+
+    monkeypatch.setattr(
+        native,
+        "run_jailed",
+        lambda *a, **kw: ExecutionResult("runtime_error", stderr="out of fuel", returncode=3),
+    )
+    assert run_wat("(module)").status == "timeout"
+
+    monkeypatch.setattr(
+        native, "run_jailed", lambda *a, **kw: pytest.fail("Invalid hex must not launch jail")
+    )
+    assert run_hex("not-hex").status == "compile_error"
+    assert run_hex("   ").status == "compile_error"
+    with pytest.raises(ValueError, match="positive integer"):
+        run_wat("(module)", fuel=0)

@@ -12,16 +12,63 @@ from neural_compiler import __version__
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="neural-compiler")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=20.0,
+        help="Execution wall-clock timeout in seconds (default: 20)",
+    )
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--version", action="store_true", help="Print package version")
-    action.add_argument("--run-python", type=Path, metavar="FILE", help="Run a Python file in the P0 namespace executor")
+    action.add_argument(
+        "--run-python",
+        type=Path,
+        metavar="FILE",
+        help="Run a Python file in the P0 namespace executor",
+    )
+    action.add_argument(
+        "--run-c",
+        type=Path,
+        metavar="FILE",
+        help="Compile and run a strict C99 file in the P1 jail executor",
+    )
+    action.add_argument(
+        "--run-asm",
+        type=Path,
+        metavar="FILE",
+        help="Assemble and run an x86-64 assembly file (`long long solve(void)`) in the P1 jail executor",
+    )
+    action.add_argument(
+        "--check-imports",
+        type=Path,
+        metavar="FILE",
+        help="Evaluate static Python AST imports against the candidate math/stdlib allowlist without executing",
+    )
     args = parser.parse_args(argv)
     if args.version:
         print(json.dumps({"name": "neural-compiler", "version": __version__}))
-    elif args.run_python:
-        from neural_compiler.bridge import run_python
+        return 0
+    if args.check_imports:
+        from neural_compiler.bridge import evaluate_import_policy
 
-        result = run_python(args.run_python.read_text(encoding="utf-8"))
+        report = evaluate_import_policy(args.check_imports.read_text(encoding="utf-8"))
+        print(json.dumps(asdict(report)))
+        return 0 if report.compliant else 1
+    if args.run_python or args.run_c or args.run_asm:
+        from neural_compiler.bridge import run_asm, run_c, run_python
+
+        if args.run_python:
+            result = run_python(
+                args.run_python.read_text(encoding="utf-8"), timeout=args.timeout
+            )
+        elif args.run_c:
+            result = run_c(
+                args.run_c.read_text(encoding="utf-8"), timeout=args.timeout
+            )
+        else:
+            result = run_asm(
+                args.run_asm.read_text(encoding="utf-8"), timeout=args.timeout
+            )
         print(json.dumps(asdict(result)))
         return 0 if result.status == "ok" else 1
     return 0
