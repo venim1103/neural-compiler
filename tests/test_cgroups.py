@@ -33,6 +33,7 @@ def test_invalid_limits(field: str, value, tmp_path: Path) -> None:
 
 
 def test_non_cgroup_directory_fails_without_execution(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/true")
     monkeypatch.setattr(
         execution, "_supervise", lambda *a, **kw: pytest.fail("launched")
     )
@@ -139,6 +140,7 @@ def test_missing_cpu_controller_never_launches(monkeypatch, controls) -> None:
         return path
 
     monkeypatch.setattr(cgroups, "mkdtemp", missing)
+    monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/true")
     monkeypatch.setattr(
         execution, "_supervise", lambda *a, **kw: pytest.fail("launched")
     )
@@ -159,6 +161,7 @@ def test_missing_controller_never_launches(monkeypatch, controls) -> None:
         return path
 
     monkeypatch.setattr(cgroups, "mkdtemp", missing)
+    monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/true")
     monkeypatch.setattr(
         execution, "_supervise", lambda *a, **kw: pytest.fail("launched")
     )

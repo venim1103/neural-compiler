@@ -109,6 +109,9 @@ else:
 
 def test_missing_filter_dependency_does_not_execute_without_policy(monkeypatch):
     monkeypatch.setattr(
+        "neural_compiler.bridge.execution.shutil.which", lambda _: "/usr/bin/true"
+    )
+    monkeypatch.setattr(
         "neural_compiler.bridge.seccomp.ctypes.util.find_library", lambda _: None
     )
     result = run_python("print('must not execute')", seccomp=SeccompPolicy(("write",)))
