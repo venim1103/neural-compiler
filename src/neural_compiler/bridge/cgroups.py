@@ -23,6 +23,7 @@ class CgroupLimits:
     memory_bytes: int
     pids: int
     swap_bytes: int = 0
+    cpu_max: tuple[int, int] | None = None
 
     def __post_init__(self) -> None:
         for name, value, minimum in (
@@ -32,6 +33,12 @@ class CgroupLimits:
         ):
             if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
                 raise ValueError(f"{name} must be an integer >= {minimum}")
+        if self.cpu_max is not None and (
+            not isinstance(self.cpu_max, tuple)
+            or len(self.cpu_max) != 2
+            or any(type(value) is not int or value <= 0 for value in self.cpu_max)
+        ):
+            raise ValueError("cpu_max must be a positive integer (quota, period) pair")
 
 
 def _require_cgroup2(root: Path) -> None:
@@ -105,6 +112,8 @@ def request_cgroup(limits: CgroupLimits) -> Generator[tuple[int, int], None, Non
                 ("memory.oom.group", 1),
             ):
                 _write_control(group / name, str(value))
+            if limits.cpu_max is not None:
+                _write_control(group / "cpu.max", " ".join(map(str, limits.cpu_max)))
             if not (group / "cgroup.kill").is_file():
                 raise CgroupError(f"cgroup.kill is required: {group}")
             cleanup.callback(_kill_group, group)

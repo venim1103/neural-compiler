@@ -746,3 +746,31 @@ accepted data, GPU jobs or host modifications.
 Next: advance the separate P1 queue with explicit caller-supplied aggregate CPU-quota
 plumbing for delegated cgroups, using kernel contract review and synthetic control files.
 Real controller enforcement remains blocked by the read-only mount.
+
+### 2026-11-12: user-requested WIP checkpoint and pause
+
+Pending delegated-cgroup plumbing adds an optional positive integer `cpu_max`
+`(quota, period)` pair, writes it before membership setup, and leaves the CPU control
+unchanged when omitted. Six focused synthetic cases passed and the changed test file
+was formatted. This WIP has **not** received the root regression/lint gate; the latest
+full result remains 138 passing tests before these edits. No real cgroup controls were
+written, and kernel enforcement remains unqualified on the read-only mount.
+
+CI investigation established that [the latest pushed baseline run][ci-failure-wip]
+fails at pytest on both Python 3.10 and 3.12, after successful installation and Ruff.
+The Python 3.12 job reports three failures, 108 passes and 27 skips: two cgroup setup
+tests and the missing-libseccomp test expect deeper dependency errors, but the runner
+has no bubblewrap executable and correctly fails earlier. An earlier checkpoint also
+failed at pytest on both runtimes. The CI repair is **not implemented**: next isolate
+these no-launch unit fixtures from ambient bubblewrap availability, including the new
+CPU-controller case, while preserving the executor's fail-closed ordering and real
+namespace-test skips.
+
+The Actions tool targeted an unrelated enterprise host (404); public repository API
+metadata succeeded, anonymous job-log reads returned 403 twice, and existing configured
+GitHub authentication permitted a bounded job-log read without credential/settings
+changes or forwarding authentication on the download redirect. No dependencies,
+downloads, model/GPU jobs or host-security changes occurred. The user requested this
+local WIP commit and a pause; no further implementation or push is part of this checkpoint.
+
+[ci-failure-wip]: https://github.com/venim1103/neural-compiler/actions/runs/43236827251

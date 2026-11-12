@@ -63,6 +63,7 @@ def controls(monkeypatch, tmp_path):
         "pids.max",
         "memory.swap.max",
         "memory.oom.group",
+        "cpu.max",
         "cgroup.kill",
         "cgroup.events",
         "cgroup.procs",
@@ -72,10 +73,9 @@ def controls(monkeypatch, tmp_path):
     def create(*, prefix, dir):
         assert dir == root and prefix == "neural-compiler-"
         group.mkdir()
+        defaults = {"cgroup.events": "populated 0\n", "cpu.max": "max 100000\n"}
         for name in names:
-            (group / name).write_text(
-                "populated 0\n" if name == "cgroup.events" else ""
-            )
+            (group / name).write_text(defaults.get(name, ""))
         return str(group)
 
     rmdir = Path.rmdir
@@ -108,6 +108,45 @@ def test_controls_and_private_fds_are_cleaned(controls) -> None:
     for fd in fds:
         with pytest.raises(OSError):
             os.fstat(fd)
+
+
+def test_cpu_quota_is_explicit_and_written_before_join(controls) -> None:
+    root, group, _ = controls
+    with request_cgroup(CgroupLimits(root, 2048, 32, cpu_max=(50000, 100000))):
+        assert (group / "cpu.max").read_text() == "50000 100000"
+        assert (group / "cgroup.procs").read_text() == ""
+
+
+def test_default_cpu_control_is_not_changed(controls) -> None:
+    root, group, _ = controls
+    with request_cgroup(CgroupLimits(root, 2048, 32)):
+        assert (group / "cpu.max").read_text() == "max 100000\n"
+
+
+@pytest.mark.parametrize("limit", [(0, 100000), (50000, False), "max 100000"])
+def test_invalid_cpu_quota_is_explicit(limit, tmp_path) -> None:
+    with pytest.raises(ValueError, match="cpu_max"):
+        CgroupLimits(tmp_path, 2048, 32, cpu_max=limit)
+
+
+def test_missing_cpu_controller_never_launches(monkeypatch, controls) -> None:
+    root, group, _ = controls
+    create = cgroups.mkdtemp
+
+    def missing(**kwargs):
+        path = create(**kwargs)
+        (group / "cpu.max").unlink()
+        return path
+
+    monkeypatch.setattr(cgroups, "mkdtemp", missing)
+    monkeypatch.setattr(
+        execution, "_supervise", lambda *a, **kw: pytest.fail("launched")
+    )
+    result = run_python(
+        "print(42)", cgroup=CgroupLimits(root, 2048, 32, cpu_max=(50000, 100000))
+    )
+    assert result.status == "sandbox_error"
+    assert "cpu.max" in result.stderr and not group.exists()
 
 
 def test_missing_controller_never_launches(monkeypatch, controls) -> None:
