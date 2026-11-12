@@ -795,3 +795,23 @@ These generators remain synthetic unit fixtures, not accepted benchmark splits o
 model accuracy evidence. Next: advance Queue 2 (bounded CPU checkpoint manager/eviction and
 resubmission comparison harness) or Queue 3 (promoting C jail compilation and candidate
 import/seccomp profiles).
+
+### 2026-11-12: bounded checkpoint store and offline P0 serving comparison harness
+
+Queue 2 offline prerequisites are implemented and verified on the tiny CPU hybrid Qwen fixture:
+- Added `CheckpointStore` (`src/neural_compiler/bridge/session.py`) with strict byte-budget
+  and entry-count LRU eviction, longest-prefix checkpoint lookup (`match_prefix` /
+  `resume_prefix`), exact pending-token boundary preservation, and hit/miss/eviction counters.
+- Added `LivePauseResumeSession`, `PrefixCachedSession`, `FullReprefillSession`,
+  `run_serving_comparison()`, and `summarize_serving()` (`src/neural_compiler/eval/serving.py`)
+  implementing the `DecodeSession` protocol so `EvaluationHarness` can compare live session
+  continuation against prefix-cached resubmission and full re-prefill under identical tasks
+  and budgets.
+- Verified on the tiny CPU hybrid Qwen model (`tests/test_checkpoints.py`,
+  `tests/test_serving_comparison.py`) that `prefix_cached_resubmission` matches
+  `live_pause_resume` logits bit-for-bit (`atol=0, rtol=0`) and matches `full_reprefill_resubmission`
+  within `atol=1e-6, rtol=1e-5`, while reducing prefill tokens across multi-call turns.
+
+This remains offline CPU correctness infrastructure, not GPU latency or serving-engine
+qualification. Next: advance Queue 3 (jailed C/assembly compilation module and candidate
+import/seccomp allowlist profiles).

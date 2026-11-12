@@ -1,5 +1,13 @@
-"""Supervised host execution for the Python-first bridge."""
+"""Supervised host execution and live hybrid-cache sessions."""
 
 from .execution import ExecutionResult, run_python
+from .session import CheckpointStore, DecodeResult, LiveSession, SessionCheckpoint
 
-__all__ = ["ExecutionResult", "run_python"]
+__all__ = [
+    "CheckpointStore",
+    "DecodeResult",
+    "ExecutionResult",
+    "LiveSession",
+    "SessionCheckpoint",
+    "run_python",
+]

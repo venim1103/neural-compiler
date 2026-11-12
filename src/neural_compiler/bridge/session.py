@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal
@@ -241,3 +242,114 @@ class LiveSession:
         resumed._prefix_tensor_versions = checkpoint._tensor_versions
         resumed._prefix_config = checkpoint._config
         return resumed
+
+
+class CheckpointStore:
+    """Bounded process-local LRU store for exact-boundary hybrid checkpoints."""
+
+    def __init__(
+        self,
+        max_total_bytes: int = 256 * 1024 * 1024,
+        max_entries: int = 32,
+    ) -> None:
+        if type(max_total_bytes) is not int or max_total_bytes <= 0:
+            raise ValueError("max_total_bytes must be a positive integer")
+        if type(max_entries) is not int or max_entries <= 0:
+            raise ValueError("max_entries must be a positive integer")
+        self.max_total_bytes = max_total_bytes
+        self.max_entries = max_entries
+        self._entries: OrderedDict[tuple[int, ...], SessionCheckpoint] = OrderedDict()
+        self._total_bytes = 0
+        self.hits = 0
+        self.misses = 0
+        self.evictions = 0
+
+    @property
+    def total_bytes(self) -> int:
+        return self._total_bytes
+
+    @property
+    def entries(self) -> int:
+        return len(self._entries)
+
+    def clear(self) -> None:
+        self._entries.clear()
+        self._total_bytes = 0
+
+    def _evict_oldest(self) -> None:
+        _, evicted = self._entries.popitem(last=False)
+        self._total_bytes -= evicted.cache_bytes
+        self.evictions += 1
+
+    def put(self, checkpoint: SessionCheckpoint) -> None:
+        if not isinstance(checkpoint, SessionCheckpoint):
+            raise TypeError("CheckpointStore accepts only SessionCheckpoint instances")
+        if checkpoint.cache_bytes > self.max_total_bytes:
+            raise ValueError(
+                f"Checkpoint requires {checkpoint.cache_bytes} bytes, "
+                f"exceeding store budget {self.max_total_bytes}"
+            )
+        key = checkpoint.tokens
+        existing = self._entries.pop(key, None)
+        if existing is not None:
+            self._total_bytes -= existing.cache_bytes
+        while self._entries and (
+            len(self._entries) >= self.max_entries
+            or self._total_bytes + checkpoint.cache_bytes > self.max_total_bytes
+        ):
+            self._evict_oldest()
+        self._entries[key] = checkpoint
+        self._total_bytes += checkpoint.cache_bytes
+
+    def get(self, tokens: Sequence[int]) -> SessionCheckpoint | None:
+        key = tuple(tokens)
+        checkpoint = self._entries.get(key)
+        if checkpoint is None:
+            self.misses += 1
+            return None
+        self._entries.move_to_end(key)
+        self.hits += 1
+        return checkpoint
+
+    def match_prefix(
+        self, tokens: Sequence[int]
+    ) -> tuple[SessionCheckpoint, tuple[int, ...]] | None:
+        """Return the longest stored prefix checkpoint and uncached suffix, if any."""
+        target = tuple(tokens)
+        if not target:
+            self.misses += 1
+            return None
+        best_key: tuple[int, ...] | None = None
+        for key in self._entries:
+            if (
+                len(key) <= len(target)
+                and target[: len(key)] == key
+                and (best_key is None or len(key) > len(best_key))
+            ):
+                best_key = key
+        if best_key is None:
+            self.misses += 1
+            return None
+        self._entries.move_to_end(best_key)
+        self.hits += 1
+        return self._entries[best_key], target[len(best_key) :]
+
+    def resume_prefix(
+        self, model: PreTrainedModel, tokens: Sequence[int]
+    ) -> tuple[LiveSession, int]:
+        """Restore from the longest prefix checkpoint or cold-prefill on miss.
+
+        Returns `(session, prefilled_tokens)` where `prefilled_tokens` counts
+        tokens forwarded through the model to reach `tokens`.
+        """
+        target = tuple(tokens)
+        matched = self.match_prefix(target)
+        if matched is None:
+            return LiveSession(model, target), len(target)
+        checkpoint, suffix = matched
+        session = LiveSession.from_checkpoint(model, checkpoint)
+        if not suffix:
+            return session, 0
+        pending_tokens = 1 if checkpoint.pending_token is not None else 0
+        session.inject(suffix)
+        return session, len(suffix) + pending_tokens

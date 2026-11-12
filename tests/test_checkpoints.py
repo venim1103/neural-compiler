@@ -9,7 +9,7 @@ import torch
 from transformers.cache_utils import LinearAttentionLayer, StaticCache
 
 from neural_compiler.bridge.protocol import QwenToolProtocol, ToolCall
-from neural_compiler.bridge.session import LiveSession
+from neural_compiler.bridge.session import CheckpointStore, LiveSession
 from neural_compiler.bridge import ExecutionResult
 
 
@@ -204,3 +204,80 @@ def test_checkpoint_can_resume_decoding_without_a_response(hybrid_model, monkeyp
     resumed.decode_until(1)
     assert resumed.tokens == (1, 2, 3, 4, 5)
     assert_reference(resumed)
+
+
+def test_checkpoint_store_enforces_lru_byte_and_entry_budgets(hybrid_model):
+    s1 = LiveSession(hybrid_model, [1, 2, 3])
+    cp1 = s1.checkpoint()
+    s2 = LiveSession(hybrid_model, [1, 2, 3, 4])
+    cp2 = s2.checkpoint()
+    s3 = LiveSession(hybrid_model, [1, 2, 3, 4, 5])
+    cp3 = s3.checkpoint()
+
+    # Budget fits (cp1 + cp2) or (cp1 + cp3), not all three -> inserting cp3 evicts LRU cp2.
+    store = CheckpointStore(max_total_bytes=cp1.cache_bytes + cp3.cache_bytes, max_entries=8)
+    store.put(cp1)
+    store.put(cp2)
+    assert store.entries == 2 and store.total_bytes == cp1.cache_bytes + cp2.cache_bytes
+    # Touch cp1 so cp2 becomes the oldest entry.
+    assert store.get([1, 2, 3]) is cp1
+    assert store.hits == 1 and store.misses == 0
+    store.put(cp3)
+    assert store.evictions == 1
+    assert store.entries == 2
+    assert store.total_bytes == cp1.cache_bytes + cp3.cache_bytes
+    assert store.get([1, 2, 3]) is cp1
+    assert store.get([1, 2, 3, 4]) is None
+    assert store.get([1, 2, 3, 4, 5]) is cp3
+
+    # Entry cap also triggers eviction even when byte budget has room.
+    capped = CheckpointStore(max_total_bytes=10 * 1024 * 1024, max_entries=1)
+    capped.put(cp1)
+    capped.put(cp2)
+    assert capped.entries == 1 and capped.evictions == 1
+    assert capped.get([1, 2, 3]) is None
+    assert capped.get([1, 2, 3, 4]) is cp2
+
+
+def test_checkpoint_store_rejects_oversized_or_invalid_inputs(hybrid_model):
+    cp = LiveSession(hybrid_model, [1, 2, 3]).checkpoint()
+    with pytest.raises(ValueError, match="max_total_bytes"):
+        CheckpointStore(max_total_bytes=0)
+    with pytest.raises(ValueError, match="max_entries"):
+        CheckpointStore(max_entries=False)  # type: ignore[arg-type]
+    store = CheckpointStore(max_total_bytes=cp.cache_bytes - 1)
+    with pytest.raises(ValueError, match="exceeding store budget"):
+        store.put(cp)
+    with pytest.raises(TypeError, match="SessionCheckpoint"):
+        store.put("not-a-checkpoint")  # type: ignore[arg-type]
+
+
+def test_checkpoint_store_prefix_resumption_preserves_pending_boundary(
+    hybrid_model, monkeypatch
+):
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    monkeypatch.setattr(session, "_next_token", lambda: 4)
+    decoded = session.decode_until(1, lambda _: True)
+    assert decoded.reason == "stop"
+    cp = session.checkpoint()
+    assert cp.pending_token == 4
+
+    store = CheckpointStore(max_total_bytes=1024 * 1024, max_entries=4)
+    store.put(cp)
+
+    # Exact match restores boundary with 0 forwarded tokens.
+    exact, prefilled_exact = store.resume_prefix(hybrid_model, [1, 2, 3, 4])
+    assert prefilled_exact == 0
+    assert exact.tokens == (1, 2, 3, 4)
+
+    # Longer continuation injects suffix [5, 6] plus pending token 4 (3 tokens forwarded).
+    resumed, prefilled_suffix = store.resume_prefix(hybrid_model, [1, 2, 3, 4, 5, 6])
+    assert prefilled_suffix == 3
+    assert resumed.tokens == (1, 2, 3, 4, 5, 6)
+    assert_reference(resumed)
+
+    # Cache miss cold-prefills the entire sequence.
+    cold, prefilled_cold = store.resume_prefix(hybrid_model, [9, 8, 7])
+    assert prefilled_cold == 3
+    assert cold.tokens == (9, 8, 7)
+    assert_reference(cold)
