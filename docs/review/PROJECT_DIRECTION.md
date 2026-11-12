@@ -351,13 +351,49 @@ an H100 or concurrent-serving SLO.
 2. **Finish containment before training or exposing a service.** Namespaces and rlimits alone
    are insufficient: seccomp, per-request cgroups/PID caps, an import policy, and an independent
    containment review remain prerequisites. A finite test suite cannot prove universal containment.
-3. **Next P0 slice: native protocol and cache-correct continuation.** Use the installed tokenizer's
-   chat template, validate complete calls, preserve the pending sampled token exactly once, and
-   prove multi-call continuation against full-prefill reference logits on a small hybrid model.
-   A prefix-cache serving spike is still outstanding; do not assume live pause/resume wins.
+3. **Native protocol/cache-correct continuation now has a P0 implementation.** See the continuation
+   below. A prefix-cache serving spike is still outstanding; do not assume live pause/resume wins.
 4. **Measure the real objective.** Record full prompt-to-answer time, including isolation startup,
    compilation, result prefill, failed attempts, and repair turns; report p50/p95 and time per
    correct answer with uncertainty. Add warm pooling only after correctness and containment.
 5. **Defer DSL/RL investment until these gates pass.** A typed DSL with arbitrary-precision host
    intrinsics is research, not an implemented low-latency compiler. Grammar/type validity is not
    semantic correctness.
+
+### P0 continuation: native tool turns and live hybrid state
+
+Implemented [protocol.py](../../src/neural_compiler/bridge/protocol.py) and
+[session.py](../../src/neural_compiler/bridge/session.py):
+
+- Token IDs are derived from the tokenizer and checked for single-token, distinct delimiters.
+  Each sequence owns its own bounded monitor. Only one `run(code: str)` call is accepted at a
+  time; malformed, nested, partial, and oversized calls fail before execution.
+- Return turns are derived from the installed chat template, including assistant thinking
+  boundaries. The real template includes an empty `<think>` block when thinking is disabled;
+  the old whitepaper's handwritten transition omitted it.
+- Results are JSON with status/stdout/stderr/returncode; angle brackets are escaped so guest
+  output cannot become chat-control tokens. Response turns have a 2,048-token cap. Shortened
+  output carries `truncated: true`; an envelope that cannot fit fails explicitly.
+- Stop/EOS tokens remain pending and are prefilled once with the result. If a generation budget
+  is exhausted, all sampled tokens are already cached and none are replayed.
+- Offline tests exercise two serial calls on a real, tiny Qwen3.5 model with one linear-attention
+  and one full-attention layer. Incremental logits match full-prefill reference logits within
+  `atol=1e-6, rtol=1e-5`, with the same cache object retained. CPU checks use Torch reference
+  kernels, not FLA/Triton; CUDA-kernel equivalence is not claimed.
+
+The opt-in native Part C path is:
+
+```bash
+cd docs/review/experiments
+python exp_loop.py --native
+```
+
+It uses the same supervised Python executor, permits five serial calls (including repairs),
+and records structured protocol failures and end-to-end inference timings. It writes
+`exp_native_results.json` separately from historical results. Tests include actual jailed
+runtime-error recovery and a real locally cached Qwen tokenizer round trip; the latter skips
+when absent and never downloads it. Importing the experiment no longer loads model weights.
+
+**Not completed:** new 4B native accuracy/latency measurements, randomized held-out-family
+evaluation with no-tool and Python-tool baselines, prefix-cached resubmission, continuous
+batching, and P1 containment. Those remain the next gates before SFT/RL.

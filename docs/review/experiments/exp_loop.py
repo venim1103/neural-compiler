@@ -8,8 +8,10 @@ Part C: an in-decode-loop bridge. Greedy decoding stops at the end of a
         prefilled into the *same* KV/recurrent cache, and decoding resumes.
 
 Run (devcontainer): python exp_loop.py
+Native Part C only: python exp_loop.py --native
 """
 
+import argparse
 import json
 import os
 import re
@@ -18,7 +20,11 @@ import sys
 import time
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizerBase, Qwen3_5ForCausalLM
+
+from neural_compiler.bridge import run_python
+from neural_compiler.bridge.protocol import RUN_TOOL, ProtocolError, QwenToolProtocol
+from neural_compiler.bridge.session import LiveSession
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -49,11 +55,9 @@ TIR_SYSTEM = ("You can run Python code. When a question needs computation, write
               "```python code block that prints the result, then stop. The system will run it and reply with its "
               "output in an ```output block. After you see the output, reply with: Final answer: <number>")
 
-tok = AutoTokenizer.from_pretrained(M)
-tok.padding_side = "left"
-model = AutoModelForCausalLM.from_pretrained(M, dtype=torch.bfloat16, device_map="cuda").eval()
-gen_eos = model.generation_config.eos_token_id
-EOS = set(gen_eos if isinstance(gen_eos, list) else [gen_eos]) | {tok.pad_token_id}
+tok: PreTrainedTokenizerBase
+model: Qwen3_5ForCausalLM
+EOS: set[int]
 
 
 def chat_text(messages):
@@ -199,12 +203,107 @@ def part_c(names):
     return rows
 
 
+def part_c_native(names, max_calls=5):
+    """Native turns, bounded repair calls, and incremental live-cache injection."""
+    if max_calls <= 0:
+        raise ValueError("max_calls must be positive")
+
+    def synchronize():
+        if model.device.type == "cuda":
+            torch.cuda.synchronize(model.device)
+
+    rows = {}
+    for name in names:
+        protocol = QwenToolProtocol(tok)
+        prompt_ids = tok.apply_chat_template(
+            [{"role": "system", "content": "Use run for computation. After seeing its output, "
+              "reply with Final answer: <number>. Repair errors using another call if needed."},
+             {"role": "user", "content": TASKS[name]["prompt"]}],
+            tools=[RUN_TOOL], tokenize=True, return_dict=False, add_generation_prompt=True, enable_thinking=False,
+        )
+        if not isinstance(prompt_ids, list) or not all(isinstance(token, int) for token in prompt_ids):
+            raise ProtocolError("Chat template must return a single token sequence")
+        synchronize()
+        started = time.perf_counter()
+        session = LiveSession(model, prompt_ids)
+        synchronize()
+        prefill_ms = (time.perf_counter() - started) * 1e3
+        calls = []
+        emitted = 0
+        call = None
+
+        def on_token(token):
+            nonlocal call
+            call = protocol.feed(token)
+            return call is not None
+
+        try:
+            while True:
+                call = None
+                decoded = session.decode_until(400, on_token)
+                emitted += len(decoded.token_ids)
+                protocol.finish()
+                if call is None:
+                    answer = tok.decode(decoded.token_ids, skip_special_tokens=False)
+                    match = re.search(r"Final answer:\s*\**\s*(-?[\d,]+)", answer)
+                    final = match.group(1).replace(",", "") if match else None
+                    synchronize()
+                    rows[name] = dict(
+                        final_answer=final, final_correct=final == str(EXPECTED[name]),
+                        stop_reason=decoded.reason, generated_tokens=emitted, calls=calls,
+                        prompt_prefill_ms=round(prefill_ms, 1),
+                        total_ms=round((time.perf_counter() - started) * 1e3, 1),
+                        transcript=tok.decode(session.tokens[len(prompt_ids):], skip_special_tokens=False),
+                    )
+                    break
+                if len(calls) >= max_calls:
+                    raise ProtocolError("Tool-call budget exhausted")
+                exec_start = time.perf_counter()
+                result = run_python(call.code)
+                exec_ms = (time.perf_counter() - exec_start) * 1e3
+                response_ids = protocol.response_ids(call, result)
+                synchronize()
+                inject_start = time.perf_counter()
+                session.inject(response_ids)
+                synchronize()
+                calls.append(dict(
+                    exec_status=result.status, exec_output=(result.stdout or result.stderr)[-200:],
+                    program_correct=result.status == "ok" and judge(result.stdout, EXPECTED[name]),
+                    program_tokens=len(decoded.token_ids), exec_ms=round(exec_ms, 2),
+                    result_tokens=len(response_ids),
+                    prefill_result_ms=round((time.perf_counter() - inject_start) * 1e3, 1),
+                ))
+        except ProtocolError as exc:
+            rows[name] = dict(
+                final_answer=None, final_correct=False, stop_reason="protocol_error",
+                error=str(exc), calls=calls,
+                transcript=tok.decode(session.tokens[len(prompt_ids):], skip_special_tokens=False),
+            )
+        print(name, {key: value for key, value in rows[name].items() if key != "transcript"}, flush=True)
+    return rows
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--native", action="store_true", help="run native-tool Part C only; keep historical results separate")
+    options = parser.parse_args()
+    tok = AutoTokenizer.from_pretrained(M)
+    tok.padding_side = "left"
+    model = AutoModelForCausalLM.from_pretrained(M, dtype=torch.bfloat16, device_map="cuda").eval()
+    gen_eos = model.generation_config.eos_token_id
+    EOS = set(gen_eos if isinstance(gen_eos, list) else [gen_eos]) | {tok.pad_token_id}
     # Warm-up (Triton autotuning / CUDA init) so timings reflect steady state.
-    batch_generate(["Say hi."] * 12, 8)
-    batch_generate(["Say hi."], 8)
-    c_rows = part_c(["double_palindromes", "lcg_median", "collatz", "digits_2_100", "lattice_paths", "modpow"])
-    b_summary, b_programs = part_b()
-    with open(os.path.join(HERE, "exp_loop_results.json"), "w") as f:
-        json.dump(dict(part_b=b_summary, part_c=c_rows, programs=b_programs), f, indent=1)
-    print("PART B", json.dumps(b_summary, indent=1))
+    names = ["double_palindromes", "lcg_median", "collatz", "digits_2_100", "lattice_paths", "modpow"]
+    if options.native:
+        batch_generate(["Say hi."], 8)
+        c_rows = part_c_native(names)
+        with open(os.path.join(HERE, "exp_native_results.json"), "w") as f:
+            json.dump(dict(protocol="native", part_c=c_rows), f, indent=1)
+    else:
+        batch_generate(["Say hi."] * 12, 8)
+        batch_generate(["Say hi."], 8)
+        c_rows = part_c(names)
+        b_summary, b_programs = part_b()
+        with open(os.path.join(HERE, "exp_loop_results.json"), "w") as f:
+            json.dump(dict(part_b=b_summary, part_c=c_rows, programs=b_programs), f, indent=1)
+        print("PART B", json.dumps(b_summary, indent=1))

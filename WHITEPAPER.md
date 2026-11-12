@@ -15,7 +15,9 @@ This whitepaper presents a two-part synthesis grounded in empirical measurements
 **Implementation status (2026-11-12):** Part I describes the target architecture, not a
 production implementation. The repository now contains a supervised, per-request execution
 foundation with in-jail C/assembly compilation and isolated Wasm/unicorn harnesses. Native tool
-turns, seccomp/cgroup hardening, warm pooling, and serving integration remain unfinished.
+turns and live hybrid-cache continuation now have a single-sequence P0 implementation with
+offline regression coverage; seccomp/cgroup hardening, warm pooling, and serving integration
+remain unfinished.
 Historical warm/in-process microbenchmarks exclude these isolation costs; the six-task E3 bridge
 used markdown fences. See [the implementation audit](./docs/review/PROJECT_DIRECTION.md#implementation-audit-2026-11-12).
 
