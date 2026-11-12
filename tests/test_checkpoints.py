@@ -156,6 +156,34 @@ def test_sessions_reject_partially_training_model(hybrid_model, operation):
         assert session.tokens == (1, 2, 3)
 
 
+@pytest.mark.parametrize("changed", ["weights", "configuration"])
+def test_checkpoint_rejects_model_changes_since_initial_prefill(hybrid_model, changed):
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    if changed == "weights":
+        with torch.no_grad():
+            next(hybrid_model.parameters()).add_(0.1)
+    else:
+        hybrid_model.config.rope_parameters["rope_theta"] = 20000
+    with pytest.raises(ValueError, match="weights|configuration"):
+        session.checkpoint()
+    with pytest.raises(ValueError, match="weights|configuration"):
+        session.decode_until(1)
+    with pytest.raises(ValueError, match="weights|configuration"):
+        session.inject([4])
+    assert session.tokens == (1, 2, 3)
+
+
+def test_unversioned_model_remains_usable_without_checkpoints(hybrid_model):
+    with torch.inference_mode():
+        model = type(hybrid_model)(hybrid_model.config)
+    model.eval()
+    session = LiveSession(model, [1, 2, 3])
+    with pytest.raises(RuntimeError, match="version"):
+        session.checkpoint()
+    session.inject([4])
+    assert_reference(session)
+
+
 def test_checkpoint_rejects_changed_configuration_and_wrong_model(hybrid_model):
     session = LiveSession(hybrid_model, [1, 2, 3])
     checkpoint = session.checkpoint()

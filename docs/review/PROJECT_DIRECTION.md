@@ -720,3 +720,29 @@ pretrained/GPU jobs, accepted data or host changes occurred.
 Next: inspect whether checkpoint model-version metadata is tied to the model that
 produced the initial prefix, rather than merely the model present at capture time.
 This is another bounded offline correctness prerequisite, not serving qualification.
+
+### 2026-11-12: checkpoint identity bound to the initial prefix
+
+Two CPU repro cases confirmed that pre-capture weight/configuration changes were
+accepted: the checkpoint stamped the current model onto a cache/logits prefix
+computed by the earlier model. Version-tracked CPU sessions now retain their initial
+prefill model identity and check it before continuation/capture. Restored sessions
+inherit that same identity; snapshots no longer relabel stale cache state with current
+weights or configuration.
+
+GPU and unversioned/inference-tensor models retain their existing live-only path;
+unsupported CPU checkpoint requests fail explicitly rather than disabling the guard
+and returning a snapshot. This is still process-local correctness infrastructure,
+not serving integration, concurrent model mutation safety or GPU equivalence evidence.
+
+**Bounded ledger:** two mutation cases failed initially and the unversioned live-only
+control passed. After repair, 15 focused checkpoint cases and the root gate's 138 cases
+passed, with existing 14 Torch JIT warnings and no skips. Changed-model decode/injection
+refusals preserve the token boundary. Ruff lint, scoped format, whitespace and Pylance
+source diagnostics passed. Reference-logit tolerances and cache/token budgets were not
+changed; fixtures remain tiny untrained CPU models with no downloads, dependency changes,
+accepted data, GPU jobs or host modifications.
+
+Next: advance the separate P1 queue with explicit caller-supplied aggregate CPU-quota
+plumbing for delegated cgroups, using kernel contract review and synthetic control files.
+Real controller enforcement remains blocked by the read-only mount.

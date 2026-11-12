@@ -88,15 +88,33 @@ class LiveSession:
         self.logits: torch.Tensor
         self._tokens = list(prompt_ids)
         self._pending: int | None = None
+        self._prefix_tensor_versions: tuple[tuple[int, int, int], ...] | None = None
+        self._prefix_config: str | None = None
         eos = model.generation_config.eos_token_id
         self._eos = (
             set(eos if isinstance(eos, list) else [eos]) if eos is not None else set()
         )
         self._forward(self._tokens)
+        # Other live-model paths remain usable, but cannot supply CPU checkpoints.
+        tensors = [*model.parameters(), *model.buffers()]
+        if model.device.type == "cpu" and all(
+            not tensor.is_inference() for tensor in tensors
+        ):
+            self._prefix_tensor_versions = _tensor_versions(model)
+            self._prefix_config = model.config.to_json_string()
 
     @property
     def tokens(self) -> tuple[int, ...]:
         return tuple(self._tokens)
+
+    def _check_prefix_model(self) -> None:
+        if self._prefix_tensor_versions is not None and (
+            _tensor_versions(self.model) != self._prefix_tensor_versions
+            or self.model.config.to_json_string() != self._prefix_config
+        ):
+            raise ValueError(
+                "Model weights or configuration changed after initial prefill"
+            )
 
     @torch.no_grad()
     def _forward(self, ids: Sequence[int]) -> None:
@@ -104,6 +122,7 @@ class LiveSession:
             raise ValueError("Cannot prefill an empty token sequence")
         if not _is_eval_mode(self.model):
             raise ValueError("LiveSession requires a model in eval mode")
+        self._check_prefix_model()
         output = self.model(
             input_ids=torch.tensor(
                 [list(ids)], dtype=torch.long, device=self.model.device
@@ -135,6 +154,7 @@ class LiveSession:
             raise ValueError("max_new_tokens must be positive")
         if not _is_eval_mode(self.model):
             raise ValueError("LiveSession requires a model in eval mode")
+        self._check_prefix_model()
         if self._pending is not None:
             self._forward([self._pending])
             self._pending = None
@@ -180,6 +200,9 @@ class LiveSession:
             raise RuntimeError(
                 "Cache length does not match the exact sampled-token boundary"
             )
+        if self._prefix_tensor_versions is None or self._prefix_config is None:
+            raise RuntimeError("Checkpoints require a version-tracked CPU model")
+        self._check_prefix_model()
         return SessionCheckpoint(
             self.model,
             self.tokens,
@@ -187,8 +210,8 @@ class LiveSession:
             size,
             copy.deepcopy(self.cache),
             self.logits.detach().clone(),
-            _tensor_versions(self.model),
-            self.model.config.to_json_string(),
+            self._prefix_tensor_versions,
+            self._prefix_config,
             frozenset(self._eos),
         )
 
@@ -215,4 +238,6 @@ class LiveSession:
         resumed._tokens = list(checkpoint.tokens)
         resumed._pending = checkpoint.pending_token
         resumed._eos = set(checkpoint._eos)
+        resumed._prefix_tensor_versions = checkpoint._tensor_versions
+        resumed._prefix_config = checkpoint._config
         return resumed
