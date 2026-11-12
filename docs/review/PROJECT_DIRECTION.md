@@ -521,3 +521,31 @@ SGLang is installed. Do not remount/change privileges or install serving engines
 routine test authority. Product syscall/import-policy acceptance and independent containment
 evidence, accepted held-out datasets/splits and exact pinned model-study budgets remain
 outstanding. Offline infrastructure is not renewed authority for those actions.
+
+### 2026-11-12: source-only import-policy inventory
+
+Added [an import inventory](../../src/neural_compiler/bridge/imports.py) as a bounded
+offline prerequisite for policy review, **not** a Python sandbox or admission mechanism.
+It records direct imports and source lines across all syntactic branches, conservatively
+flags relative/dynamic import sites (including simple aliases), and compares known direct
+imports against caller-supplied module/package names. It parses source only and never
+imports or executes the inspected program.
+
+Unknown runtime/library imports, reflection and indirect calls remain unresolved. An empty
+inventory or no unlisted direct imports is not evidence of safety. No product import policy
+was selected and the executor's behavior is unchanged. Runtime enforcement/containment
+requires separate evidence; the inventory must not be used as a substitute.
+
+**Routine ledger:** 11 focused cases and the root suite (107 cases) passed. The subsequent
+lint gate caught E731 on a sorting-key lambda assignment; it was replaced with an equivalent
+typed function. The scoped format check then required spacing around the new function;
+the repository formatter applied it. Lint/scoped-format/whitespace checks were revalidated without repeating the
+unchanged successful runtime suite. Pylance reported no import-inventory diagnostics.
+Fixtures cover relative imports, aliasing, dead branches, package-prefix boundaries and
+explicit source-byte/syntax failures. No source was executed, no dataset accepted, no
+downloads/dependency changes or host modifications made.
+
+The next gates still require accepted task/family/split and pinned study scopes, real
+serving-engine dependencies/resources, or a writable delegated cgroup environment and
+approved production containment policies. Current offline fixtures and infrastructure do
+not supply those missing inputs or justify relaxing isolation to obtain measurements.
