@@ -54,6 +54,26 @@ def test_checker_rejects_partial_or_lucky_earlier_answers(answer, correct, valid
         assert checked.diagnostic
 
 
+@pytest.mark.parametrize("sign", [1, -1])
+def test_checker_handles_large_integer_references(sign):
+    digits = "1" + "0" * 4499
+    prefix = "-" if sign < 0 else "+000"
+    checked = IntegerChecker(sign * 10**4499)(f"Final answer: {prefix}{digits}")
+    assert checked.correct and checked.valid
+
+
+def test_checker_retains_valid_wrong_large_integer_answer():
+    checked = IntegerChecker(10**4499)("Final answer: " + "2" + "0" * 4499)
+    assert checked.valid and not checked.correct
+    assert checked.diagnostic
+
+
+def test_checker_handles_large_mixed_decimal_blocks():
+    expected = ((10**4500 - 1) // 9 * 7) * 10 + 3
+    checked = IntegerChecker(expected)("Final answer: " + "7" * 4500 + "3")
+    assert checked.correct and checked.valid
+
+
 def test_matched_paths_share_tasks_and_budgets(tokenizer, hybrid_model, monkeypatch):
     rng = random.Random(7)
     for index in range(3):
@@ -247,6 +267,72 @@ def test_wall_budget_is_counted_across_execution(tokenizer, hybrid_model, monkey
     )
     assert result.outcome == "timeout" and result.elapsed_seconds == 2
     assert len(result.calls) == 1 and result.calls[0].status == "timeout"
+
+
+@pytest.mark.parametrize("stage", ["checker", "synchronize"])
+def test_wall_budget_includes_terminal_work(
+    tokenizer, hybrid_model, monkeypatch, stage
+):
+    from neural_compiler.eval import harness
+
+    now = [0.0]
+    sync_calls = 0
+    monkeypatch.setattr(harness.time, "perf_counter", lambda: now[0])
+
+    def synchronize():
+        nonlocal sync_calls
+        sync_calls += 1
+        if stage == "synchronize" and sync_calls == 3:
+            now[0] = 2
+
+    def check(answer):
+        checked = IntegerChecker(42)(answer)
+        if stage == "checker":
+            now[0] = 2
+        return checked
+
+    runner = harness_for(
+        tokenizer,
+        hybrid_model,
+        monkeypatch,
+        "Final answer: 42<|im_end|>",
+        budgets=replace(Budgets(), wall_seconds=1),
+    )
+    runner.synchronize = synchronize
+    result = runner.run(Task("terminal", "unit", "Compute.", check), "no_tool")
+    assert result.outcome == "timeout"
+    assert result.elapsed_seconds == 2 and result.answer == "Final answer: 42"
+    assert result.diagnostic
+
+
+def test_terminal_wall_check_preserves_explicit_protocol_failure(
+    tokenizer, hybrid_model, monkeypatch
+):
+    from neural_compiler.eval import harness
+
+    now = [0.0]
+    sync_calls = 0
+    monkeypatch.setattr(harness.time, "perf_counter", lambda: now[0])
+
+    def synchronize():
+        nonlocal sync_calls
+        sync_calls += 1
+        if sync_calls == 2:
+            now[0] = 2
+
+    runner = harness_for(
+        tokenizer,
+        hybrid_model,
+        monkeypatch,
+        "<tool_call>bad</tool_call>",
+        budgets=replace(Budgets(), wall_seconds=1),
+    )
+    runner.synchronize = synchronize
+    result = runner.run(
+        Task("protocol", "unit", "Compute.", IntegerChecker(42)), "python_tool"
+    )
+    assert result.outcome == "protocol_error" and result.diagnostic
+    assert result.elapsed_seconds == 2
 
 
 def test_zero_success_ratio_is_explicit_and_failed_time_counts():

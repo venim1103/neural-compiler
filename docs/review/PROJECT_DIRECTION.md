@@ -589,3 +589,36 @@ remained compatible. No downloads, dependencies, fork/memory bombs, model studie
 untrusted services were used.
 
 [cgroup-requests]: ../../src/neural_compiler/bridge/cgroups.py
+
+### 2026-11-12: evaluation correctness beyond qualification blockers
+
+The prior stopping decision conflated missing real-engine/controller/study qualification
+with all local implementation work. Those gates remain protected, but do not prevent
+compatible offline prerequisites. A subsequent local check reproduced and repaired two
+issues in [the evaluator][evaluation-harness]:
+
+- `IntegerChecker` called `str(expected)`, crashing on a valid 4,500-digit reference at
+  Python's current 4,300-digit decimal conversion limit. It now compares integers after
+  parsing at most nine decimal digits per chunk, without changing the interpreter limit.
+  The accepted final-line grammar, sign/leading-zero behavior and checker outcomes remain
+  unchanged. Signed correct, valid wrong and mixed-block large answers are covered.
+- Final checking and terminal device synchronization could finish outside the existing
+  wall budget while the case was still scored correct. The completion boundary now checks
+  the same measured elapsed time reported in `CaseResult`; ordinary answer outcomes past
+  the budget become timeouts. Existing explicit protocol/budget/isolation failures remain
+  visible. This remains a cooperative deadline, not interruption of arbitrary checker or
+  device code.
+
+**Bounded ledger:** three integer repro cases failed with the decimal conversion error;
+ten focused grammar/integer cases passed after repair. Two deterministic terminal-clock
+repros failed by returning `correct` past the budget; four terminal/execution checks passed
+after repair, including an explicit-protocol-failure control. One shared root gate passed
+132 cases. Ruff lint/scoped format/whitespace and Pylance source diagnostics passed;
+existing 14 Torch JIT warnings remain visible. No accepted data, pretrained runs, GPU jobs,
+dependency changes or host modifications occurred.
+
+Next: verify current primary-source serving-engine compatibility before proposing an exact
+dependency integration scope. Public-source research and offline implementation do not
+require resolving all qualification gates first.
+
+[evaluation-harness]: ../../src/neural_compiler/eval/harness.py

@@ -66,10 +66,14 @@ class IntegerChecker:
             )
         value = match.group(1)
         magnitude = value.lstrip("+-").lstrip("0") or "0"
-        canonical = (
-            "-" if value.startswith("-") and magnitude != "0" else ""
-        ) + magnitude
-        correct = canonical == str(self.expected)
+        parsed = 0
+        # Small decimal chunks preserve the interpreter's global conversion limit.
+        for offset in range(0, len(magnitude), 9):
+            chunk = magnitude[offset : offset + 9]
+            parsed = parsed * 10 ** len(chunk) + int(chunk)
+        if value.startswith("-"):
+            parsed = -parsed
+        correct = parsed == self.expected
         return CheckResult(
             correct, True, "" if correct else "Final integer differs from the reference"
         )
@@ -322,6 +326,12 @@ class EvaluationHarness:
         except _RunFailure as exc:
             outcome, diagnostic = exc.outcome, str(exc)
         self.synchronize()
+        elapsed = time.perf_counter() - started
+        if (
+            outcome in ("correct", "wrong_answer", "invalid_answer")
+            and elapsed >= self.budgets.wall_seconds
+        ):
+            outcome, diagnostic = "timeout", "Evaluation wall-clock budget exhausted"
         return CaseResult(
             task.case_id,
             task.family,
@@ -329,7 +339,7 @@ class EvaluationHarness:
             outcome,
             diagnostic,
             answer,
-            time.perf_counter() - started,
+            elapsed,
             generated,
             injected,
             tuple(calls),
