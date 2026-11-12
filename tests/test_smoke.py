@@ -55,14 +55,14 @@ def test_cli_check_imports_and_native_flags(monkeypatch, tmp_path: Path, capsys)
     assert bad_report["compliant"] is False
     assert bad_report["disallowed"] == [{"module": "subprocess", "line": 1}]
 
-    recorded: list[tuple[str, str, float]] = []
+    recorded: list[tuple[str, str, float, str]] = []
 
-    def fake_c(code: str, timeout: float = 20) -> ExecutionResult:
-        recorded.append(("c", code, timeout))
+    def fake_c(code: str, timeout: float = 20, *, compiler: str = "gcc") -> ExecutionResult:
+        recorded.append(("c", code, timeout, compiler))
         return ExecutionResult("ok", stdout="42\n", returncode=0)
 
     def fake_asm(code: str, timeout: float = 20) -> ExecutionResult:
-        recorded.append(("asm", code, timeout))
+        recorded.append(("asm", code, timeout, ""))
         return ExecutionResult("compile_error", stderr="bad asm", returncode=1)
 
     monkeypatch.setattr(bridge, "run_c", fake_c)
@@ -70,7 +70,7 @@ def test_cli_check_imports_and_native_flags(monkeypatch, tmp_path: Path, capsys)
 
     c_file = tmp_path / "prog.c"
     c_file.write_text("int main(void){return 0;}", encoding="utf-8")
-    assert main(["--timeout", "3.5", "--run-c", str(c_file)]) == 0
+    assert main(["--timeout", "3.5", "--compiler", "tcc", "--run-c", str(c_file)]) == 0
     assert json.loads(capsys.readouterr().out)["status"] == "ok"
 
     asm_file = tmp_path / "solve.s"
@@ -78,6 +78,6 @@ def test_cli_check_imports_and_native_flags(monkeypatch, tmp_path: Path, capsys)
     assert main(["--timeout", "2.0", "--run-asm", str(asm_file)]) == 1
     assert json.loads(capsys.readouterr().out)["status"] == "compile_error"
     assert recorded == [
-        ("c", "int main(void){return 0;}", 3.5),
-        ("asm", "ret", 2.0),
+        ("c", "int main(void){return 0;}", 3.5, "tcc"),
+        ("asm", "ret", 2.0, ""),
     ]

@@ -18,6 +18,12 @@ def main(argv: list[str] | None = None) -> int:
         default=20.0,
         help="Execution wall-clock timeout in seconds (default: 20)",
     )
+    parser.add_argument(
+        "--compiler",
+        choices=("gcc", "tcc"),
+        default="gcc",
+        help="C compiler inside the jail for --run-c (default: gcc)",
+    )
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--version", action="store_true", help="Print package version")
     action.add_argument(
@@ -63,7 +69,9 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.run_c:
             result = run_c(
-                args.run_c.read_text(encoding="utf-8"), timeout=args.timeout
+                args.run_c.read_text(encoding="utf-8"),
+                timeout=args.timeout,
+                compiler=args.compiler,
             )
         else:
             result = run_asm(

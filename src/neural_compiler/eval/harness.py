@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 import re
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -447,30 +448,95 @@ class EvaluationHarness:
         )
 
 
+def _quantile(values: Sequence[float], q: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return float(ordered[0])
+    pos = q * (len(ordered) - 1)
+    lo = math.floor(pos)
+    hi = math.ceil(pos)
+    if lo == hi:
+        return float(ordered[lo])
+    frac = pos - lo
+    return float(ordered[lo] * (1.0 - frac) + ordered[hi] * frac)
+
+
+def _wilson_interval(
+    correct: int, total: int, z: float = 1.959963984540054
+) -> tuple[float, float] | None:
+    if total <= 0:
+        return None
+    p = correct / total
+    z2 = z * z
+    denom = 1.0 + z2 / total
+    center = (p + z2 / (2.0 * total)) / denom
+    half = (z * math.sqrt((p * (1.0 - p) + z2 / (4.0 * total)) / total)) / denom
+    return max(0.0, center - half), min(1.0, center + half)
+
+
+def _bootstrap_seconds_per_correct_ci(
+    results: Sequence[CaseResult], samples: int = 1000, seed: int = 0
+) -> tuple[float, float] | None:
+    n = len(results)
+    if n == 0 or not any(r.outcome == "correct" for r in results):
+        return None
+    rng = random.Random(seed)
+    elapsed_vals = [r.elapsed_seconds for r in results]
+    correct_vals = [1 if r.outcome == "correct" else 0 for r in results]
+    ratios: list[float] = []
+    for _ in range(samples):
+        tot_elapsed = 0.0
+        tot_correct = 0
+        for _ in range(n):
+            idx = rng.randrange(n)
+            tot_elapsed += elapsed_vals[idx]
+            tot_correct += correct_vals[idx]
+        if tot_correct > 0:
+            ratios.append(tot_elapsed / tot_correct)
+    if not ratios:
+        return None
+    low = _quantile(ratios, 0.025)
+    high = _quantile(ratios, 0.975)
+    assert low is not None and high is not None
+    return low, high
+
+
 def summarize(results: Sequence[CaseResult]) -> dict[str, object]:
-    """Failure-inclusive aggregate; zero successes have no finite cost ratio."""
+    """Failure-inclusive aggregate with quantiles and confidence intervals."""
     if len({result.path for result in results}) > 1:
         raise ValueError("Summarize one evaluation path at a time")
     if len({result.case_id for result in results}) != len(results):
         raise ValueError("Duplicate case IDs cannot be counted as independent attempts")
+    total = len(results)
     correct = sum(result.outcome == "correct" for result in results)
-    elapsed = sum(result.elapsed_seconds for result in results)
+    elapsed_list = [result.elapsed_seconds for result in results]
+    elapsed = sum(elapsed_list)
     generated_tokens = sum(result.generated_tokens for result in results)
     injected_tokens = sum(result.injected_tokens for result in results)
     tool_calls = sum(len(result.calls) for result in results)
-    execution_seconds = sum(
+    exec_list = [
         call.execution_seconds for result in results for call in result.calls
-    )
+    ]
+    execution_seconds = sum(exec_list)
     outcomes = {
         outcome: sum(result.outcome == outcome for result in results)
         for outcome in ALL_OUTCOMES
     }
     return {
-        "cases": len(results),
+        "cases": total,
         "correct": correct,
+        "accuracy": correct / total if total else None,
+        "accuracy_ci_95": _wilson_interval(correct, total),
         "elapsed_seconds": elapsed,
+        "elapsed_p50_seconds": _quantile(elapsed_list, 0.50),
+        "elapsed_p95_seconds": _quantile(elapsed_list, 0.95),
         "execution_seconds": execution_seconds,
+        "execution_p50_seconds": _quantile(exec_list, 0.50),
+        "execution_p95_seconds": _quantile(exec_list, 0.95),
         "seconds_per_correct": elapsed / correct if correct else None,
+        "seconds_per_correct_ci_95": _bootstrap_seconds_per_correct_ci(results),
         "ratio_status": "defined" if correct else "no_correct_answers",
         "generated_tokens": generated_tokens,
         "injected_tokens": injected_tokens,
@@ -494,6 +560,40 @@ def run_matched(
     if any(runners[path].budgets != budget for path in paths):
         raise ValueError("Matched paths must use identical resource budgets")
     return tuple(runners[path].run(task, path) for task in tasks for path in paths)
+
+
+def _paired_comparison(
+    paired: Mapping[str, Mapping[str, CaseResult]],
+    target: Path,
+    baseline: Path,
+) -> dict[str, object]:
+    n = len(paired)
+    both = target_only = baseline_only = neither = 0
+    time_deltas: list[float] = []
+    for case in paired.values():
+        t_res = case[target]
+        b_res = case[baseline]
+        t_ok = t_res.outcome == "correct"
+        b_ok = b_res.outcome == "correct"
+        if t_ok and b_ok:
+            both += 1
+        elif t_ok:
+            target_only += 1
+        elif b_ok:
+            baseline_only += 1
+        else:
+            neither += 1
+        time_deltas.append(t_res.elapsed_seconds - b_res.elapsed_seconds)
+    return {
+        "pairs": n,
+        "accuracy_delta": (target_only - baseline_only) / n,
+        "both_correct": both,
+        "target_only_correct": target_only,
+        "baseline_only_correct": baseline_only,
+        "neither_correct": neither,
+        "elapsed_delta_mean_seconds": sum(time_deltas) / n,
+        "elapsed_delta_p50_seconds": _quantile(time_deltas, 0.50),
+    }
 
 
 def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
@@ -548,5 +648,13 @@ def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
                 for path in paths
             }
             for outcome in ALL_OUTCOMES
+        },
+        "paired_deltas": {
+            "python_tool_vs_no_tool": _paired_comparison(
+                paired, "python_tool", "no_tool"
+            ),
+            "current_best_vs_python_tool": _paired_comparison(
+                paired, "current_best", "python_tool"
+            ),
         },
     }

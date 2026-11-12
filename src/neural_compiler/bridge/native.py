@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Literal
 
 from . import runtime
 from .cgroups import CgroupLimits
@@ -79,30 +80,49 @@ def _compile_and_run(
     )
 
 
+CCompiler = Literal["gcc", "tcc"]
+
+_C_COMPILER_COMMANDS: dict[CCompiler, list[str]] = {
+    "gcc": [
+        "/usr/bin/gcc",
+        "-std=c99",
+        "-pedantic-errors",
+        "-O2",
+        "-o",
+        "/work/prog",
+        "/work/prog.c",
+        "-lm",
+    ],
+    "tcc": [
+        "/usr/bin/tcc",
+        "-Wall",
+        "-Werror",
+        "-o",
+        "/work/prog",
+        "/work/prog.c",
+        "-lm",
+    ],
+}
+
+
 def run_c(
     code: str,
     timeout: float = 20,
     *,
+    compiler: CCompiler = "gcc",
     output_limit: int = MAX_OUTPUT_BYTES,
     seccomp: SeccompPolicy | None = None,
     cgroup: CgroupLimits | None = None,
 ) -> ExecutionResult:
-    """Compile strict C99 inside a writable jail, then run in a read-only jail."""
+    """Compile C inside a writable jail (`gcc` C99 or `tcc`), then run read-only."""
+    if compiler not in _C_COMPILER_COMMANDS:
+        raise ValueError(f"Unsupported C compiler: {compiler!r}")
     validate_code(code)
     with tempfile.TemporaryDirectory(prefix="neural-compiler-c-") as directory:
         work = Path(directory)
         (work / "prog.c").write_text(code, encoding="utf-8")
         return _compile_and_run(
-            [
-                "/usr/bin/gcc",
-                "-std=c99",
-                "-pedantic-errors",
-                "-O2",
-                "-o",
-                "/work/prog",
-                "/work/prog.c",
-                "-lm",
-            ],
+            list(_C_COMPILER_COMMANDS[compiler]),
             work,
             timeout,
             output_limit=output_limit,

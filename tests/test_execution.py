@@ -224,3 +224,42 @@ def test_supervise_classifies_bwrap_and_sigxcpu_failures() -> None:
     )
     assert xcpu_res.status == "timeout"
     assert "CPU time limit exceeded" in xcpu_res.stderr
+
+
+def test_run_python_static_import_policy_prefilter(monkeypatch) -> None:
+    from neural_compiler.bridge import execution
+    from neural_compiler.bridge.imports import CANDIDATE_MATH_MODULES
+
+    monkeypatch.setattr(
+        execution, "run_jailed", lambda *a, **kw: pytest.fail("Must not launch jail")
+    )
+    disallowed = run_python(
+        "import subprocess\nprint(1)\n", allowed_imports=CANDIDATE_MATH_MODULES
+    )
+    assert disallowed.status == "sandbox_error"
+    assert "subprocess" in disallowed.stderr
+
+    unresolved = run_python(
+        "__import__('os')\n", allowed_imports=CANDIDATE_MATH_MODULES
+    )
+    assert unresolved.status == "sandbox_error"
+    assert "__import__" in unresolved.stderr
+
+    syntax_err = run_python(
+        "def broken(:\n", allowed_imports=CANDIDATE_MATH_MODULES
+    )
+    assert syntax_err.status == "sandbox_error"
+    assert "syntax" in syntax_err.stderr.lower()
+
+    launched: list[list[str]] = []
+    monkeypatch.setattr(
+        execution,
+        "run_jailed",
+        lambda cmd, *a, **kw: launched.append(list(cmd)) or execution.ExecutionResult("ok", "6\n"),
+    )
+    allowed = run_python(
+        "import math\nprint(math.factorial(3))\n",
+        allowed_imports=CANDIDATE_MATH_MODULES,
+    )
+    assert allowed.status == "ok" and allowed.stdout.strip() == "6"
+    assert len(launched) == 1

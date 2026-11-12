@@ -848,3 +848,19 @@ separate hardware/host gates.
   `--check-imports` (static candidate import-policy triage), and `--timeout`.
 - Verified with runner-independent unit tests in `tests/test_native_bridge.py` and
   `tests/test_smoke.py`.
+
+### 2026-11-12: uncertainty intervals, paired deltas, jailed tcc fast path, and import pre-filter
+
+- Extended `summarize()` and `matched_report()` (`src/neural_compiler/eval/harness.py`) with
+  point accuracy, 95% Wilson score intervals (`accuracy_ci_95`), deterministic seeded bootstrap
+  95% CIs on failure-inclusive `seconds_per_correct` (`seconds_per_correct_ci_95`), p50/p95
+  wall-clock and execution quantiles, and `paired_deltas` 2×2 contingency counts (`both_correct`,
+  `target_only_correct`, `baseline_only_correct`, `neither_correct`) plus paired time deltas.
+- Added `compiler: Literal["gcc", "tcc"] = "gcc"` to `run_c()` (`src/neural_compiler/bridge/native.py`)
+  and `--compiler` to `neural-compiler` CLI (`src/neural_compiler/cli.py`), compiling via
+  `/usr/bin/tcc -Wall -Werror` inside the writable jail before read-only execution.
+- Added optional static AST import pre-filtering (`allowed_imports`, `allow_unresolved_imports`)
+  to `run_python()` (`src/neural_compiler/bridge/execution.py`) failing closed as `sandbox_error`
+  before launching `bwrap`.
+- Updated `AGENTS.md` `Current Work` to reflect completed offline prerequisites across Queues 1–3
+  and remaining privileged-Linux / CUDA-GPU gates.

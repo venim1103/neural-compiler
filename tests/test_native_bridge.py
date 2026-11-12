@@ -131,6 +131,32 @@ def test_run_c_validates_inputs_before_jail(monkeypatch) -> None:
         run_c("int main(void){return 0;}", timeout=0)
     with pytest.raises(ValueError, match="output_limit"):
         run_c("int main(void){return 0;}", output_limit=0)
+    with pytest.raises(ValueError, match="Unsupported C compiler"):
+        run_c("int main(void){return 0;}", compiler="clang")  # type: ignore[arg-type]
+
+
+def test_run_c_supports_tcc_fast_path_inside_jail(monkeypatch) -> None:
+    from neural_compiler.bridge import native
+
+    commands: list[list[str]] = []
+
+    def fake_run_jailed(command, workdir, timeout=20, **kwargs):
+        commands.append(list(command))
+        return ExecutionResult("ok", stdout="42\n", returncode=0)
+
+    monkeypatch.setattr(native, "run_jailed", fake_run_jailed)
+    res = run_c("int main(void){return 0;}", compiler="tcc")
+    assert res.status == "ok" and res.stdout.strip() == "42"
+    assert commands[0] == [
+        "/usr/bin/tcc",
+        "-Wall",
+        "-Werror",
+        "-o",
+        "/work/prog",
+        "/work/prog.c",
+        "-lm",
+    ]
+    assert commands[1] == ["/work/prog"]
 
 
 def test_native_bridge_real_jail_when_toolchain_available() -> None:

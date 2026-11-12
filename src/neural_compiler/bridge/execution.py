@@ -14,8 +14,9 @@ import signal
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass
+from collections.abc import Set
 from contextlib import nullcontext
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -278,9 +279,31 @@ def run_python(
     *,
     seccomp: SeccompPolicy | None = None,
     cgroup: CgroupLimits | None = None,
+    allowed_imports: Set[str] | None = None,
+    allow_unresolved_imports: bool = False,
 ) -> ExecutionResult:
     """Execute Python in fresh globals with bounded output and a hard deadline."""
     validate_code(code)
+    if allowed_imports is not None:
+        from .imports import evaluate_import_policy
+
+        try:
+            report = evaluate_import_policy(
+                code,
+                allowed_imports,
+                allow_unresolved=allow_unresolved_imports,
+            )
+        except SyntaxError as exc:
+            return ExecutionResult(
+                "sandbox_error",
+                stderr=f"Import policy syntax check failed: {exc}",
+            )
+        if not report.compliant:
+            blocked = [site.module for site in (*report.disallowed, *report.unresolved)]
+            return ExecutionResult(
+                "sandbox_error",
+                stderr=f"Blocked by static import policy: {', '.join(blocked)}",
+            )
     with tempfile.TemporaryDirectory(prefix="neural-compiler-") as directory:
         work = Path(directory)
         (work / "prog.py").write_text(code, encoding="utf-8")

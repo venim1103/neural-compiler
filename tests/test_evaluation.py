@@ -656,3 +656,75 @@ def test_end_to_end_multi_family_suite_on_tiny_cpu_model(
         report["by_path"][p]["correct"] == len(SYNTHETIC_FAMILIES)
         for p in ("no_tool", "python_tool", "current_best")
     )
+
+
+def test_summarize_quantiles_wilson_ci_and_paired_deltas():
+    rows: list[CaseResult] = []
+    # 4 paired cases:
+    # - c1: both correct (no_tool 4.0s, python_tool 1.0s)
+    # - c2: python_tool only correct (no_tool 5.0s, python_tool 2.0s)
+    # - c3: python_tool only correct (no_tool 6.0s, python_tool 3.0s)
+    # - c4: neither correct (no_tool 10.0s, python_tool 4.0s)
+    specs = [
+        ("c1", "correct", 4.0, "correct", 1.0),
+        ("c2", "wrong_answer", 5.0, "correct", 2.0),
+        ("c3", "wrong_answer", 6.0, "correct", 3.0),
+        ("c4", "timeout", 10.0, "wrong_answer", 4.0),
+    ]
+    for cid, nt_out, nt_t, py_out, py_t in specs:
+        rows.append(
+            CaseResult(cid, "arithmetic", "no_tool", nt_out, "", "", nt_t, 5, 0, ())
+        )
+        rows.append(
+            CaseResult(
+                cid,
+                "arithmetic",
+                "python_tool",
+                py_out,
+                "",
+                "",
+                py_t,
+                5,
+                2,
+                (CallRecord("ok", py_t * 0.5, 2),),
+            )
+        )
+        rows.append(
+            CaseResult(
+                cid,
+                "arithmetic",
+                "current_best",
+                py_out,
+                "",
+                "",
+                py_t * 0.5,
+                5,
+                2,
+                (CallRecord("ok", py_t * 0.25, 2),),
+            )
+        )
+
+    report = matched_report(rows)
+    py_sum = report["by_path"]["python_tool"]
+    assert py_sum["accuracy"] == pytest.approx(0.75)
+    lo, hi = py_sum["accuracy_ci_95"]
+    assert 0.0 < lo < 0.75 < hi < 1.0
+    assert py_sum["elapsed_p50_seconds"] == pytest.approx(2.5)
+    assert py_sum["elapsed_p95_seconds"] == pytest.approx(3.85)
+    assert py_sum["execution_p50_seconds"] == pytest.approx(1.25)
+    spc_lo, spc_hi = py_sum["seconds_per_correct_ci_95"]
+    assert spc_lo <= py_sum["seconds_per_correct"] <= spc_hi
+
+    nt_sum = report["by_path"]["no_tool"]
+    assert nt_sum["execution_p50_seconds"] is None
+    assert nt_sum["execution_p95_seconds"] is None
+
+    delta = report["paired_deltas"]["python_tool_vs_no_tool"]
+    assert delta["pairs"] == 4
+    assert delta["both_correct"] == 1
+    assert delta["target_only_correct"] == 2
+    assert delta["baseline_only_correct"] == 0
+    assert delta["neither_correct"] == 1
+    assert delta["accuracy_delta"] == pytest.approx(0.5)
+    assert delta["elapsed_delta_mean_seconds"] == pytest.approx(-3.75)
+    assert delta["elapsed_delta_p50_seconds"] == pytest.approx(-3.0)

@@ -61,23 +61,23 @@ not new native-protocol measurements or renewed experiment authority.
 Continue this queue, deriving smaller compatible prerequisites when a gate is
 blocked:
 
-1. Build bounded offline prerequisites for randomized held-out-family evaluation:
-   task/checker contracts, synthetic unit fixtures and no-tool/Python-tool/current
-   best-tier harness paths now exist; advance matched-family reporting and checks
-   using them. Implementing a harness does not authorize accepting
-   a dataset, collecting trajectories or running a pretrained-model study.
-2. Advance the P0 serving comparison: live pause/resume versus hybrid
-   prefix-cached resubmission. Process-local CPU exact-boundary snapshots now
-   exist; real-engine checkpoint integration remains outstanding.
-   Verify cache/turn correctness before claiming
-   latency gains; real-engine runs and dependency changes remain separately scoped.
-3. Advance P1 containment code and tests: seccomp, per-request cgroups/PID caps,
-   import policy, deadlines, compile-in-jail and independent containment evidence.
-   Opt-in delegated-cgroup requests have synthetic plumbing checks; the current
-   read-only host mount cannot qualify kernel enforcement. Static import inventory
-   is an offline policy-review aid, not admission or runtime enforcement.
-   Do not change host privileges/security or launch an untrusted service as a
-   testing workaround.
+1. Offline held-out-family evaluation prerequisites (`src/neural_compiler/eval/`):
+   matched `no_tool`/`python_tool`/`current_best` harness, exact integer/rational/sequence
+   checkers, deterministic synthetic family generators, Wilson/bootstrap uncertainty and
+   paired-delta reporting now exist. Held-out dataset acceptance, trajectory collection and
+   pretrained-model studies remain separate gated steps.
+2. P0 serving comparison (`src/neural_compiler/bridge/session.py`, `eval/serving.py`):
+   exact-boundary CPU snapshots, bounded LRU `CheckpointStore`, and offline `DecodeSession`
+   comparison adapters (`live_pause_resume`, `prefix_cached_resubmission`, `full_reprefill`)
+   now exist and match reference logits on tiny CPU hybrid models. Real-engine checkpoint
+   integration, CUDA/FLA kernel checks and dependency changes remain separately scoped.
+3. P1 containment and multi-tier execution (`src/neural_compiler/bridge/`, `cli.py`):
+   jailed Python (`run_python` with optional static import pre-filter), in-jail C99/tcc and
+   assembly (`run_c`, `run_asm`), jailed Wasm/Unicorn (`run_wat`, `run_hex`), opt-in seccomp
+   and delegated cgroup plumbing, and candidate math/compute review baselines now exist.
+   Live `bubblewrap` user-namespace qualification, kernel `seccomp` enforcement and writable
+   `cgroup2` controller qualification remain blocked on privileged Linux host capabilities;
+   do not change host privileges/security or launch an untrusted service as a workaround.
 
 SFT, execution-rewarded RL, middle-level IR investment and production serving
 remain downstream of the relevant P0/P1 gates. Fine-tuning is part of the project
