@@ -11,6 +11,8 @@ import math
 import sys
 import tempfile
 import time
+from collections.abc import Set
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -20,6 +22,7 @@ from .execution import (
     MAX_OUTPUT_BYTES,
     ExecutionResult,
     run_jailed,
+    run_python,
     validate_code,
 )
 from .seccomp import SeccompPolicy
@@ -259,3 +262,90 @@ def run_hex(
         seccomp=seccomp,
         cgroup=cgroup,
     )
+
+
+Language = Literal["python", "c", "asm", "wat", "hex"]
+ALL_LANGUAGES: tuple[Language, ...] = ("python", "c", "asm", "wat", "hex")
+
+
+@dataclass(frozen=True)
+class BridgePolicy:
+    """Shared execution and containment configuration across bridge tiers."""
+
+    timeout: float = 20.0
+    output_limit: int = MAX_OUTPUT_BYTES
+    seccomp: SeccompPolicy | None = None
+    cgroup: CgroupLimits | None = None
+    allowed_imports: Set[str] | None = None
+    allow_unresolved_imports: bool = False
+    c_compiler: CCompiler = "gcc"
+    wat_fuel: int = 20_000_000_000
+    hex_max_insns: int = 200_000_000
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.timeout) or self.timeout <= 0:
+            raise ValueError("timeout must be a finite positive number")
+        if type(self.output_limit) is not int or self.output_limit <= 0:
+            raise ValueError("output_limit must be a positive integer")
+        if self.c_compiler not in _C_COMPILER_COMMANDS:
+            raise ValueError(f"Unsupported C compiler: {self.c_compiler!r}")
+        if type(self.wat_fuel) is not int or self.wat_fuel <= 0:
+            raise ValueError("wat_fuel must be a positive integer")
+        if type(self.hex_max_insns) is not int or self.hex_max_insns <= 0:
+            raise ValueError("hex_max_insns must be a positive integer")
+
+
+def execute_program(
+    language: Language,
+    code: str,
+    policy: BridgePolicy = BridgePolicy(),
+    *,
+    timeout: float | None = None,
+) -> ExecutionResult:
+    """Dispatch `code` to the jailed executor for `language` under `policy`."""
+    effective_timeout = policy.timeout if timeout is None else timeout
+    if language == "python":
+        return run_python(
+            code,
+            timeout=effective_timeout,
+            seccomp=policy.seccomp,
+            cgroup=policy.cgroup,
+            allowed_imports=policy.allowed_imports,
+            allow_unresolved_imports=policy.allow_unresolved_imports,
+        )
+    if language == "c":
+        return run_c(
+            code,
+            timeout=effective_timeout,
+            compiler=policy.c_compiler,
+            output_limit=policy.output_limit,
+            seccomp=policy.seccomp,
+            cgroup=policy.cgroup,
+        )
+    if language == "asm":
+        return run_asm(
+            code,
+            timeout=effective_timeout,
+            output_limit=policy.output_limit,
+            seccomp=policy.seccomp,
+            cgroup=policy.cgroup,
+        )
+    if language == "wat":
+        return run_wat(
+            code,
+            fuel=policy.wat_fuel,
+            timeout=effective_timeout,
+            output_limit=policy.output_limit,
+            seccomp=policy.seccomp,
+            cgroup=policy.cgroup,
+        )
+    if language == "hex":
+        return run_hex(
+            code,
+            max_insns=policy.hex_max_insns,
+            timeout=effective_timeout,
+            output_limit=policy.output_limit,
+            seccomp=policy.seccomp,
+            cgroup=policy.cgroup,
+        )
+    raise ValueError(f"Unsupported execution language: {language!r}")
