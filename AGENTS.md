@@ -63,7 +63,9 @@ blocked:
    using them. Implementing a harness does not authorize accepting
    a dataset, collecting trajectories or running a pretrained-model study.
 2. Advance the P0 serving comparison: live pause/resume versus hybrid
-   prefix-cached resubmission. Verify cache/turn correctness before claiming
+   prefix-cached resubmission. Process-local CPU exact-boundary snapshots now
+   exist; real-engine checkpoint integration remains outstanding.
+   Verify cache/turn correctness before claiming
    latency gains; real-engine runs and dependency changes remain separately scoped.
 3. Advance P1 containment code and tests: seccomp, per-request cgroups/PID caps,
    import policy, deadlines, compile-in-jail and independent containment evidence.

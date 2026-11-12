@@ -435,3 +435,38 @@ No downloads, pretrained inference, GPU studies, dependencies or host privileges
 Next: exact-boundary hybrid checkpoint/resubmission correctness. Dataset/family/split
 acceptance, matched statistical evaluation and serving-engine latency measurements remain
 separately scoped; this harness alone does not satisfy those gates.
+
+### 2026-11-12: exact-boundary CPU hybrid checkpoints
+
+[LiveSession](../../src/neural_compiler/bridge/session.py) can now capture an exact
+sampled-token boundary and fork independent sessions from it, without full re-prefill.
+The snapshot includes full-attention KV, convolution history, recurrent state, logits,
+token history and the pending sampled token. Restore clones the saved state; advancing
+one branch does not mutate the source, sibling branches or the retained snapshot.
+
+This is deliberately a **process-local CPU prerequisite**, not a vLLM/SGLang prefix-cache
+integration or a 4B performance claim. It supports only non-offloaded `DynamicCache`
+with standard dynamic/full-attention and linear-attention layer types. Unsupported cache
+types, non-CPU/autograd tensors, inconsistent token boundaries and stale model weights/
+buffers/configuration fail explicitly. Restore requires the same unchanged eval-mode model.
+The default snapshot cap is 64 MiB of tensor storage, including logits, and is checked
+before copying. The source, retained snapshot and each fork occupy separate memory;
+this per-snapshot cap is not an aggregate server memory-management policy.
+
+**Finite routine ledger and repair:** the first focused cache/protocol/evaluation check
+ran 45 cases (44 passed, one failed). The ownership check found dictionary-valued
+recurrent/conv state where the implementation and fixture initially expected lists.
+The repair counts dictionary tensor storage, verifies all four state types are independently
+cloned, and tests the precise storage cap. Revised focused check: 46 passed; final focused
+checkpoint check: nine passed; root gate: 84 passed. Ruff lint, scoped format, whitespace
+and Pylance session diagnostics passed. Existing Torch JIT warnings remain visible.
+
+Tests compare serial native-call forks with live continuation and independent full-prefill
+logits (`atol=1e-6, rtol=1e-5`), including stop/EOS/length boundaries, divergent sibling
+responses and subsequent decoding without injection. Live and identically-fed restored
+sessions also match exactly in the fixture. No tolerance was relaxed. No downloads,
+pretrained inference, GPU runs, dependency changes or host security changes occurred.
+
+Next: enforce matched case/family coverage in the offline reporting layer, then continue
+P1 containment prerequisites. Real-engine checkpoint formats, GPU correctness, cache
+eviction, matched latency studies and containment qualification remain outstanding.

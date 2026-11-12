@@ -27,6 +27,11 @@ task/checker contracts, matched no-tool/Python-tool/current-best paths, shared b
 failure-inclusive timing. It does not load models or accept datasets; statistical held-out
 evaluation remains a separate gate.
 
+[Live sessions](./src/neural_compiler/bridge/session.py) also support bounded, process-local
+CPU checkpoints and independent exact-boundary resubmission. Unsupported caches and stale
+model state are rejected. This is an offline correctness prerequisite, not a production
+prefix-cache integration or measured serving speedup.
+
 The 12 fixed tasks and 6 forced-tool examples are preliminary evidence, not proof of autonomous tool use, generalization, or production latency. See [the implementation audit and next gates](./docs/review/PROJECT_DIRECTION.md#implementation-audit-2026-11-12).
 
 ## Key Empirical Findings (`Qwen3.5-4B`)
