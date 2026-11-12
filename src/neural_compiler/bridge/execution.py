@@ -22,7 +22,14 @@ from typing import Literal
 from .cgroups import CgroupError, CgroupLimits, request_cgroup
 from .seccomp import SeccompError, SeccompPolicy, export_filter
 
-Status = Literal["ok", "runtime_error", "timeout", "output_limit", "sandbox_error"]
+Status = Literal[
+    "ok",
+    "compile_error",
+    "runtime_error",
+    "timeout",
+    "output_limit",
+    "sandbox_error",
+]
 
 
 @dataclass(frozen=True)

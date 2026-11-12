@@ -1,0 +1,140 @@
+"""In-jail C99 and assembly compilation + execution through the supervised bridge.
+
+This is a P1 bridge prerequisite, not a production security boundary: compiled
+binaries still require accepted seccomp/cgroup policies and independent
+containment qualification before running untrusted workloads.
+"""
+
+from __future__ import annotations
+
+import math
+import tempfile
+import time
+from pathlib import Path
+
+from .cgroups import CgroupLimits
+from .execution import (
+    MAX_OUTPUT_BYTES,
+    ExecutionResult,
+    run_jailed,
+    validate_code,
+)
+from .seccomp import SeccompPolicy
+
+ASM_HARNESS = (
+    "#include <stdio.h>\n"
+    "long long solve(void);\n"
+    'int main(void){printf("%lld\\n", solve());return 0;}\n'
+)
+
+
+def _compile_and_run(
+    compile_command: list[str],
+    workdir: Path,
+    timeout: float,
+    *,
+    output_limit: int = MAX_OUTPUT_BYTES,
+    seccomp: SeccompPolicy | None = None,
+    cgroup: CgroupLimits | None = None,
+) -> ExecutionResult:
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("timeout must be a finite positive number")
+    if output_limit <= 0:
+        raise ValueError("output_limit must be positive")
+    deadline = time.monotonic() + timeout
+    compiled = run_jailed(
+        compile_command,
+        workdir,
+        timeout,
+        writable=True,
+        output_limit=output_limit,
+        cgroup=cgroup,
+    )
+    if compiled.status != "ok":
+        status = (
+            "compile_error" if compiled.status == "runtime_error" else compiled.status
+        )
+        return ExecutionResult(
+            status,
+            compiled.stdout,
+            compiled.stderr,
+            compiled.returncode,
+        )
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return ExecutionResult(
+            "timeout",
+            stderr="Compilation exhausted the wall-clock deadline",
+        )
+    return run_jailed(
+        ["/work/prog"],
+        workdir,
+        remaining,
+        writable=False,
+        output_limit=output_limit,
+        seccomp=seccomp,
+        cgroup=cgroup,
+    )
+
+
+def run_c(
+    code: str,
+    timeout: float = 20,
+    *,
+    output_limit: int = MAX_OUTPUT_BYTES,
+    seccomp: SeccompPolicy | None = None,
+    cgroup: CgroupLimits | None = None,
+) -> ExecutionResult:
+    """Compile strict C99 inside a writable jail, then run in a read-only jail."""
+    validate_code(code)
+    with tempfile.TemporaryDirectory(prefix="neural-compiler-c-") as directory:
+        work = Path(directory)
+        (work / "prog.c").write_text(code, encoding="utf-8")
+        return _compile_and_run(
+            [
+                "/usr/bin/gcc",
+                "-std=c99",
+                "-pedantic-errors",
+                "-O2",
+                "-o",
+                "/work/prog",
+                "/work/prog.c",
+                "-lm",
+            ],
+            work,
+            timeout,
+            output_limit=output_limit,
+            seccomp=seccomp,
+            cgroup=cgroup,
+        )
+
+
+def run_asm(
+    code: str,
+    timeout: float = 20,
+    *,
+    output_limit: int = MAX_OUTPUT_BYTES,
+    seccomp: SeccompPolicy | None = None,
+    cgroup: CgroupLimits | None = None,
+) -> ExecutionResult:
+    """Assemble and link a `long long solve(void)` routine inside the jail."""
+    validate_code(code)
+    with tempfile.TemporaryDirectory(prefix="neural-compiler-asm-") as directory:
+        work = Path(directory)
+        (work / "solve.s").write_text(code + "\n", encoding="utf-8")
+        (work / "main.c").write_text(ASM_HARNESS, encoding="utf-8")
+        return _compile_and_run(
+            [
+                "/usr/bin/gcc",
+                "-no-pie",
+                "-o",
+                "/work/prog",
+                "/work/main.c",
+                "/work/solve.s",
+            ],
+            work,
+            timeout,
+            output_limit=output_limit,
+            seccomp=seccomp,
+            cgroup=cgroup,
+        )

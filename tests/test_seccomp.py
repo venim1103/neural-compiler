@@ -9,7 +9,13 @@ import os
 import pytest
 
 from neural_compiler.bridge import run_python
-from neural_compiler.bridge.seccomp import SeccompError, SeccompPolicy, export_filter
+from neural_compiler.bridge.seccomp import (
+    CANDIDATE_PYTHON_COMPUTE_SYSCALLS,
+    SeccompError,
+    SeccompPolicy,
+    candidate_python_compute_policy,
+    export_filter,
+)
 
 # Trusted fixture-only interpreter/launcher syscalls. Process creation and
 # networking are deliberately absent; no product allowlist is adopted here.
@@ -142,3 +148,19 @@ def test_library_load_failure_is_explicit(monkeypatch):
     with pytest.raises(SeccompError, match="Cannot load"):
         with export_filter(SeccompPolicy(("write",))):
             pytest.fail("A failed filter must not be usable")
+
+
+def test_candidate_python_compute_policy_and_merge():
+    policy = candidate_python_compute_policy()
+    assert policy.allowed_syscalls == CANDIDATE_PYTHON_COMPUTE_SYSCALLS
+    assert set(FIXTURE_SYSCALLS).issubset(set(policy.allowed_syscalls))
+    assert policy.allows("read") and policy.allows("write") and policy.allows("mmap")
+    for denied in ("fork", "vfork", "clone", "socket", "ptrace", "mount"):
+        assert not policy.allows(denied)
+
+    extra = SeccompPolicy(("write", "nanosleep"))
+    merged = policy.merge(extra)
+    assert merged.allows("nanosleep")
+    assert merged.allowed_syscalls.count("write") == 1
+    with pytest.raises(TypeError, match="SeccompPolicy"):
+        policy.merge("write")  # type: ignore[arg-type]

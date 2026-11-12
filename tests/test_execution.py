@@ -133,3 +133,94 @@ def test_cli_runs_python_with_structured_failure(jail, tmp_path: Path, capsys) -
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "runtime_error"
     assert "cli regression" in result["stderr"]
+
+
+def test_run_jailed_command_assembly_and_fd_plumbing(monkeypatch, tmp_path: Path) -> None:
+    from contextlib import contextmanager
+    from neural_compiler.bridge import execution
+    from neural_compiler.bridge.cgroups import CgroupLimits
+    from neural_compiler.bridge.seccomp import SeccompPolicy
+
+    recorded: list[tuple[list[str], tuple[int, ...]]] = []
+
+    @contextmanager
+    def fake_filter(_policy):
+        yield 17
+
+    @contextmanager
+    def fake_cgroup(_limits):
+        m_fd = os.memfd_create("test-cgroup-member", os.MFD_CLOEXEC)
+        s_fd = os.memfd_create("test-cgroup-status", os.MFD_CLOEXEC)
+        try:
+            yield m_fd, s_fd
+        finally:
+            os.close(m_fd)
+            os.close(s_fd)
+
+    def fake_supervise(command, timeout, output_limit, pass_fds=()):
+        recorded.append((list(command), tuple(pass_fds)))
+        return execution.ExecutionResult("ok", "done\n", returncode=0)
+
+    monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/bwrap")
+    monkeypatch.setattr(execution, "export_filter", fake_filter)
+    monkeypatch.setattr(execution, "request_cgroup", fake_cgroup)
+    monkeypatch.setattr(execution, "_supervise", fake_supervise)
+
+    res_ro = run_jailed(
+        ["/usr/bin/python3", "/work/a.py"],
+        tmp_path,
+        writable=False,
+        runtime_prefix=Path("/usr"),
+    )
+    assert res_ro.status == "ok"
+    cmd_ro, fds_ro = recorded[-1]
+    assert fds_ro == ()
+    assert "--ro-bind" in cmd_ro and "--bind" not in cmd_ro
+    assert cmd_ro.count("/usr") == 2
+
+    res_rw = run_jailed(
+        ["/work/prog"],
+        tmp_path,
+        writable=True,
+        runtime_prefix=Path("/opt/venv"),
+        seccomp=SeccompPolicy(("read", "write", "exit_group")),
+        cgroup=CgroupLimits(tmp_path, 4096, 16),
+    )
+    assert res_rw.status == "ok"
+    cmd_rw, fds_rw = recorded[-1]
+    assert len(fds_rw) == 3 and fds_rw[0] == 17
+    assert cmd_rw[:4] == ["/usr/bin/python3", "-I", "-c", execution._CGROUP_LAUNCHER]
+    assert "/usr/bin/bwrap" in cmd_rw
+    bind_idx = cmd_rw.index("--bind")
+    assert cmd_rw[bind_idx + 1 : bind_idx + 3] == [str(tmp_path.resolve()), "/work"]
+    assert "/opt/venv" in cmd_rw
+    seccomp_idx = cmd_rw.index("--seccomp")
+    assert cmd_rw[seccomp_idx + 1] == "17"
+
+
+def test_supervise_classifies_bwrap_and_sigxcpu_failures() -> None:
+    bwrap_res = _supervise(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import sys; sys.stderr.write('bwrap: uid map failed\\n'); raise SystemExit(1)",
+        ],
+        timeout=2,
+        output_limit=1024,
+    )
+    assert bwrap_res.status == "sandbox_error"
+    assert "bwrap:" in bwrap_res.stderr
+
+    xcpu_res = _supervise(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import os, signal; os.kill(os.getpid(), signal.SIGXCPU)",
+        ],
+        timeout=2,
+        output_limit=1024,
+    )
+    assert xcpu_res.status == "timeout"
+    assert "CPU time limit exceeded" in xcpu_res.stderr

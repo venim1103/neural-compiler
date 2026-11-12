@@ -36,6 +36,77 @@ class SeccompPolicy:
         ):
             raise ValueError("Syscall names must be lowercase identifiers")
 
+    def allows(self, syscall: str) -> bool:
+        return syscall in self.allowed_syscalls
+
+    def merge(self, *others: SeccompPolicy) -> SeccompPolicy:
+        seen = set(self.allowed_syscalls)
+        merged = list(self.allowed_syscalls)
+        for policy in others:
+            if not isinstance(policy, SeccompPolicy):
+                raise TypeError("merge expects SeccompPolicy instances")
+            for name in policy.allowed_syscalls:
+                if name not in seen:
+                    seen.add(name)
+                    merged.append(name)
+        return SeccompPolicy(tuple(merged))
+
+
+# Candidate P1 compute-only syscall baseline (excludes process creation and sockets).
+# Retained as an explicit review candidate, not an adopted production policy.
+CANDIDATE_PYTHON_COMPUTE_SYSCALLS: tuple[str, ...] = (
+    "read",
+    "write",
+    "close",
+    "lseek",
+    "pread64",
+    "newfstatat",
+    "fstat",
+    "statx",
+    "openat",
+    "readlink",
+    "readlinkat",
+    "getcwd",
+    "getdents64",
+    "mmap",
+    "mprotect",
+    "munmap",
+    "madvise",
+    "brk",
+    "futex",
+    "set_tid_address",
+    "set_robust_list",
+    "rseq",
+    "rt_sigaction",
+    "rt_sigprocmask",
+    "rt_sigreturn",
+    "sigaltstack",
+    "arch_prctl",
+    "getrandom",
+    "getpid",
+    "gettid",
+    "prlimit64",
+    "getrlimit",
+    "clock_gettime",
+    "clock_nanosleep",
+    "fcntl",
+    "ioctl",
+    "exit",
+    "exit_group",
+    "getuid",
+    "geteuid",
+    "getgid",
+    "getegid",
+    "execve",
+    "wait4",
+    "sched_getaffinity",
+)
+
+
+def candidate_python_compute_policy() -> SeccompPolicy:
+    """Return the candidate compute-only syscall allowlist for review/testing."""
+    return SeccompPolicy(CANDIDATE_PYTHON_COMPUTE_SYSCALLS)
+
 
 @contextmanager
 def export_filter(policy: SeccompPolicy) -> Generator[int, None, None]:

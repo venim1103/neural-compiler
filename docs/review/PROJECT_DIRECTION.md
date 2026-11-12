@@ -815,3 +815,25 @@ Queue 2 offline prerequisites are implemented and verified on the tiny CPU hybri
 This remains offline CPU correctness infrastructure, not GPU latency or serving-engine
 qualification. Next: advance Queue 3 (jailed C/assembly compilation module and candidate
 import/seccomp allowlist profiles).
+
+### 2026-11-12: in-jail C99/assembly bridge module and candidate P1 policy baselines
+
+Queue 3 offline/bridge prerequisites are implemented and verified:
+- Added `run_c()` and `run_asm()` (`src/neural_compiler/bridge/native.py`, exported from
+  `neural_compiler.bridge`) compiling strict C99 (`-std=c99 -pedantic-errors -O2`) and
+  x86-64 assembly (`long long solve(void)`) inside a writable bubblewrap jail before
+  executing `/work/prog` in a read-only jail with remaining wall-clock budget, explicit
+  `compile_error` status mapping, and optional post-compile `seccomp`/`cgroup` enforcement.
+- Added candidate P1 review baselines (`CANDIDATE_MATH_MODULES` and `evaluate_import_policy()`
+  in `src/neural_compiler/bridge/imports.py`; `CANDIDATE_PYTHON_COMPUTE_SYSCALLS`,
+  `candidate_python_compute_policy()`, `SeccompPolicy.allows()`, and `SeccompPolicy.merge()`
+  in `src/neural_compiler/bridge/seccomp.py`), explicitly scoped as review candidates rather
+  than adopted production security boundaries.
+- Added runner-independent unit tests (`tests/test_execution.py`, `tests/test_native_bridge.py`,
+  `tests/test_import_inventory.py`, `tests/test_seccomp.py`) covering `run_jailed` flag/FD
+  assembly, supervisor `bwrap:` / `SIGXCPU` classification, compile-vs-run isolation boundaries,
+  and candidate policy evaluation.
+
+Real kernel containment qualification (`bwrap` user namespaces, kernel `seccomp` enforcement,
+writable `cgroup2` delegation) and GPU/serving-engine runs on `Qwen/Qwen3.5-4B` remain
+separate hardware/host gates.

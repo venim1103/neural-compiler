@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from neural_compiler.bridge.imports import ImportSite, inspect_imports
+from neural_compiler.bridge.imports import (
+    CANDIDATE_MATH_MODULES,
+    ImportSite,
+    evaluate_import_policy,
+    inspect_imports,
+)
 
 
 def test_inventory_preserves_aliases_relative_imports_and_source_lines():
@@ -63,3 +68,32 @@ def test_invalid_and_oversized_source_is_explicit():
         inspect_imports("import")
     with pytest.raises(ValueError, match="UTF-8"):
         inspect_imports("#" + "\u00e9" * (64 * 1024))
+
+
+def test_evaluate_import_policy_candidate_math_profile():
+    clean = (
+        "import math, itertools\n"
+        "from fractions import Fraction\n"
+        "from collections import deque\n"
+        "print(math.comb(10, 5))\n"
+    )
+    ok_report = evaluate_import_policy(clean)
+    assert ok_report.compliant is True
+    assert ok_report.disallowed == ()
+    assert ok_report.unresolved == ()
+    assert "math" in CANDIDATE_MATH_MODULES
+
+    bad_direct = evaluate_import_policy("import math, subprocess, os.path\n")
+    assert bad_direct.compliant is False
+    assert bad_direct.disallowed == (
+        ImportSite("os.path", 1),
+        ImportSite("subprocess", 1),
+    )
+
+    dynamic = evaluate_import_policy("import math\n__import__('os')\n")
+    assert dynamic.compliant is False
+    assert dynamic.disallowed == ()
+    assert dynamic.unresolved == (ImportSite("__import__", 2),)
+    assert evaluate_import_policy(
+        "import math\n__import__('os')\n", allow_unresolved=True
+    ).compliant is True

@@ -8,6 +8,28 @@ from dataclasses import dataclass
 
 from .execution import validate_code
 
+# Candidate P1 math/stdlib allowlist for static source triage (not a security boundary).
+CANDIDATE_MATH_MODULES: frozenset[str] = frozenset(
+    {
+        "array",
+        "bisect",
+        "cmath",
+        "collections",
+        "decimal",
+        "fractions",
+        "functools",
+        "heapq",
+        "itertools",
+        "json",
+        "math",
+        "operator",
+        "random",
+        "re",
+        "statistics",
+        "string",
+    }
+)
+
 
 @dataclass(frozen=True)
 class ImportSite:
@@ -30,6 +52,33 @@ class ImportInventory:
                 for allowed in allowed_modules
             )
         )
+
+
+@dataclass(frozen=True)
+class ImportPolicyReport:
+    inventory: ImportInventory
+    disallowed: tuple[ImportSite, ...]
+    unresolved: tuple[ImportSite, ...]
+    compliant: bool
+
+
+def evaluate_import_policy(
+    code: str,
+    allowed_modules: Set[str] = CANDIDATE_MATH_MODULES,
+    *,
+    allow_unresolved: bool = False,
+) -> ImportPolicyReport:
+    """Evaluate static AST imports against a candidate module allowlist."""
+    inventory = inspect_imports(code)
+    disallowed = inventory.unlisted(allowed_modules)
+    unresolved = inventory.unresolved
+    compliant = not disallowed and (allow_unresolved or not unresolved)
+    return ImportPolicyReport(
+        inventory=inventory,
+        disallowed=disallowed,
+        unresolved=unresolved,
+        compliant=compliant,
+    )
 
 
 def inspect_imports(code: str) -> ImportInventory:
