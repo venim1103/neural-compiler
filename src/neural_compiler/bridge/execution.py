@@ -1,7 +1,7 @@
 """Per-request Linux namespace execution.
 
-This is a P0 foundation, not a production security boundary: an accepted syscall
-policy and per-request cgroups are still required before accepting untrusted workloads.
+This is a P0 foundation, not a production security boundary: accepted policies and
+independent containment qualification are still required for untrusted workloads.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Literal
 
+from .cgroups import CgroupError, CgroupLimits, request_cgroup
 from .seccomp import SeccompError, SeccompPolicy, export_filter
 
 Status = Literal["ok", "runtime_error", "timeout", "output_limit", "sandbox_error"]
@@ -44,6 +45,20 @@ resource.setrlimit(resource.RLIMIT_FSIZE, (16 * 1024 * 1024, 16 * 1024 * 1024))
 resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
 os.execv(sys.argv[3], sys.argv[3:])
+"""
+
+_CGROUP_LAUNCHER = """
+import os, sys
+membership, status = map(int, sys.argv[1:3])
+try:
+    os.set_inheritable(status, False)
+    if os.write(membership, b"0") != 1:
+        raise OSError("Incomplete cgroup membership write")
+    os.close(membership)
+    os.execv(sys.argv[3], sys.argv[3:])
+except OSError as exc:
+    os.write(status, ("Cgroup setup failed: " + str(exc)).encode("utf-8")[:4096])
+    os._exit(125)
 """
 
 
@@ -143,11 +158,14 @@ def run_jailed(
     output_limit: int = MAX_OUTPUT_BYTES,
     runtime_prefix: Path | None = None,
     seccomp: SeccompPolicy | None = None,
+    cgroup: CgroupLimits | None = None,
 ) -> ExecutionResult:
     """Run a trusted command specification against guest files in a private jail.
 
     Guest stdout is data, never a status/control protocol. There is deliberately
     no unjailed fallback if bubblewrap or user namespaces are unavailable.
+    Optional cgroups require an existing caller-delegated subtree; this function
+    never enables controllers or changes host delegation.
     """
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("timeout must be a finite positive number")
@@ -192,11 +210,15 @@ def run_jailed(
         "--chdir",
         "/work",
     ]
+    result: ExecutionResult | None = None
     try:
         with (
+            request_cgroup(cgroup)
+            if cgroup is not None
+            else nullcontext(None) as group_fds,
             export_filter(seccomp)
             if seccomp is not None
-            else nullcontext(None) as filter_fd
+            else nullcontext(None) as filter_fd,
         ):
             if filter_fd is not None:
                 args += ["--seccomp", str(filter_fd)]
@@ -209,14 +231,38 @@ def run_jailed(
                 str(math.ceil(timeout)),
                 *command,
             ]
-            return _supervise(
-                args,
-                timeout,
-                output_limit,
-                pass_fds=() if filter_fd is None else (filter_fd,),
-            )
-    except SeccompError as exc:
-        return ExecutionResult("sandbox_error", stderr=str(exc))
+            inherited = () if filter_fd is None else (filter_fd,)
+            if group_fds is not None:
+                # Join before bubblewrap can spawn guest processes. The status fd
+                # closes on exec, so guest output cannot forge setup diagnostics.
+                args = [
+                    "/usr/bin/python3",
+                    "-I",
+                    "-c",
+                    _CGROUP_LAUNCHER,
+                    *(str(fd) for fd in group_fds),
+                    *args,
+                ]
+                inherited += group_fds
+            result = _supervise(args, timeout, output_limit, pass_fds=inherited)
+            if group_fds is not None:
+                os.lseek(group_fds[1], 0, os.SEEK_SET)
+                diagnostic = os.read(group_fds[1], 4096)
+                if diagnostic:
+                    result = ExecutionResult(
+                        "sandbox_error",
+                        result.stdout,
+                        diagnostic.decode("utf-8", errors="replace"),
+                        result.returncode,
+                    )
+        return result
+    except (SeccompError, CgroupError) as exc:
+        return ExecutionResult(
+            "sandbox_error",
+            "" if result is None else result.stdout,
+            str(exc) if result is None else f"{result.stderr}\n{exc}".strip(),
+            None if result is None else result.returncode,
+        )
 
 
 def run_python(
@@ -224,6 +270,7 @@ def run_python(
     timeout: float = 20,
     *,
     seccomp: SeccompPolicy | None = None,
+    cgroup: CgroupLimits | None = None,
 ) -> ExecutionResult:
     """Execute Python in fresh globals with bounded output and a hard deadline."""
     validate_code(code)
@@ -235,4 +282,5 @@ def run_python(
             work,
             timeout,
             seccomp=seccomp,
+            cgroup=cgroup,
         )

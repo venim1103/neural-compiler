@@ -41,8 +41,8 @@ not approval for a model run or evidence of resource fit.
 This is a **P0 prototype, not a production security boundary**. Supervised
 per-request execution, in-jail C/assembly compilation, isolated Wasm/unicorn
 harnesses, native protocol framing and single-sequence cache continuation exist.
-Opt-in seccomp plumbing exists, but a production syscall policy, per-request
-cgroups/PID caps, a curated-import policy and production serving integration
+Opt-in seccomp and delegated-cgroup plumbing exist, but production syscall/import
+policies, real cgroup/PID-cap qualification and production serving integration
 remain unfinished. Do not expose it to untrusted workloads.
 The numerical NeuroVM helpers and Part II of [WHITEPAPER.md][whitepaper] are
 retained research/reference material, not the active CPU-bridge execution path.
@@ -70,6 +70,9 @@ blocked:
    latency gains; real-engine runs and dependency changes remain separately scoped.
 3. Advance P1 containment code and tests: seccomp, per-request cgroups/PID caps,
    import policy, deadlines, compile-in-jail and independent containment evidence.
+   Opt-in delegated-cgroup requests have synthetic plumbing checks; the current
+   read-only host mount cannot qualify kernel enforcement. Static import inventory
+   is an offline policy-review aid, not admission or runtime enforcement.
    Do not change host privileges/security or launch an untrusted service as a
    testing workaround.
 

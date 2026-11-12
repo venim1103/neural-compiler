@@ -549,3 +549,43 @@ The next gates still require accepted task/family/split and pinned study scopes,
 serving-engine dependencies/resources, or a writable delegated cgroup environment and
 approved production containment policies. Current offline fixtures and infrastructure do
 not supply those missing inputs or justify relaxing isolation to obtain measurements.
+
+### 2026-11-12: opt-in delegated cgroup requests
+
+Implemented [per-request cgroup-v2 plumbing][cgroup-requests] through `run_python` and
+`run_jailed`, with no change to default execution. Callers supply
+`CgroupLimits(delegated_root=Path(...), memory_bytes=..., pids=..., swap_bytes=0)`.
+The root must already be delegated, writable cgroup v2 with memory/PID controls enabled.
+The bridge creates only its unique child group; it never enables controllers, remounts a
+filesystem or changes host privileges.
+
+The request configures `memory.max`, `memory.swap.max`, `pids.max` and
+`memory.oom.group`. PID limits count launcher/helper processes and threads too; callers must
+budget those, not just guest Python. A trusted wrapper joins itself before executing
+bubblewrap, so guests inherit the group without a post-spawn attachment race. Its private
+setup-status descriptor closes on exec, keeping guest output separate from trusted
+isolation diagnostics. Cleanup closes private descriptors, requests `cgroup.kill`, waits
+at most one second for depopulation and removes the owned subgroup. Setup or cleanup
+failure produces `sandbox_error`, preserving already captured guest output. A failed
+cleanup can leave an owned subgroup requiring removal; its path is reported.
+
+**Scope and limits:** the actual host mount was rechecked read-only; no real cgroup controls
+were written. Temporary synthetic control files test configuration, missing controls,
+membership failure, descriptor lifetime, bounded cleanup and error preservation.
+Two existing-style jailed fixtures check guest output/exit codes cannot forge setup status
+and try at most 61 descriptor writes to check the setup descriptor is not inherited.
+These are plumbing checks, not evidence that kernel memory/PID caps work, production policy
+acceptance or independent containment qualification. Default jailed/native regression
+controls ran without skips. Real-controller evidence still needs a writable delegated
+environment; no privilege/delegation workaround is authorized here.
+
+**Finite routine ledger:** initial cgroup/executor check: 33 passed; three added cleanup/
+descriptor edge cases: three passed. Root gate: 125 passed; Ruff lint, scoped format and
+whitespace checks passed. Existing 14 Torch JIT warnings remain visible. No execution/static
+checks failed. One documentation patch partially applied because its final context differed;
+the applied hunks were retained and only the missing hunk was retried after a bounded read.
+Pylance source diagnostics found no errors and the inspected existing call signature
+remained compatible. No downloads, dependencies, fork/memory bombs, model studies or
+untrusted services were used.
+
+[cgroup-requests]: ../../src/neural_compiler/bridge/cgroups.py
