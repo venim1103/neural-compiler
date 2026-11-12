@@ -470,3 +470,25 @@ pretrained inference, GPU runs, dependency changes or host security changes occu
 Next: enforce matched case/family coverage in the offline reporting layer, then continue
 P1 containment prerequisites. Real-engine checkpoint formats, GPU correctness, cache
 eviction, matched latency studies and containment qualification remain outstanding.
+
+### 2026-11-12: paired case/family reporting
+
+The [offline harness](../../src/neural_compiler/eval/harness.py) now preflights unique
+task IDs, all three comparison paths and identical resource budgets before any inference.
+It runs the same task/checker object through each supplied path. Reporting rejects duplicate
+results, missing baseline/current-best pairs and inconsistent family identities. Costs are
+reported by path and by family, retaining failed-attempt time; invalid/nonfinite elapsed
+times and mixed-path single summaries fail explicitly.
+
+These are consistency checks, not cohort/split acceptance, statistical confidence bounds,
+or proof of matched hardware/intrinsics. A complete table does not qualify task quality or
+generalization; current-best remains a caller-provided label.
+
+**Routine ledger:** 27 focused evaluation cases passed, then the root gate passed 90 tests.
+Ruff lint, scoped format check, whitespace and Pylance harness diagnostics passed.
+No failed attempts, downloads, datasets, pretrained inference or GPU studies occurred.
+
+Read-only containment inspection found installed `libseccomp.so.2` and a cgroup-v2 mount
+with CPU/memory/PID controllers, but the mount is **read-only**. Do not remount it or change
+host privileges. Next: implement opt-in seccomp-filter plumbing with bounded trusted
+fixtures; policy acceptance and writable delegated per-request cgroups remain separate.

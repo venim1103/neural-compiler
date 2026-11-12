@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -158,6 +158,10 @@ class CaseResult:
     generated_tokens: int
     injected_tokens: int
     calls: tuple[CallRecord, ...]
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.elapsed_seconds) or self.elapsed_seconds < 0:
+            raise ValueError("Case elapsed time must be finite and nonnegative")
 
 
 class _RunFailure(Exception):
@@ -334,6 +338,10 @@ class EvaluationHarness:
 
 def summarize(results: Sequence[CaseResult]) -> dict[str, int | float | None | str]:
     """Failure-inclusive aggregate; zero successes have no finite cost ratio."""
+    if len({result.path for result in results}) > 1:
+        raise ValueError("Summarize one evaluation path at a time")
+    if len({result.case_id for result in results}) != len(results):
+        raise ValueError("Duplicate case IDs cannot be counted as independent attempts")
     correct = sum(result.outcome == "correct" for result in results)
     elapsed = sum(result.elapsed_seconds for result in results)
     return {
@@ -342,4 +350,64 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, int | float | None | s
         "elapsed_seconds": elapsed,
         "seconds_per_correct": elapsed / correct if correct else None,
         "ratio_status": "defined" if correct else "no_correct_answers",
+    }
+
+
+def run_matched(
+    tasks: Sequence[Task],
+    runners: Mapping[Path, EvaluationHarness],
+) -> tuple[CaseResult, ...]:
+    """Preflight common budgets and task identities before any inference."""
+    paths: tuple[Path, ...] = ("no_tool", "python_tool", "current_best")
+    if set(runners) != set(paths):
+        raise ValueError("Matched evaluation requires all three labelled paths")
+    if len({task.case_id for task in tasks}) != len(tasks):
+        raise ValueError("Matched tasks must have unique case IDs")
+    budget = runners[paths[0]].budgets
+    if any(runners[path].budgets != budget for path in paths):
+        raise ValueError("Matched paths must use identical resource budgets")
+    return tuple(runners[path].run(task, path) for task in tasks for path in paths)
+
+
+def matched_report(results: Sequence[CaseResult]) -> dict[str, dict]:
+    """Require complete paired coverage; retain per-family costs and failures.
+
+    Coverage alone does not establish matched hardware, prompts, accepted splits,
+    intrinsic availability, independence or statistical qualification.
+    """
+    if not results:
+        raise ValueError("A matched report requires case results")
+    paths = ("no_tool", "python_tool", "current_best")
+    paired: dict[str, dict[str, CaseResult]] = {}
+    for result in results:
+        if result.path not in paths:
+            raise ValueError(f"Unknown report path: {result.path}")
+        case = paired.setdefault(result.case_id, {})
+        if result.path in case:
+            raise ValueError(f"Duplicate {result.path} result for {result.case_id}")
+        case[result.path] = result
+    for case_id, case in paired.items():
+        if set(case) != set(paths):
+            raise ValueError(f"Missing baseline/current-best result for {case_id}")
+        if len({result.family for result in case.values()}) != 1:
+            raise ValueError(f"Family identity differs between paths for {case_id}")
+    families = sorted({result.family for result in results})
+    return {
+        "by_path": {
+            path: summarize([result for result in results if result.path == path])
+            for path in paths
+        },
+        "by_family": {
+            family: {
+                path: summarize(
+                    [
+                        result
+                        for result in results
+                        if result.path == path and result.family == family
+                    ]
+                )
+                for path in paths
+            }
+            for family in families
+        },
     }

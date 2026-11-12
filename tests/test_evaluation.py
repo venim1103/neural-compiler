@@ -15,6 +15,8 @@ from neural_compiler.eval.harness import (
     EvaluationHarness,
     IntegerChecker,
     Task,
+    matched_report,
+    run_matched,
     summarize,
 )
 
@@ -266,3 +268,83 @@ def test_zero_success_ratio_is_explicit_and_failed_time_counts():
 def test_invalid_budgets_are_explicit(kwargs):
     with pytest.raises(ValueError):
         Budgets(**kwargs)
+
+
+def test_matched_report_preserves_family_failures_and_rejects_missing_pairs():
+    rows = []
+    for path in ("no_tool", "python_tool", "current_best"):
+        good = CaseResult("a", "arithmetic", path, "correct", "", "42", 2, 3, 0, ())
+        bad = replace(
+            good,
+            case_id="b",
+            family="sequences",
+            outcome="wrong_answer",
+            elapsed_seconds=6,
+        )
+        rows.extend([good, bad])
+    report = matched_report(rows)
+    assert report["by_path"]["python_tool"]["seconds_per_correct"] == 8
+    assert (
+        report["by_family"]["sequences"]["python_tool"]["seconds_per_correct"] is None
+    )
+    with pytest.raises(ValueError, match="Missing"):
+        matched_report(rows[:-1])
+    with pytest.raises(ValueError, match="Duplicate"):
+        matched_report([*rows, rows[0]])
+    with pytest.raises(ValueError, match="Family identity"):
+        matched_report([*rows[:-1], replace(rows[-1], family="arithmetic")])
+    with pytest.raises(ValueError, match="one evaluation path"):
+        summarize(rows)
+
+
+def test_matched_preflight_rejects_budget_mismatch_before_inference(tokenizer):
+    def factory(ids):
+        pytest.fail("Preflight must precede model execution")
+
+    base = EvaluationHarness(tokenizer, factory, lambda: None)
+    different = EvaluationHarness(
+        tokenizer,
+        factory,
+        lambda: None,
+        budgets=replace(Budgets(), calls=1),
+    )
+    tasks = [Task("a", "unit", "Compute.", IntegerChecker(42))]
+    with pytest.raises(ValueError, match="identical resource"):
+        run_matched(
+            tasks, {"no_tool": base, "python_tool": base, "current_best": different}
+        )
+    with pytest.raises(ValueError, match="all three"):
+        run_matched(tasks, {"python_tool": base})
+    with pytest.raises(ValueError, match="unique case"):
+        run_matched(
+            tasks * 2, {"no_tool": base, "python_tool": base, "current_best": base}
+        )
+
+
+def test_matched_runner_produces_all_three_report_paths(
+    tokenizer, hybrid_model, monkeypatch
+):
+    task = Task("synthetic", "unit", "Compute six times seven.", IntegerChecker(42))
+
+    def factory(ids):
+        scripted = iter(
+            tokenizer.encode("Final answer: 42<|im_end|>", add_special_tokens=False)
+        )
+        session = LiveSession(hybrid_model, ids)
+        monkeypatch.setattr(session, "_next_token", lambda: next(scripted))
+        return session
+
+    runner = EvaluationHarness(tokenizer, factory, lambda: None)
+    rows = run_matched(
+        [task], {"no_tool": runner, "python_tool": runner, "current_best": runner}
+    )
+    assert len(rows) == 3
+    report = matched_report(rows)
+    assert set(report["by_path"]) == {"no_tool", "python_tool", "current_best"}
+    assert all(summary["correct"] == 1 for summary in report["by_path"].values())
+
+
+@pytest.mark.parametrize("elapsed", [-1, float("nan"), float("inf")])
+def test_invalid_time_cannot_produce_a_success_shaped_cost(elapsed):
+    with pytest.raises(ValueError, match="finite and nonnegative"):
+        CaseResult("a", "unit", "no_tool", "correct", "", "42", elapsed, 3, 0, ())
