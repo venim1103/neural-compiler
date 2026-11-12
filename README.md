@@ -22,6 +22,11 @@ The experimental C/assembly executors compile **inside** the jail; Wasm and x86 
 
 [Native protocol framing](./src/neural_compiler/bridge/protocol.py) supports one `run(code)` call at a time, rejects incomplete/malformed calls, and escapes control delimiters in structured results. Calls are capped at 4,096 body tokens; response turns are capped at 2,048 tokens with a visible `truncated` flag when output is shortened. [Live sessions](./src/neural_compiler/bridge/session.py) preserve pending sampled tokens exactly once. Multi-call, EOS, and token-budget continuation are checked against full-prefill logits on a tiny CPU hybrid Qwen model; this is not a new 4B accuracy/latency result.
 
+[The offline evaluation harness](./src/neural_compiler/eval/harness.py) supplies explicit
+task/checker contracts, matched no-tool/Python-tool/current-best paths, shared budgets and
+failure-inclusive timing. It does not load models or accept datasets; statistical held-out
+evaluation remains a separate gate.
+
 The 12 fixed tasks and 6 forced-tool examples are preliminary evidence, not proof of autonomous tool use, generalization, or production latency. See [the implementation audit and next gates](./docs/review/PROJECT_DIRECTION.md#implementation-audit-2026-11-12).
 
 ## Key Empirical Findings (`Qwen3.5-4B`)

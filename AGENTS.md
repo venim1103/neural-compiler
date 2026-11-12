@@ -59,7 +59,8 @@ blocked:
 
 1. Build bounded offline prerequisites for randomized held-out-family evaluation:
    task/checker contracts, synthetic unit fixtures and no-tool/Python-tool/current
-   best-tier harness paths. Implementing a harness does not authorize accepting
+   best-tier harness paths now exist; advance matched-family reporting and checks
+   using them. Implementing a harness does not authorize accepting
    a dataset, collecting trajectories or running a pretrained-model study.
 2. Advance the P0 serving comparison: live pause/resume versus hybrid
    prefix-cached resubmission. Verify cache/turn correctness before claiming

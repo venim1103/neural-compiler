@@ -397,3 +397,41 @@ when absent and never downloads it. Importing the experiment no longer loads mod
 **Not completed:** new 4B native accuracy/latency measurements, randomized held-out-family
 evaluation with no-tool and Python-tool baselines, prefix-cached resubmission, continuous
 batching, and P1 containment. Those remain the next gates before SFT/RL.
+
+### 2026-11-12: bounded offline evaluation prerequisites
+
+Implemented [the evaluation harness](../../src/neural_compiler/eval/harness.py) without
+loading models, importing task data, or accepting a benchmark policy. Task identity/family,
+prompt, and checker are separate; references are never passed to inference. The integer
+checker requires a complete final answer on the last line, rather than crediting an earlier
+matching integer. Other checker contracts can be supplied by callers.
+
+The no-tool, Python-tool and caller-labelled current-best paths share prompts, checker
+and resource budgets. Only tool availability differs for no-tool. "Current best" is a
+comparison label, not a claim that a backend is best; the caller supplies the actual
+already-loaded session factory and executor. No new C/DSL tier is selected here.
+
+- Total generated tokens, turn/call/response tokens, serial calls, prompt/context size
+  and elapsed time have explicit finite budgets. Limits do not reset after repair turns.
+  Prompt overflow prevents prefill; result overflow prevents cache injection.
+- Failed executions are retained with timing and status; runtime errors can be repaired.
+  Missing isolation fails explicitly, rather than pretending it is a recoverable model error.
+- End-to-end timing includes prompt prefill, decoding, failed attempts, execution and result
+  injection. Callers must supply device synchronization. The model watchdog is cooperative
+  at token/turn boundaries; the subprocess executor has its separate hard deadline.
+- The cost ratio uses total elapsed time, including failures, divided by correct answers.
+  Zero successes produce `seconds_per_correct: null` and `no_correct_answers`, not zero
+  or a success-shaped fallback. Raw family/case/path results remain available.
+
+**Finite routine ledger:** one initial evaluation/protocol check (33 cases passed), one
+extended budget-edge check (21 evaluation cases passed), and one root gate (75 passed).
+Ruff lint, scoped format check, whitespace check and Pylance harness diagnostics passed.
+No checks failed; existing Torch JIT deprecation warnings remain visible. The shared tiny
+CPU model/tokenizer fixtures were extracted without changing their reference kernels or
+logit tolerances. Fixtures include three seeded arithmetic examples and actual jailed error
+recovery; they are unit controls, not accepted task data or measured model accuracy.
+
+No downloads, pretrained inference, GPU studies, dependencies or host privileges changed.
+Next: exact-boundary hybrid checkpoint/resubmission correctness. Dataset/family/split
+acceptance, matched statistical evaluation and serving-engine latency measurements remain
+separately scoped; this harness alone does not satisfy those gates.
