@@ -696,3 +696,27 @@ CPU hybrid checkpoint's eval-mode consistency guard and use bounded existing-sty
 fixtures if a concrete gap is reproduced, rather than ending at a dependency approval.
 
 [project-guide]: ../../AGENTS.md
+
+### 2026-11-12: actual continuation and complete model-mode guards
+
+The instruction checkpoint was followed by an actual offline cache-contract check,
+not a terminal completion call. Three tiny CPU repro cases showed session creation,
+checkpoint capture and restore accepting child modules in training mode while the
+parent model's training flag remained false.
+
+The session now shares a complete module-tree eval-mode predicate across creation,
+prefill/decode, capture and restore. Changed mode is rejected before decoding/injection
+can mutate the token boundary. This closes an unsupported-state path, not a numerical
+accuracy claim; exact-boundary ownership/pending-token/reference-logit controls remain
+unchanged (`atol=1e-6, rtol=1e-5`), as do source/token/cache budgets.
+
+**Bounded ledger:** three initial mode cases failed; the focused checkpoint gate passed
+12 cases after repair, including unchanged-state checks after refused continuation.
+Root gate: 135 passed, with existing 14 Torch JIT warnings and no skips. Ruff lint,
+scoped format, whitespace and Pylance session diagnostics passed. Fixtures were tiny
+untrained CPU models using the existing Torch-reference path; no new dependencies,
+pretrained/GPU jobs, accepted data or host changes occurred.
+
+Next: inspect whether checkpoint model-version metadata is tied to the model that
+produced the initial prefix, rather than merely the model present at capture time.
+This is another bounded offline correctness prerequisite, not serving qualification.

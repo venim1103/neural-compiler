@@ -135,6 +135,27 @@ def test_checkpoint_rejects_changed_weights_and_train_mode(hybrid_model):
         LiveSession.from_checkpoint(hybrid_model, checkpoint)
 
 
+@pytest.mark.parametrize("operation", ["create", "capture", "restore"])
+def test_sessions_reject_partially_training_model(hybrid_model, operation):
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    checkpoint = session.checkpoint()
+    next(hybrid_model.children()).train()
+    assert not hybrid_model.training
+    with pytest.raises(ValueError, match="eval"):
+        if operation == "create":
+            LiveSession(hybrid_model, [1, 2, 3])
+        elif operation == "capture":
+            session.checkpoint()
+        else:
+            LiveSession.from_checkpoint(hybrid_model, checkpoint)
+    if operation == "capture":
+        with pytest.raises(ValueError, match="eval"):
+            session.decode_until(1)
+        with pytest.raises(ValueError, match="eval"):
+            session.inject([4])
+        assert session.tokens == (1, 2, 3)
+
+
 def test_checkpoint_rejects_changed_configuration_and_wrong_model(hybrid_model):
     session = LiveSession(hybrid_model, [1, 2, 3])
     checkpoint = session.checkpoint()

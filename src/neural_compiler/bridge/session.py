@@ -71,11 +71,15 @@ def _tensor_versions(model: PreTrainedModel) -> tuple[tuple[int, int, int], ...]
     return tuple((id(tensor), tensor._version, tensor.data_ptr()) for tensor in tensors)
 
 
+def _is_eval_mode(model: PreTrainedModel) -> bool:
+    return all(not module.training for module in model.modules())
+
+
 class LiveSession:
     """Own a live cache; sampled stop/EOS tokens are pending until the next feed."""
 
     def __init__(self, model: PreTrainedModel, prompt_ids: Sequence[int]):
-        if model.training:
+        if not _is_eval_mode(model):
             raise ValueError("LiveSession requires a model in eval mode")
         if model.generation_config is None:
             raise ValueError("LiveSession requires a causal language model")
@@ -98,6 +102,8 @@ class LiveSession:
     def _forward(self, ids: Sequence[int]) -> None:
         if not ids:
             raise ValueError("Cannot prefill an empty token sequence")
+        if not _is_eval_mode(self.model):
+            raise ValueError("LiveSession requires a model in eval mode")
         output = self.model(
             input_ids=torch.tensor(
                 [list(ids)], dtype=torch.long, device=self.model.device
@@ -127,6 +133,8 @@ class LiveSession:
     ) -> DecodeResult:
         if max_new_tokens <= 0:
             raise ValueError("max_new_tokens must be positive")
+        if not _is_eval_mode(self.model):
+            raise ValueError("LiveSession requires a model in eval mode")
         if self._pending is not None:
             self._forward([self._pending])
             self._pending = None
@@ -158,6 +166,8 @@ class LiveSession:
             raise ValueError("max_cache_bytes must be a positive integer")
         if self.cache is None:
             raise RuntimeError("Cannot checkpoint an absent cache")
+        if not _is_eval_mode(self.model):
+            raise ValueError("Checkpoints require a model in eval mode")
         size = _snapshot_bytes(self.cache, self.logits)
         if size > max_cache_bytes:
             raise ValueError(
@@ -189,7 +199,7 @@ class LiveSession:
         checkpoint: SessionCheckpoint,
     ) -> LiveSession:
         """Fork an independent session; no prefill or recurrent-state truncation."""
-        if model is not checkpoint.model or model.training:
+        if model is not checkpoint.model or not _is_eval_mode(model):
             raise ValueError("Checkpoint requires the same unchanged eval-mode model")
         if (
             _tensor_versions(model) != checkpoint._tensor_versions
