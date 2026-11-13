@@ -36,6 +36,20 @@ def response_payload(protocol: QwenToolProtocol, ids: list[int]):
     )
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("max_call_tokens", float("nan")),
+        ("max_response_tokens", float("inf")),
+        ("max_call_tokens", True),
+        ("max_response_tokens", 1.5),
+    ],
+)
+def test_invalid_token_budgets_are_rejected(tokenizer, field, value):
+    with pytest.raises(ValueError, match=field):
+        QwenToolProtocol(tokenizer, **{field: value})
+
+
 def test_calls_preserve_python_indentation_and_literal_markup(tokenizer) -> None:
     protocol = QwenToolProtocol(tokenizer)
     code = "for i in range(2):\n    print(i < 3, '</parameter>', '\u00e9')\n"

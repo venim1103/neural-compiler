@@ -43,25 +43,37 @@ class QwenToolProtocol:
     """One bounded stream monitor per sequence; only run(code: str) is supported."""
 
     def __init__(
-        self, tokenizer: PreTrainedTokenizerBase, max_call_tokens: int = 4096,
+        self,
+        tokenizer: PreTrainedTokenizerBase,
+        max_call_tokens: int = 4096,
         max_response_tokens: int = 2048,
     ):
-        if max_call_tokens <= 0 or max_response_tokens <= 0:
-            raise ValueError("Tool call and response token budgets must be positive")
+        for name, value in (
+            ("max_call_tokens", max_call_tokens),
+            ("max_response_tokens", max_response_tokens),
+        ):
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
         self.tokenizer = tokenizer
         self.max_call_tokens = max_call_tokens
         self.max_response_tokens = max_response_tokens
         markers = {}
         for marker in (
-            "<tool_call>", "</tool_call>", "<tool_response>", "</tool_response>",
-            "<|im_start|>", "<|im_end|>",
+            "<tool_call>",
+            "</tool_call>",
+            "<tool_response>",
+            "</tool_response>",
+            "<|im_start|>",
+            "<|im_end|>",
         ):
             ids = tokenizer.encode(marker, add_special_tokens=False)
             if len(ids) != 1:
                 raise ProtocolError(f"{marker} must be a single tokenizer token")
             markers[marker] = ids[0]
         if len(set(markers.values())) != len(markers):
-            raise ProtocolError("Native tool/turn delimiters must have distinct token IDs")
+            raise ProtocolError(
+                "Native tool/turn delimiters must have distinct token IDs"
+            )
         self._start = markers["<tool_call>"]
         self._end = markers["</tool_call>"]
         self._reserved = set(markers.values())
@@ -114,14 +126,18 @@ class QwenToolProtocol:
     def response_ids(self, call: ToolCall, result: ExecutionResult) -> list[int]:
         payload = asdict(result)
         while True:
-            ids = self._response_ids(call, json.dumps(payload, ensure_ascii=True, separators=(",", ":")))
+            ids = self._response_ids(
+                call, json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+            )
             if len(ids) <= self.max_response_tokens:
                 return ids
             stdout, stderr = payload["stdout"], payload["stderr"]
             if not stdout and not stderr:
-                raise ProtocolError("Response token budget cannot fit the tool-result envelope")
-            payload["stdout"] = stdout[:len(stdout) // 2]
-            payload["stderr"] = stderr[:len(stderr) // 2]
+                raise ProtocolError(
+                    "Response token budget cannot fit the tool-result envelope"
+                )
+            payload["stdout"] = stdout[: len(stdout) // 2]
+            payload["stderr"] = stderr[: len(stderr) // 2]
             payload["truncated"] = True
 
     def _response_ids(self, call: ToolCall, payload: str) -> list[int]:
@@ -130,21 +146,35 @@ class QwenToolProtocol:
         payload = payload.replace("<", "\\u003c").replace(">", "\\u003e")
         messages = [
             {"role": "user", "content": ""},
-            {"role": "assistant", "content": "", "tool_calls": [
-                {"type": "function", "function": {"name": "run", "arguments": {"code": call.code}}},
-            ]},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "type": "function",
+                        "function": {"name": "run", "arguments": {"code": call.code}},
+                    },
+                ],
+            },
         ]
         completed = self.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=False, enable_thinking=False,
+            messages,
+            tokenize=False,
+            add_generation_prompt=False,
+            enable_thinking=False,
         )
         resumed = self.tokenizer.apply_chat_template(
             [*messages, {"role": "tool", "content": payload}],
-            tokenize=False, add_generation_prompt=True, enable_thinking=False,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
         )
         if not isinstance(completed, str) or not isinstance(resumed, str):
             raise ProtocolError("Chat template must render text")
         end = completed.rfind("</tool_call>")
         if end < 0 or not resumed.startswith(completed):
-            raise ProtocolError("Chat template cannot extend a completed native tool call")
-        suffix = completed[end + len("</tool_call>"):] + resumed[len(completed):]
+            raise ProtocolError(
+                "Chat template cannot extend a completed native tool call"
+            )
+        suffix = completed[end + len("</tool_call>") :] + resumed[len(completed) :]
         return self.tokenizer.encode(suffix, add_special_tokens=False)

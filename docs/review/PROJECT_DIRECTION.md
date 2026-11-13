@@ -1004,3 +1004,49 @@ models under this read-only research scope.
 
 [classification-ci-failure]: https://github.com/venim1103/neural-compiler/actions/runs/43411265117
 [record-validation-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43411652981
+
+### 2026-11-13: primary SGLang compatibility prerequisite recovered
+
+Six primary requests succeeded: [PyPI metadata][sglang-metadata], release metadata,
+tag resolution, the canonical documentation root, its linked index and the linked
+[hybrid-memory page][sglang-hybrid-memory]. The four-request routine plan was extended
+to six solely to follow the root's actual index/page links, not retry guessed 404 routes.
+Inspected release `v0.5.23` resolves to source commit
+`297e54fd105e974cdf401e5b4d20253a22c16f90`; neither is an adopted execution pin.
+
+SGLang `0.5.23` declares Python `>=3.11`, Torch `==2.14.1`, Transformers `==5.19.0`
+and tokenizers `==0.23.2`, versus verified installed `2.10.0+cu128`, `5.22.1` and
+`0.23.3`. It also declares CUDA 13 packages. Installing it into the working base
+would change incompatible dependencies; isolated integration remains separately scoped.
+Apache-2.0 package metadata is not transitive licence review.
+
+Current docs explicitly describe Qwen3.5 GDN support and conv/recurrent state slots
+alongside full-attention KV. Their SWA-plus-state `extra_buffer` path cuts prefill chunks
+on a checkpoint grid; this is not proof of our exact native tool boundary. Current docs
+are not assumed version-bound to the inspected tag, nor numerical/GPU-fit/latency evidence.
+No wheels, source checkout, weights or datasets were downloaded or executed.
+
+The model-identity/classification repair's [hosted baseline][identity-repair-ci] passed.
+No code gate was repeated for this read-only research update; its latest result is 222
+local passing cases. Next: enforce positive integer standalone native framing budgets.
+
+[sglang-metadata]: https://pypi.org/pypi/sglang/0.5.23/json
+[sglang-hybrid-memory]: https://docs.sglang.io/docs/advanced_features/unified_memory.md
+[identity-repair-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43412525283
+
+### 2026-11-13: standalone native framing budgets reject invalid caps
+
+The standalone protocol constructor accepted NaN, infinity, boolean and fractional
+caps, unlike the evaluation budget contract. NaN/infinity could defeat the token
+comparison. Both caps now require positive integers before tokenizer initialization;
+the 4,096/2,048 defaults, native grammar and visible-truncation behavior are unchanged.
+The touched protocol file was formatted with the existing repository formatter.
+
+**Bounded ledger:** four synthetic repros failed before repair; all 21 protocol
+controls passed afterward. Root gate: 226 passed, 14 existing warnings, no skips;
+Ruff lint, both scoped format checks, whitespace and protocol diagnostics passed.
+No downloads, pretrained/GPU runs, dependency or host changes occurred. These are
+offline contract checks, not production containment or serving qualification.
+
+Next: inspect case-level budget accounting at the serving/harness boundary for an
+offline prerequisite; real-engine integration and accepted held-out data remain gated.
