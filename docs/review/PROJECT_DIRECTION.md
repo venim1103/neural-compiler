@@ -1153,3 +1153,56 @@ host changes occurred.
 
 Next: recover the cached target configuration and owning hybrid-state shapes for
 a bounded offline checkpoint-budget estimate, not a model run or fit claim.
+
+### 2026-11-13: target checkpoint storage lower bounds, metadata only
+
+The locally cached [target configuration][qwen-cache-config] at snapshot
+`851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a` has 24 linear-attention and eight
+full-attention layers. Installed Transformers 5.22.1's Torch-reference source
+uses float32 recurrent states shaped `(batch, value_heads, key_dim, value_dim)`.
+With batch one and the configured `32 × 128 × 128` states, recurrent storage
+alone is **48 MiB**.
+
+**Source-derived estimate, not a measurement:** assuming unquantized BF16 KV,
+the eight full-attention layers require 32 KiB per forwarded token. Recurrent
+plus KV lower bounds are 64 MiB at 512 tokens, 304 MiB at 8,192, and 560 MiB at
+16,384. These omit convolution history, logits, extra buffers, weights, vision
+activations and allocator overhead. Thus even the 512-token bound cannot fit
+the default 64 MiB snapshot once positive extra storage is included. Forwarded
+tokens exclude an unforwarded pending stop token.
+
+**Bounded ledger:** eight initial metadata probes were extended to ten to follow
+the actually listed snapshot and its installed owning state source; the direct
+configuration read succeeded despite earlier glob misses. Three scalar estimates
+completed. No model forward, weight deserialization, downloads, dependency or
+host changes occurred. The cached revision is an inspected metadata identity,
+not renewed execution authority. This is neither actual cache storage, GPU fit
+nor an SGLang/vLLM allocation measurement; no cap increase is authorized by it.
+The unchanged code suite was not rerun for these read-only findings.
+
+Next: expose the already-existing explicit adapter snapshot override through the
+comparison helper, preserving all defaults and requiring a separately scoped
+actual run before nondefault limits become qualification evidence.
+
+[qwen-cache-config]: https://huggingface.co/Qwen/Qwen3.5-4B/blob/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a/config.json
+
+### 2026-11-13: explicit adapter snapshot overrides reach the comparison helper
+
+`run_serving_comparison` now forwards optional `max_checkpoint_bytes` to the
+existing cached adapter. `None` preserves the 64 MiB default additionally bounded
+by the store; the aggregate store cap remains independent. Invalid overrides fail
+before sampler/session creation. No default, metric, policy or actual-run budget
+was increased, and exposing the argument does not authorize a model study.
+
+**Bounded ledger:** three new selectors failed before forwarding existed. One
+two-case tiny CPU fixture now reports the default overflow and succeeds only with
+an explicit 65 MiB synthetic threshold; no large snapshot was allocated. Boolean
+and zero overrides fail before prefill. All 42 focused serving/checkpoint controls
+passed. The initial signature check identified three existing dependent executor
+fixtures without the protocol's optional timeout default; their signatures were
+aligned without changing current execution. All 11 resolved call sites are now
+compatible. Root gate: 241 passed, 14 existing warnings, no skips; Ruff lint,
+both scoped format checks, whitespace and serving diagnostics passed.
+
+Next: verify target model-loader/output compatibility from local configuration
+and installed classes before any separately authorized pretrained-model run.

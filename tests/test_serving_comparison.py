@@ -119,7 +119,7 @@ def test_prefix_cached_resubmission_recovers_after_lru_eviction(
         hybrid_model,
         lambda: None,
         modes=("prefix_cached_resubmission",),
-        executor=lambda code, timeout: ExecutionResult("ok", "27\n"),
+        executor=lambda code, timeout=20: ExecutionResult("ok", "27\n"),
         on_token_factory=make_sampler,
     )[0]
     one_slot_budget = probe.checkpoint_bytes_peak
@@ -132,7 +132,7 @@ def test_prefix_cached_resubmission_recovers_after_lru_eviction(
         modes=("prefix_cached_resubmission",),
         max_store_bytes=one_slot_budget,
         max_store_entries=1,
-        executor=lambda code, timeout: ExecutionResult("ok", "27\n"),
+        executor=lambda code, timeout=20: ExecutionResult("ok", "27\n"),
         on_token_factory=make_sampler,
     )[0]
     assert evicted_run.case.outcome == "correct"
@@ -214,7 +214,7 @@ def test_checkpoint_budget_failure_retains_the_matched_case(
         tokenizer,
         hybrid_model,
         lambda: None,
-        executor=lambda code, timeout: ExecutionResult("ok", "42\n"),
+        executor=lambda code, timeout=20: ExecutionResult("ok", "42\n"),
         on_token_factory=sampler_factory,
     )
     assert len(rows) == len(ALL_SERVING_MODES)
@@ -253,6 +253,58 @@ def test_unsupported_checkpoint_is_not_a_case_budget_failure(
             hybrid_model,
             lambda: None,
             modes=("prefix_cached_resubmission",),
+        )
+
+
+def test_comparison_forwards_explicit_snapshot_override(
+    tokenizer, hybrid_model, monkeypatch
+):
+    from neural_compiler.bridge import session
+
+    size = 65 * 1024 * 1024
+    monkeypatch.setattr(session, "_snapshot_bytes", lambda *_: size)
+    task = Task("explicit-cap", "unit-serving", "Compute 1 + 1.", IntegerChecker(2))
+
+    def sampler_factory(_task, _mode):
+        stream = iter(
+            tokenizer.encode("Final answer: 2<|im_end|>", add_special_tokens=False)
+        )
+        return lambda _: next(stream)
+
+    default = run_serving_comparison(
+        [task],
+        tokenizer,
+        hybrid_model,
+        lambda: None,
+        modes=("prefix_cached_resubmission",),
+        on_token_factory=sampler_factory,
+    )[0]
+    assert default.case.outcome == "budget_exhausted"
+    explicit = run_serving_comparison(
+        [task],
+        tokenizer,
+        hybrid_model,
+        lambda: None,
+        modes=("prefix_cached_resubmission",),
+        max_checkpoint_bytes=size,
+        on_token_factory=sampler_factory,
+    )[0]
+    assert explicit.case.outcome == "correct"
+    assert explicit.checkpoint_bytes_peak == size
+
+
+@pytest.mark.parametrize("limit", [False, 0])
+def test_comparison_snapshot_override_is_validated_before_prefill(
+    tokenizer, hybrid_model, limit
+):
+    with pytest.raises(ValueError, match="max_checkpoint_bytes"):
+        run_serving_comparison(
+            [Task("bad-cap", "unit-serving", "Compute.", IntegerChecker(2))],
+            tokenizer,
+            hybrid_model,
+            lambda: None,
+            max_checkpoint_bytes=limit,
+            on_token_factory=lambda *_: pytest.fail("Sampler/prefill started"),
         )
 
 

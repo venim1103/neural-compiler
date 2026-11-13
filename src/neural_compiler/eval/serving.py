@@ -266,14 +266,19 @@ def run_serving_comparison(
     modes: Sequence[ServingMode] = ALL_SERVING_MODES,
     max_store_bytes: int = 256 * 1024 * 1024,
     max_store_entries: int = 32,
+    max_checkpoint_bytes: int | None = None,
     on_token_factory: Callable[[Task, ServingMode], Callable[[LiveSession], int]]
     | None = None,
 ) -> tuple[ServingCaseResult, ...]:
-    """Run matched tasks across serving modes with shared budgets and executor."""
+    """Run matched tasks with shared budgets and an optional cached snapshot override."""
     if path == "no_tool":
         raise ValueError("Serving continuation comparison requires a tool-enabled path")
     if not modes or len(set(modes)) != len(modes):
         raise ValueError("modes must be a non-empty sequence of unique serving modes")
+    if max_checkpoint_bytes is not None and (
+        type(max_checkpoint_bytes) is not int or max_checkpoint_bytes <= 0
+    ):
+        raise ValueError("max_checkpoint_bytes must be a positive integer")
     for mode in modes:
         if mode not in ALL_SERVING_MODES:
             raise ValueError(f"Unknown serving mode: {mode}")
@@ -302,6 +307,7 @@ def run_serving_comparison(
                             model,
                             prompt_ids,
                             store,
+                            max_checkpoint_bytes=max_checkpoint_bytes,
                             on_token_override=sampler,
                         )
                     except CheckpointBudgetError:
