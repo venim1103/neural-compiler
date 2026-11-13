@@ -99,6 +99,23 @@ def test_invalid_format_is_not_scored_as_correct(tokenizer, hybrid_model, monkey
     assert result.generated_tokens > 0
 
 
+@pytest.mark.parametrize("correct,valid", [("false", True), (True, "false")])
+def test_nonboolean_checker_flags_cannot_count_as_correct(
+    tokenizer, hybrid_model, monkeypatch, correct, valid
+):
+    task = Task(
+        "malformed-checker",
+        "unit-checker",
+        "Compute six times seven.",
+        lambda answer: CheckResult(correct, valid, "Malformed checker flags"),
+    )
+    runner = harness_for(
+        tokenizer, hybrid_model, monkeypatch, "Final answer: 42<|im_end|>"
+    )
+    with pytest.raises(ValueError, match="boolean"):
+        runner.run(task, "no_tool")
+
+
 def test_checker_handles_large_mixed_decimal_blocks():
     expected = ((10**4500 - 1) // 9 * 7) * 10 + 3
     checked = IntegerChecker(expected)("Final answer: " + "7" * 4500 + "3")

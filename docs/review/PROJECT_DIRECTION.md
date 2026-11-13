@@ -1329,3 +1329,23 @@ were accepted or performed. Synthetic fixtures remain unit evidence, not a study
 
 Next: check matched-family aggregation inputs against the existing pairing
 contract, without changing accepted metric definitions.
+
+### 2026-11-13: checker-result flags must satisfy their boolean contract
+
+Matched-report pairing already rejects missing/duplicate paths and mismatched
+families. A related scoring boundary was still permissive: custom `CheckResult`
+objects could contain truthy strings in `correct` or `valid`, and both malformed
+cases entered correctness scoring. The result constructor now rejects
+nonboolean flags with an explicit `ValueError`. This implements the existing
+typed contract, not a new correctness metric. Genuine `True`/`False` flags retain
+their behavior, including semantically correct but invalidly formatted answers.
+
+**Bounded ledger:** two tiny forced-answer CPU repros failed before repair.
+All 71 focused evaluation controls and the root gate now pass: **252 tests**,
+14 existing warnings, no skips; root lint, both scoped format checks, whitespace
+and harness diagnostics are clear. Existing checker diagnostics are preserved.
+No dataset/cohort acceptance, pretrained inference, trajectory collection,
+dependency, GPU or host changes occurred.
+
+Next: expose the existing paired comparisons within each matched family,
+keeping aggregate fields and comparison definitions unchanged.

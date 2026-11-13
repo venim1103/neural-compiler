@@ -67,6 +67,10 @@ class CheckResult:
     valid: bool
     diagnostic: str
 
+    def __post_init__(self) -> None:
+        if type(self.correct) is not bool or type(self.valid) is not bool:
+            raise ValueError("Checker correctness and validity must be booleans")
+
 
 class Checker(Protocol):
     def __call__(self, answer: str) -> CheckResult: ...
