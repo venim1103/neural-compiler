@@ -1105,3 +1105,34 @@ changing the shared host or accepting production policies.
 The EOS checkpoint's [hosted baseline][eos-repair-ci] also completed successfully.
 
 [eos-repair-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43415037944
+
+### 2026-11-13: checkpoint capacity failures remain matched failed cases
+
+Snapshot/store byte overflow previously raised generic `ValueError` and aborted
+the serving comparison, losing complete failure-inclusive reports. Genuine
+capacity failures now raise `CheckpointBudgetError`, still a `ValueError`, and
+the harness records the existing `budget_exhausted` outcome. Unsupported caches,
+invalid arguments and model-identity errors remain explicit errors, not budget
+failures. There is no live-session fallback.
+
+At startup the fresh per-case store has already cold-prefilled the prompt before
+capture can overflow. Its known prompt/prefill count is retained, while unavailable
+logits remain `None`. Turn-boundary failures retain sampled tokens and prevent
+execution; other matched modes still run. Existing schemas, defaults, metrics and
+token/logit tolerances are unchanged.
+
+**Bounded ledger:** initial/turn synthetic threshold repros both aborted before
+repair; the unsupported-cache control passed without being reclassified.
+All 104 focused serving/checkpoint/evaluation controls passed afterward, including
+all six intended matched records across the two threshold fixtures. No large
+snapshot was allocated. Root gate: 237 passed, 14 existing warnings, no skips;
+Ruff lint, four scoped format checks, whitespace and all three source diagnostics
+passed. No data acceptance, pretrained/GPU runs, downloads, dependencies or
+host changes occurred; these are not fit or statistical qualification measurements.
+
+Next: inspect final-answer validity precedence for caller-supplied checker results
+before advancing other matched-family reporting prerequisites.
+
+The setup-deadline checkpoint's [hosted baseline][setup-deadline-ci] passed.
+
+[setup-deadline-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43416605746

@@ -21,6 +21,10 @@ from transformers.modeling_outputs import CausalLMOutputWithPast
 DEFAULT_CHECKPOINT_BYTES = 64 * 1024 * 1024
 
 
+class CheckpointBudgetError(ValueError):
+    """A valid snapshot or store request exceeds its byte budget."""
+
+
 @dataclass(frozen=True)
 class DecodeResult:
     token_ids: tuple[int, ...]
@@ -208,7 +212,7 @@ class LiveSession:
             raise ValueError("Checkpoints require a model in eval mode")
         size = _snapshot_bytes(self.cache, self.logits)
         if size > max_cache_bytes:
-            raise ValueError(
+            raise CheckpointBudgetError(
                 f"Checkpoint requires {size} bytes, exceeding {max_cache_bytes}"
             )
         if not isinstance(self.cache, DynamicCache):
@@ -302,7 +306,7 @@ class CheckpointStore:
         if not isinstance(checkpoint, SessionCheckpoint):
             raise TypeError("CheckpointStore accepts only SessionCheckpoint instances")
         if checkpoint.cache_bytes > self.max_total_bytes:
-            raise ValueError(
+            raise CheckpointBudgetError(
                 f"Checkpoint requires {checkpoint.cache_bytes} bytes, "
                 f"exceeding store budget {self.max_total_bytes}"
             )

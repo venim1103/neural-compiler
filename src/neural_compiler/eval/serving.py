@@ -18,6 +18,7 @@ from transformers import PreTrainedModel, PreTrainedTokenizerBase
 from neural_compiler.bridge import run_python
 from neural_compiler.bridge.session import (
     DEFAULT_CHECKPOINT_BYTES,
+    CheckpointBudgetError,
     CheckpointStore,
     DecodeResult,
     LiveSession,
@@ -289,17 +290,24 @@ def run_serving_comparison(
             active: list[
                 LivePauseResumeSession | PrefixCachedSession | FullReprefillSession
             ] = []
+            failed_prompt: tuple[int, ...] = ()
 
             def factory(prompt_ids: Sequence[int]):
+                nonlocal failed_prompt
                 if mode == "live_pause_resume":
                     session = LivePauseResumeSession(model, prompt_ids, sampler)
                 elif mode == "prefix_cached_resubmission":
-                    session = PrefixCachedSession(
-                        model,
-                        prompt_ids,
-                        store,
-                        on_token_override=sampler,
-                    )
+                    try:
+                        session = PrefixCachedSession(
+                            model,
+                            prompt_ids,
+                            store,
+                            on_token_override=sampler,
+                        )
+                    except CheckpointBudgetError:
+                        # The fresh per-case store cold-prefills before capture.
+                        failed_prompt = tuple(prompt_ids)
+                        raise
                 else:
                     session = FullReprefillSession(model, prompt_ids, sampler)
                 active.append(session)
@@ -318,11 +326,13 @@ def run_serving_comparison(
                 ServingCaseResult(
                     mode=mode,
                     case=case_result,
-                    final_tokens=() if last_session is None else last_session.tokens,
+                    final_tokens=failed_prompt
+                    if last_session is None
+                    else last_session.tokens,
                     final_logits=None
                     if last_session is None
                     else last_session.logits.detach().cpu(),
-                    prefill_tokens=0
+                    prefill_tokens=len(failed_prompt)
                     if last_session is None
                     else last_session.prefill_tokens,
                     checkpoint_bytes_peak=getattr(

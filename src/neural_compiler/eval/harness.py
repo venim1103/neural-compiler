@@ -20,7 +20,7 @@ from neural_compiler.bridge.protocol import (
     QwenToolProtocol,
     ToolCall,
 )
-from neural_compiler.bridge.session import DecodeResult
+from neural_compiler.bridge.session import CheckpointBudgetError, DecodeResult
 
 Path = Literal["no_tool", "python_tool", "current_best"]
 _PATHS: tuple[Path, ...] = ("no_tool", "python_tool", "current_best")
@@ -436,6 +436,8 @@ class EvaluationHarness:
                 )
         except ProtocolError as exc:
             outcome, diagnostic = "protocol_error", str(exc)
+        except CheckpointBudgetError as exc:
+            outcome, diagnostic = "budget_exhausted", str(exc)
         except _RunFailure as exc:
             outcome, diagnostic = exc.outcome, str(exc)
         self.synchronize()

@@ -186,6 +186,76 @@ def test_default_snapshot_limit_is_not_the_aggregate_store_budget(
         PrefixCachedSession(hybrid_model, [1, 2, 3], CheckpointStore())
 
 
+@pytest.mark.parametrize("boundary", ["initial", "turn"])
+def test_checkpoint_budget_failure_retains_the_matched_case(
+    tokenizer, hybrid_model, monkeypatch, boundary
+):
+    from neural_compiler.bridge import session
+
+    snapshot_bytes = session._snapshot_bytes
+    snapshots = []
+
+    def bounded_size(cache, logits):
+        snapshots.append(None)
+        if boundary == "initial" or len(snapshots) > 1:
+            return session.DEFAULT_CHECKPOINT_BYTES + 1
+        return snapshot_bytes(cache, logits)
+
+    monkeypatch.setattr(session, "_snapshot_bytes", bounded_size)
+    call = _call_text("print(6 * 7)")
+    script = call + "Final answer: 42<|im_end|>"
+
+    def sampler_factory(_task, _mode):
+        stream = iter(tokenizer.encode(script, add_special_tokens=False))
+        return lambda _: next(stream)
+
+    rows = run_serving_comparison(
+        [Task("cache-budget", "unit-serving", "Compute 6 * 7.", IntegerChecker(42))],
+        tokenizer,
+        hybrid_model,
+        lambda: None,
+        executor=lambda code, timeout: ExecutionResult("ok", "42\n"),
+        on_token_factory=sampler_factory,
+    )
+    assert len(rows) == len(ALL_SERVING_MODES)
+    cached = next(row for row in rows if row.mode == "prefix_cached_resubmission")
+    assert cached.case.outcome == "budget_exhausted"
+    assert "exceeding" in cached.case.diagnostic
+    assert cached.case.calls == () and cached.case.injected_tokens == 0
+    expected_generated = (
+        0
+        if boundary == "initial"
+        else len(tokenizer.encode(call, add_special_tokens=False))
+    )
+    assert cached.case.generated_tokens == expected_generated
+    assert cached.prefill_tokens > 0
+    assert len(cached.final_tokens) == cached.prefill_tokens + expected_generated
+    if boundary == "initial":
+        assert cached.final_logits is None
+    assert all(row.case.outcome == "correct" for row in rows if row is not cached)
+    summary = summarize_serving(rows)["by_mode"]["prefix_cached_resubmission"]
+    assert summary["cases"] == 1 and summary["outcomes"]["budget_exhausted"] == 1
+
+
+def test_unsupported_checkpoint_is_not_a_case_budget_failure(
+    tokenizer, hybrid_model, monkeypatch
+):
+    from neural_compiler.bridge import session
+
+    def unsupported(*_args):
+        raise ValueError("Unsupported synthetic cache")
+
+    monkeypatch.setattr(session, "_snapshot_bytes", unsupported)
+    with pytest.raises(ValueError, match="Unsupported synthetic cache"):
+        run_serving_comparison(
+            [Task("unsupported", "unit-serving", "Compute 1 + 1.", IntegerChecker(2))],
+            tokenizer,
+            hybrid_model,
+            lambda: None,
+            modes=("prefix_cached_resubmission",),
+        )
+
+
 def test_malformed_turn_retains_all_sampled_tokens_in_every_serving_mode(
     tokenizer, hybrid_model
 ):
