@@ -1050,3 +1050,25 @@ offline contract checks, not production containment or serving qualification.
 
 Next: inspect case-level budget accounting at the serving/harness boundary for an
 offline prerequisite; real-engine integration and accepted held-out data remain gated.
+
+### 2026-11-13: CPU continuation identity includes generation EOS settings
+
+The existing identity stamp omitted `generation_config.eos_token_id`. Stateless
+re-prefill/cache-miss paths could therefore adopt new termination settings while
+live/restored sessions retained the initial EOS set. Supported CPU prefix stamps
+now include that setting, and the existing guards refuse drift before decode,
+injection, capture or restore. Private checkpoint fields and valid token/turn
+semantics are unchanged; GPU/unversioned live-only behavior remains unchanged.
+This is not concurrent mutation safety or real-engine integration evidence.
+
+**Bounded ledger:** five tiny CPU repros failed before repair; all 36 focused
+serving/checkpoint controls passed afterward. The first scoped format check found
+one pre-existing long line in the touched checkpoint test, which the formatter
+repaired. The unchanged successful focused gate was not repeated. Root gate:
+231 passed, 14 existing warnings, no skips; Ruff lint/scoped format/whitespace
+passed, with no source diagnostics or test errors. Existing exact cached/live
+and `atol=1e-6, rtol=1e-5` full-prefill controls are unchanged. No downloads,
+pretrained/GPU runs, dependency or host changes occurred.
+
+Next: continue the P1 resource-budget boundary prerequisites with bounded trusted
+fixtures; real cgroup enforcement still requires separately qualified host support.

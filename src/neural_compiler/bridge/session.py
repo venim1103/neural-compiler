@@ -78,13 +78,19 @@ def _is_eval_mode(model: PreTrainedModel) -> bool:
     return all(not module.training for module in model.modules())
 
 
+def _model_configuration(model: PreTrainedModel) -> str:
+    generation = model.generation_config
+    eos = None if generation is None else generation.eos_token_id
+    return f"{model.config.to_json_string()}\neos_token_id={eos!r}"
+
+
 def _validate_prefix_model(
     model: PreTrainedModel,
     versions: tuple[tuple[int, int, int], ...] | None,
     config: str | None,
 ) -> None:
     if versions is not None and (
-        _tensor_versions(model) != versions or model.config.to_json_string() != config
+        _tensor_versions(model) != versions or _model_configuration(model) != config
     ):
         raise ValueError("Model weights or configuration changed after initial prefill")
 
@@ -115,7 +121,7 @@ class LiveSession:
             not tensor.is_inference() for tensor in tensors
         ):
             self._prefix_tensor_versions = _tensor_versions(model)
-            self._prefix_config = model.config.to_json_string()
+            self._prefix_config = _model_configuration(model)
 
     @property
     def tokens(self) -> tuple[int, ...]:
@@ -238,7 +244,7 @@ class LiveSession:
             raise ValueError("Checkpoint requires the same unchanged eval-mode model")
         if (
             _tensor_versions(model) != checkpoint._tensor_versions
-            or model.config.to_json_string() != checkpoint._config
+            or _model_configuration(model) != checkpoint._config
         ):
             raise ValueError(
                 "Model weights or configuration changed after checkpoint creation"

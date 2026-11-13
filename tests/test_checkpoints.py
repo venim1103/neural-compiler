@@ -135,6 +135,20 @@ def test_checkpoint_rejects_changed_weights_and_train_mode(hybrid_model):
         LiveSession.from_checkpoint(hybrid_model, checkpoint)
 
 
+@pytest.mark.parametrize("operation", ["capture", "restore"])
+def test_checkpoint_rejects_changed_eos_settings(hybrid_model, operation):
+    hybrid_model.generation_config.eos_token_id = 5
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    checkpoint = session.checkpoint()
+    hybrid_model.generation_config.eos_token_id = [4, 5]
+    with pytest.raises(ValueError, match="configuration"):
+        if operation == "capture":
+            session.checkpoint()
+        else:
+            LiveSession.from_checkpoint(hybrid_model, checkpoint)
+    assert session.tokens == (1, 2, 3)
+
+
 @pytest.mark.parametrize("operation", ["create", "capture", "restore"])
 def test_sessions_reject_partially_training_model(hybrid_model, operation):
     session = LiveSession(hybrid_model, [1, 2, 3])
@@ -215,7 +229,9 @@ def test_checkpoint_store_enforces_lru_byte_and_entry_budgets(hybrid_model):
     cp3 = s3.checkpoint()
 
     # Budget fits (cp1 + cp2) or (cp1 + cp3), not all three -> inserting cp3 evicts LRU cp2.
-    store = CheckpointStore(max_total_bytes=cp1.cache_bytes + cp3.cache_bytes, max_entries=8)
+    store = CheckpointStore(
+        max_total_bytes=cp1.cache_bytes + cp3.cache_bytes, max_entries=8
+    )
     store.put(cp1)
     store.put(cp2)
     assert store.entries == 2 and store.total_bytes == cp1.cache_bytes + cp2.cache_bytes

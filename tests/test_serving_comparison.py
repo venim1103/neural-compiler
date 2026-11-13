@@ -258,3 +258,27 @@ def test_prefix_cache_miss_does_not_relabel_a_changed_model(hybrid_model):
     with pytest.raises(ValueError, match="weights|configuration"):
         adapter.decode_until(1)
     assert adapter.tokens == boundary
+
+
+@pytest.mark.parametrize("mode", ALL_SERVING_MODES)
+def test_serving_modes_reject_changed_eos_settings(hybrid_model, mode):
+    hybrid_model.generation_config.eos_token_id = 5
+    if mode == "live_pause_resume":
+        adapter = LivePauseResumeSession(hybrid_model, [1, 2, 3], lambda _: 4)
+    elif mode == "prefix_cached_resubmission":
+        store = CheckpointStore()
+        adapter = PrefixCachedSession(
+            hybrid_model, [1, 2, 3], store, on_token_override=lambda _: 4
+        )
+    else:
+        adapter = FullReprefillSession(hybrid_model, [1, 2, 3], lambda _: 4)
+    adapter.decode_until(1, lambda _: True)
+    boundary = adapter.tokens
+    if mode == "prefix_cached_resubmission":
+        store.clear()
+    hybrid_model.generation_config.eos_token_id = 4
+    with pytest.raises(ValueError, match="configuration"):
+        adapter.inject([6, 7])
+    with pytest.raises(ValueError, match="configuration"):
+        adapter.decode_until(1)
+    assert adapter.tokens == boundary
