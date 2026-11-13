@@ -600,6 +600,9 @@ def test_synthetic_family_generators_are_deterministic_and_self_consistent():
         (generate_family_tasks, ("binomial_coefficient", 0), {}),
         (generate_family_tasks, ("binomial_coefficient", True), {}),
         (generate_matched_suite, (), {"families": ()}),
+        (generate_matched_suite, (), {"seed": True}),
+        (generate_matched_suite, (), {"seed": False}),
+        (generate_matched_suite, (), {"seed": "0"}),
         (
             generate_matched_suite,
             (),

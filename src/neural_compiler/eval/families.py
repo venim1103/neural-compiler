@@ -131,9 +131,7 @@ _GENERATORS: dict[
 SYNTHETIC_FAMILIES: tuple[str, ...] = tuple(_GENERATORS)
 
 
-def generate_family_tasks(
-    family: str, count: int, seed: int = 0
-) -> tuple[Task, ...]:
+def generate_family_tasks(family: str, count: int, seed: int = 0) -> tuple[Task, ...]:
     """Generate `count` distinct, deterministic tasks for one synthetic family."""
     if family not in _GENERATORS:
         raise ValueError(f"Unknown synthetic task family: {family}")
@@ -174,7 +172,11 @@ def generate_matched_suite(
         raise ValueError("families must not be empty")
     if len(set(selected)) != len(selected):
         raise ValueError("families must be unique")
+    if type(seed) is not int:
+        raise ValueError("seed must be an integer")
     suite: list[Task] = []
     for index, family in enumerate(selected):
-        suite.extend(generate_family_tasks(family, per_family, seed=seed + index * 1009))
+        suite.extend(
+            generate_family_tasks(family, per_family, seed=seed + index * 1009)
+        )
     return tuple(suite)

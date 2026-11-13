@@ -1299,3 +1299,33 @@ Owned descriptor channels are closed; no persistent runtime artifacts were added
 
 Next: advance another bounded offline evaluation prerequisite while retaining
 the separate dataset, real-engine and writable-cgroup qualification gates.
+
+The startup-channel checkpoint's [hosted CI][startup-channel-ci] succeeded at
+`bbb1aa8`. Public metadata also confirmed successful runs for `e73de2b` and
+`d44d647`, which had not previously been inspected. The configured GitHub
+connector returned 404 from a different host; the public GitHub API provided
+this evidence without any connector, credential or security changes.
+
+[startup-channel-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43429641390
+
+### 2026-11-13: matched synthetic suites validate seeds before arithmetic
+
+The single-family generator rejected non-integer seeds, but the matched-suite
+entry point first added its family offset. Booleans became integers and silently
+bypassed validation; string seeds raised `TypeError` instead of the explicit
+contract error. The matched entry point now applies the same exact-integer guard
+before arithmetic. Valid integer seeds, offsets, generated cases, checkers and
+report metrics are unchanged.
+
+**Bounded ledger:** three invalid-seed repros failed and five existing input
+controls passed. After repair, all 69 evaluation controls and the root gate
+passed: **250 tests**, 14 existing warnings, no skips; root Ruff lint and family
+diagnostics were clear. The scoped formatter initially flagged the existing
+single-family signature layout and directly dependent matched-suite call. Both
+were normalized by Ruff; scoped format, lint and whitespace checks then passed.
+The unchanged successful behavior gate was not repeated for formatting alone.
+No datasets, labels, pretrained-model/trajectory runs, dependencies or host changes
+were accepted or performed. Synthetic fixtures remain unit evidence, not a study.
+
+Next: check matched-family aggregation inputs against the existing pairing
+contract, without changing accepted metric definitions.
