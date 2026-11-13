@@ -1349,3 +1349,34 @@ dependency, GPU or host changes occurred.
 
 Next: expose the existing paired comparisons within each matched family,
 keeping aggregate fields and comparison definitions unchanged.
+
+### 2026-11-13: paired comparison effects remain visible within each family
+
+`matched_report` now adds `paired_deltas_by_family`, keyed by the existing
+validated family identities. Each family retains the same
+`python_tool_vs_no_tool` and `current_best_vs_python_tool` comparisons as the
+aggregate report: correctness contingency counts and failure-inclusive elapsed
+deltas. A shared wrapper reuses the existing comparison implementation. Existing
+aggregate fields, per-path/per-family cost maps and metric definitions are unchanged.
+This exposes heterogeneous effects, not new confidence intervals or accepted
+held-out-family evidence.
+
+**Bounded ledger:** one six-row, two-family synthetic fixture demonstrates
+opposing accuracy effects that cancel in both aggregate comparisons, with
+distinct elapsed deltas including failed answers. The first attempt failed on
+omitted required fixture counters; after correcting those, the missing-field
+repro failed at the required output key. The repaired feature selector passed.
+All 94 focused evaluation/serving controls and the root gate passed: **253 tests**,
+14 existing warnings, no skips; root lint, both scoped format checks, whitespace
+and harness diagnostics were clear. No inference was added to this fixture,
+and no dataset, model-study, dependency, GPU or host changes occurred.
+
+The matched-seed checkpoint's [hosted CI][matched-seed-ci] succeeded at `5d66671`;
+the checker and family-report checkpoints have not yet had hosted results
+inspected.
+
+[matched-seed-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43430515411
+
+Next: finish bounded inspection of the pinned engine's remaining declaration;
+do not infer exact token-boundary checkpoint hooks from a truncated page or
+install an incompatible engine without a separately scoped runtime directive.

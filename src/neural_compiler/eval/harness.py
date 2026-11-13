@@ -619,6 +619,17 @@ def _paired_comparison(
     }
 
 
+def _paired_deltas(
+    paired: Mapping[str, Mapping[str, CaseResult]],
+) -> dict[str, object]:
+    return {
+        "python_tool_vs_no_tool": _paired_comparison(paired, "python_tool", "no_tool"),
+        "current_best_vs_python_tool": _paired_comparison(
+            paired, "current_best", "python_tool"
+        ),
+    }
+
+
 def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
     """Require complete paired coverage; retain per-family costs and failures.
 
@@ -672,12 +683,15 @@ def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
             }
             for outcome in ALL_OUTCOMES
         },
-        "paired_deltas": {
-            "python_tool_vs_no_tool": _paired_comparison(
-                paired, "python_tool", "no_tool"
-            ),
-            "current_best_vs_python_tool": _paired_comparison(
-                paired, "current_best", "python_tool"
-            ),
+        "paired_deltas": _paired_deltas(paired),
+        "paired_deltas_by_family": {
+            family: _paired_deltas(
+                {
+                    case_id: case
+                    for case_id, case in paired.items()
+                    if case[paths[0]].family == family
+                }
+            )
+            for family in families
         },
     }

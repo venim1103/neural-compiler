@@ -744,6 +744,55 @@ def test_end_to_end_multi_family_suite_on_tiny_cpu_model(
     )
 
 
+def test_matched_report_preserves_opposing_family_comparisons():
+    arithmetic = CaseResult(
+        "a", "arithmetic", "no_tool", "wrong_answer", "", "", 8, 5, 0, ()
+    )
+    sequence = CaseResult("b", "sequences", "no_tool", "correct", "", "", 2, 5, 0, ())
+    rows = [
+        arithmetic,
+        replace(arithmetic, path="python_tool", outcome="correct", elapsed_seconds=3),
+        replace(arithmetic, path="current_best", elapsed_seconds=5),
+        sequence,
+        replace(
+            sequence, path="python_tool", outcome="wrong_answer", elapsed_seconds=6
+        ),
+        replace(sequence, path="current_best", elapsed_seconds=1),
+    ]
+    report = matched_report(rows)
+    families = report["paired_deltas_by_family"]
+    assert set(families) == {"arithmetic", "sequences"}
+    for family, python_accuracy, python_time, best_accuracy, best_time in [
+        ("arithmetic", 1, -5, -1, 2),
+        ("sequences", -1, 4, 1, -5),
+    ]:
+        comparisons = families[family]
+        assert set(comparisons) == {
+            "python_tool_vs_no_tool",
+            "current_best_vs_python_tool",
+        }
+        for name, accuracy, elapsed in [
+            ("python_tool_vs_no_tool", python_accuracy, python_time),
+            ("current_best_vs_python_tool", best_accuracy, best_time),
+        ]:
+            delta = comparisons[name]
+            assert delta["pairs"] == 1
+            assert delta["accuracy_delta"] == accuracy
+            assert delta["target_only_correct"] == (accuracy > 0)
+            assert delta["baseline_only_correct"] == (accuracy < 0)
+            assert delta["both_correct"] == delta["neither_correct"] == 0
+            assert delta["elapsed_delta_mean_seconds"] == elapsed
+            assert delta["elapsed_delta_p50_seconds"] == elapsed
+    aggregate = report["paired_deltas"]
+    assert aggregate["python_tool_vs_no_tool"]["accuracy_delta"] == 0
+    assert aggregate["python_tool_vs_no_tool"]["elapsed_delta_mean_seconds"] == -0.5
+    assert aggregate["current_best_vs_python_tool"]["accuracy_delta"] == 0
+    assert (
+        aggregate["current_best_vs_python_tool"]["elapsed_delta_mean_seconds"] == -1.5
+    )
+    assert report["by_path"]["python_tool"]["seconds_per_correct"] == 9
+
+
 def test_summarize_quantiles_wilson_ci_and_paired_deltas():
     rows: list[CaseResult] = []
     # 4 paired cases:
