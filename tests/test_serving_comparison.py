@@ -10,7 +10,9 @@ import torch
 from neural_compiler.bridge import ExecutionResult
 from neural_compiler.eval import (
     ALL_SERVING_MODES,
+    FullReprefillSession,
     IntegerChecker,
+    LivePauseResumeSession,
     PrefixCachedSession,
     ServingCaseResult,
     Task,
@@ -182,3 +184,43 @@ def test_default_snapshot_limit_is_not_the_aggregate_store_budget(
     monkeypatch.setattr(session, "_snapshot_bytes", lambda *_: 64 * 1024 * 1024 + 1)
     with pytest.raises(ValueError, match="exceeding"):
         PrefixCachedSession(hybrid_model, [1, 2, 3], CheckpointStore())
+
+
+def test_malformed_turn_retains_all_sampled_tokens_in_every_serving_mode(
+    tokenizer, hybrid_model
+):
+    text = "<tool_call>bad</tool_call>"
+
+    def sampler_factory(_task, _mode):
+        stream = iter(tokenizer.encode(text, add_special_tokens=False))
+        return lambda _session: next(stream)
+
+    rows = run_serving_comparison(
+        [Task("malformed", "unit-serving", "Compute 1 + 1.", IntegerChecker(2))],
+        tokenizer,
+        hybrid_model,
+        lambda: None,
+        executor=lambda *_args, **_kwargs: pytest.fail("Malformed call executed"),
+        on_token_factory=sampler_factory,
+    )
+    sampled = tuple(tokenizer.encode(text, add_special_tokens=False))
+    for row in rows:
+        assert row.case.outcome == "protocol_error"
+        assert row.case.generated_tokens == len(sampled)
+        assert row.final_tokens[-len(sampled) :] == sampled
+        assert row.final_tokens == rows[0].final_tokens
+
+
+def test_full_reprefill_retains_pending_token_after_callback_abort(hybrid_model):
+    live = LivePauseResumeSession(hybrid_model, [1, 2, 3], lambda _session: 4)
+    reprefill = FullReprefillSession(hybrid_model, [1, 2, 3], lambda _session: 4)
+
+    def abort(_token):
+        raise ValueError("fixture callback abort")
+
+    for adapter in (live, reprefill):
+        with pytest.raises(ValueError, match="callback abort"):
+            adapter.decode_until(1, abort)
+        adapter.inject([5, 6])
+        assert adapter.tokens == (1, 2, 3, 4, 5, 6)
+    torch.testing.assert_close(reprefill.logits, live.logits, atol=1e-6, rtol=1e-5)

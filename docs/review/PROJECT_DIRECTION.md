@@ -929,3 +929,29 @@ dependencies, model/data downloads, pretrained/GPU jobs or host-security changes
 This user-requested review does not resume separate project milestones.
 
 [review-ci-baseline]: https://github.com/venim1103/neural-compiler/actions/runs/43314457168
+
+### 2026-11-13: failed-turn boundaries in full re-prefill comparison
+
+The review repair's [hosted baseline][review-repair-ci] completed successfully.
+Autonomous continuation then reproduced a separate Queue 2 correctness gap:
+`FullReprefillSession` reported stale token history when a decode callback raised,
+and subsequent injection omitted the pending sampled token. Live and prefix-cached
+adapters retained those tokens.
+
+The full re-prefill adapter now reports active session history and snapshots that
+history before resubmission. Malformed native calls therefore retain all sampled
+tokens in the failure record; callback-abort recovery feeds the pending token exactly
+once. No exceptions are swallowed and failed cases remain failed.
+
+**Bounded ledger:** both tiny CPU repros failed before repair. Five focused failure,
+recovery, multi-call reference-logit and eviction controls passed afterward. Root
+gate: 212 passed, 14 existing warnings, no skips; Ruff lint/scoped format/whitespace
+and Pylance serving diagnostics passed. Exact cached/live equality and full-prefill
+`atol=1e-6, rtol=1e-5` remain unchanged. No model/data downloads, pretrained/GPU jobs,
+dependency changes or host modifications occurred.
+
+Next: advance the reporting contract's validation of externally assembled case/call
+records so impossible counters or unknown outcomes cannot silently enter aggregates.
+This is another bounded offline prerequisite, not a dataset or benchmark-policy gate.
+
+[review-repair-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43410204789

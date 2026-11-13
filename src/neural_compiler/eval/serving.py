@@ -189,7 +189,7 @@ class FullReprefillSession:
 
     @property
     def tokens(self) -> tuple[int, ...]:
-        return tuple(self._tokens)
+        return tuple(self._tokens) if self._session is None else self._session.tokens
 
     @property
     def logits(self) -> torch.Tensor:
@@ -214,6 +214,7 @@ class FullReprefillSession:
     def inject(self, response_ids: Sequence[int]) -> None:
         if not response_ids:
             raise ValueError("Tool response must not be empty")
+        self._tokens = list(self.tokens)
         self._tokens.extend(response_ids)
         self._session = LiveSession(self.model, self._tokens)
         self._bind_sampler(self._session)
