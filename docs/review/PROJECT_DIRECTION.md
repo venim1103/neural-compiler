@@ -955,3 +955,20 @@ records so impossible counters or unknown outcomes cannot silently enter aggrega
 This is another bounded offline prerequisite, not a dataset or benchmark-policy gate.
 
 [review-repair-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43410204789
+
+### 2026-11-13: impossible evaluation records fail before aggregation
+
+Public case/call records previously accepted negative, fractional or boolean token
+counts and unknown outcome/path labels. This allowed impossible token totals and
+failures absent from the canonical outcome matrix. Record construction now rejects
+these values explicitly, using the same canonical paths/outcomes as the runner and
+matched reporter. Valid zero counts, accepted labels and all metric definitions are
+unchanged.
+
+**Bounded ledger:** six scalar synthetic repros failed before repair; eight focused
+record/report controls passed afterward. Root gate: 218 passed, 14 existing warnings,
+no skips; Ruff lint/scoped format/whitespace and Pylance harness diagnostics passed.
+There were no accepted data, inference studies, dependency or host changes.
+
+Next: check whether stateless resubmission retains initial model identity when a
+fresh session is constructed, rather than silently accepting mid-sequence model changes.

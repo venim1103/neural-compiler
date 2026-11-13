@@ -23,6 +23,7 @@ from neural_compiler.bridge.protocol import (
 from neural_compiler.bridge.session import DecodeResult
 
 Path = Literal["no_tool", "python_tool", "current_best"]
+_PATHS: tuple[Path, ...] = ("no_tool", "python_tool", "current_best")
 Outcome = Literal[
     "correct",
     "wrong_answer",
@@ -249,6 +250,8 @@ class CallRecord:
     def __post_init__(self) -> None:
         if not math.isfinite(self.execution_seconds) or self.execution_seconds < 0:
             raise ValueError("Call execution time must be finite and nonnegative")
+        if type(self.response_tokens) is not int or self.response_tokens < 0:
+            raise ValueError("response_tokens must be a nonnegative integer")
 
 
 @dataclass(frozen=True)
@@ -267,6 +270,14 @@ class CaseResult:
     def __post_init__(self) -> None:
         if not math.isfinite(self.elapsed_seconds) or self.elapsed_seconds < 0:
             raise ValueError("Case elapsed time must be finite and nonnegative")
+        if self.path not in _PATHS:
+            raise ValueError(f"Unknown evaluation path: {self.path}")
+        if self.outcome not in ALL_OUTCOMES:
+            raise ValueError(f"Unknown evaluation outcome: {self.outcome}")
+        for name in ("generated_tokens", "injected_tokens"):
+            value = getattr(self, name)
+            if type(value) is not int or value < 0:
+                raise ValueError(f"{name} must be a nonnegative integer")
 
 
 class _RunFailure(Exception):
@@ -298,7 +309,7 @@ class EvaluationHarness:
         self.executor = executor
 
     def run(self, task: Task, path: Path) -> CaseResult:
-        if path not in ("no_tool", "python_tool", "current_best"):
+        if path not in _PATHS:
             raise ValueError(f"Unknown evaluation path: {path}")
         self.synchronize()
         started = time.perf_counter()
@@ -608,7 +619,7 @@ def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
     """
     if not results:
         raise ValueError("A matched report requires case results")
-    paths = ("no_tool", "python_tool", "current_best")
+    paths = _PATHS
     paired: dict[str, dict[str, CaseResult]] = {}
     for result in results:
         if result.path not in paths:

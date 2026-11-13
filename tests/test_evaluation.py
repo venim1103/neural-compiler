@@ -462,6 +462,34 @@ def test_execution_time_cannot_produce_nonfinite_report_metrics():
 
 
 @pytest.mark.parametrize(
+    "field,value",
+    [
+        ("generated_tokens", -1),
+        ("generated_tokens", True),
+        ("injected_tokens", 0.5),
+        ("outcome", "unrecorded_failure"),
+        ("path", "unknown_backend"),
+    ],
+)
+def test_impossible_case_records_cannot_enter_aggregates(field, value):
+    record = CaseResult("a", "unit", "python_tool", "correct", "", "", 1, 3, 0, ())
+    with pytest.raises(ValueError, match=field):
+        summarize([replace(record, **{field: value})])
+
+
+def test_negative_response_count_cannot_enter_execution_metrics():
+    with pytest.raises(ValueError, match="response_tokens"):
+        call = CallRecord("ok", 0.1, -1)
+        summarize(
+            [
+                CaseResult(
+                    "a", "unit", "python_tool", "correct", "", "", 1, 3, 0, (call,)
+                )
+            ]
+        )
+
+
+@pytest.mark.parametrize(
     "expected,answer,correct,valid",
     [
         (Fraction(11, 6), "Work.\nFinal answer: 11/6", True, True),
