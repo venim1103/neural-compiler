@@ -130,11 +130,13 @@ def test_cgroup_setup_consumes_the_request_deadline(
             clock[0] = setup_seconds
             yield fds
 
-    def supervise(command, timeout, output_limit, pass_fds=()):
+    def supervise(command, timeout, output_limit, pass_fds=(), *, stdin_fd=None):
         if setup_seconds >= 2:
             pytest.fail("Guest launched after setup exhausted the deadline")
         assert timeout == 0.5
         assert command[command.index(execution._LAUNCHER) + 2] == "1"
+        assert stdin_fd is not None
+        os.write(stdin_fd, execution._JAIL_READY)
         return execution.ExecutionResult("ok", "42\n", returncode=0)
 
     monkeypatch.setattr(execution, "request_cgroup", delayed)
@@ -166,9 +168,11 @@ def test_remaining_cpu_limit_reaches_the_jailed_child(monkeypatch, controls) -> 
             offset[0] = 10
             yield fds
 
-    def capture(command, timeout, output_limit, pass_fds=()):
+    def capture(command, timeout, output_limit, pass_fds=(), *, stdin_fd=None):
         remaining.append(timeout)
-        return supervise(command, timeout, output_limit, pass_fds=pass_fds)
+        return supervise(
+            command, timeout, output_limit, pass_fds=pass_fds, stdin_fd=stdin_fd
+        )
 
     monkeypatch.setattr(execution, "request_cgroup", delayed)
     monkeypatch.setattr(

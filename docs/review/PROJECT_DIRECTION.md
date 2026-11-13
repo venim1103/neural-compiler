@@ -1225,3 +1225,77 @@ dependencies and resource scopes remain separately gated.
 
 Next: inspect the pinned SGLang release's actual cache/API boundary hooks, rather
 than treating current documentation as version-bound checkpoint evidence.
+
+### 2026-11-13: pinned SGLang API and checkpoint-source evidence
+
+At inspected source `297e54fd105e974cdf401e5b4d20253a22c16f90`,
+[the engine declaration][sglang-engine-source] accepts token `input_ids`,
+sampling parameters, session identifiers/parameters and `cache_salt`.
+[Its base interface][sglang-engine-base] declares cache flushing and memory
+occupation release/resume; memory resume is not proof of token-boundary
+pause/inject/resume. The engine page was truncated, so absence of additional
+concrete methods is not established.
+
+[The optional Mamba checkpoint pool][sglang-checkpoint-source] compresses cached
+recurrent state to int8, then dequantizes into active slots and copies convolution
+history. This is not our exact tensor-copy checkpoint path; its source's quality
+claims are not accepted accuracy/exactness evidence. Keep compression out of an
+exactness baseline unless separately qualified. The pool also states its extra
+allocation is not charged to `max_total_num_tokens`; actual resource qualification
+must account for it independently. The earlier Transformers storage lower bounds
+must not be presented as this compressed engine's actual allocation.
+
+**Bounded ledger:** six primary requests, one failed and five successful. The
+first recursive root tree exceeded the 4 MiB read cap; the cap was not increased.
+Two narrower metadata queries followed the actual Python subtree. The original
+three-query plan was extended to five for that recovery, then six to follow the
+actual `EngineBase` import. Source pages retained their 20,000-character caps.
+No source checkout, engine execution/installation, weights, datasets or host
+changes occurred. No unchanged code suite was rerun. Exact native stop-token
+accounting, boundary cache restoration, multi-call logits and hardware fit remain
+unverified for this engine; inspected sources are not adopted execution pins.
+
+[sglang-engine-source]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/entrypoints/engine.py
+[sglang-engine-base]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/entrypoints/EngineBase.py
+[sglang-checkpoint-source]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/mem_cache/mamba_checkpoint_pool.py
+
+### 2026-11-13: jail startup status is independent of guest stderr
+
+The supervisor previously classified any nonzero exit whose stderr began with
+`bwrap:` as an isolation failure. A trusted jailed print/exit fixture reproduced
+this misclassification. Stderr now remains guest data; a separate startup
+acknowledgement distinguishes genuine setup failures from guest runtime errors.
+
+The trusted resource-limit launcher reports readiness through an anonymous
+host-created Unix datagram endpoint temporarily used as stdin. It restores
+read-only `/dev/null` at fd0 and closes its private writer before guest exec.
+The parent reads at most the acknowledgement length plus one byte, rejects
+missing/invalid reports explicitly and closes both endpoints. The endpoint is
+unnamed IPC, not a listening service; guest syscall allowlists are unchanged.
+Existing wall/output limits, cgroup status handling and no-fallback behavior remain.
+
+**Bounded ledger:** the initial five selectors yielded four failures and one
+passing genuine setup-error control. An `--info-fd` implementation passed four
+but failed that control: bubblewrap reports its child PID before mounts finish.
+That report was not accepted as readiness evidence. The private-stdin repair
+passed five selectors, then its `dup2` operation broke two existing seccomp
+controls (99 passed). Reopening fd0 with already-supported operations preserved
+all 101 controls without broadening policies. One bounded owned-jail monitor
+probe then found the regular-file acknowledgement reachable through
+`/proc/1/fd/0`; self-descriptor closure alone was insufficient. The final
+datagram design passed the strengthened descriptor selector, including monitor
+reopen refusal and parent cleanup. One overlong-report parameter extended the
+new fixture count to six. All 102 coupled execution controls and the root gate
+passed: **247 tests**, 14 existing warnings, no skips. Root Ruff lint, all three
+scoped format checks, whitespace and execution diagnostics passed; all four
+resolved supervisor callers are signature-compatible.
+
+Actual jailed Python/C/assembly/Wasm/Unicorn and trusted seccomp fork/socket-denial
+controls ran. Namespace-local descriptor checks are not complete ptrace/process
+memory or production containment qualification. The missing local manpage lookup
+and failed approaches remain spent evidence. No downloads, dependencies, model/
+GPU jobs, service exposure or shared-host privilege/security changes occurred.
+Owned descriptor channels are closed; no persistent runtime artifacts were added.
+
+Next: advance another bounded offline evaluation prerequisite while retaining
+the separate dataset, real-engine and writable-cgroup qualification gates.

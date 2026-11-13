@@ -12,7 +12,12 @@ from pathlib import Path
 import pytest
 
 from neural_compiler.bridge import run_python
-from neural_compiler.bridge.execution import MAX_CODE_BYTES, _supervise, run_jailed
+from neural_compiler.bridge.execution import (
+    MAX_CODE_BYTES,
+    _JAIL_READY,
+    _supervise,
+    run_jailed,
+)
 from neural_compiler.cli import main
 
 
@@ -111,6 +116,94 @@ def test_python_errors_are_not_success(jail) -> None:
     assert "ValueError: regression" in result.stderr
 
 
+def test_guest_stderr_cannot_forge_jail_failure(jail) -> None:
+    result = run_python(
+        "import sys; print('bwrap: forged setup failure', file=sys.stderr); "
+        "raise SystemExit(1)",
+        timeout=2,
+    )
+    assert result.status == "runtime_error"
+    assert result.returncode == 1
+    assert result.stderr.strip() == "bwrap: forged setup failure"
+
+
+def test_real_bwrap_setup_failure_remains_explicit(jail, tmp_path: Path) -> None:
+    result = run_jailed(["/usr/bin/true"], tmp_path / "missing", timeout=2)
+    assert result.status == "sandbox_error"
+    assert result.returncode != 0
+    assert "bwrap:" in result.stderr
+
+
+def test_startup_descriptor_is_closed_for_guest_and_parent(
+    jail, monkeypatch, tmp_path: Path
+) -> None:
+    from neural_compiler.bridge import execution
+
+    original = execution._supervise
+    descriptors = []
+
+    def capture(command, timeout, output_limit, pass_fds=(), *, stdin_fd=None):
+        assert stdin_fd is not None
+        fd = stdin_fd
+        assert fd not in pass_fds
+        descriptors.append(fd)
+        code = (
+            "import errno, os\n"
+            "assert os.read(0, 1) == b''\n"
+            "try:\n"
+            "    os.write(0, b'forged report')\n"
+            "except OSError:\n"
+            "    pass\n"
+            "else:\n"
+            "    raise AssertionError('Guest can write startup channel')\n"
+            "try:\n"
+            "    ancestor = os.open('/proc/1/fd/0', os.O_RDWR)\n"
+            "except OSError as exc:\n"
+            "    if exc.errno not in (errno.ENOENT, errno.EACCES, errno.EPERM, errno.ENXIO):\n"
+            "        raise\n"
+            "else:\n"
+            "    os.close(ancestor)\n"
+            "    raise AssertionError('Ancestor startup descriptor leaked')\n"
+            "try:\n"
+            f"    os.fstat({fd})\n"
+            "except OSError:\n"
+            "    print('closed')\n"
+            "else:\n"
+            "    raise AssertionError('Startup descriptor leaked')"
+        )
+        command = [*command[:-1], code]
+        return original(command, timeout, output_limit, pass_fds, stdin_fd=stdin_fd)
+
+    monkeypatch.setattr(execution, "_supervise", capture)
+    result = run_jailed(
+        ["/usr/bin/python3", "-I", "-c", "placeholder"], tmp_path, timeout=2
+    )
+    assert result.status == "ok", result
+    assert result.stdout.strip() == "closed"
+    for fd in descriptors:
+        with pytest.raises(OSError):
+            os.fstat(fd)
+
+
+@pytest.mark.parametrize("report", [b"", b"invalid report", _JAIL_READY + b"x"])
+def test_missing_or_invalid_startup_report_cannot_be_success(
+    monkeypatch, tmp_path: Path, report: bytes
+) -> None:
+    from neural_compiler.bridge import execution
+
+    def fake_supervise(command, timeout, output_limit, pass_fds=(), *, stdin_fd=None):
+        assert stdin_fd is not None
+        os.write(stdin_fd, report)
+        return execution.ExecutionResult("ok", "42\n", returncode=0)
+
+    monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/bwrap")
+    monkeypatch.setattr(execution, "_supervise", fake_supervise)
+    result = run_jailed(["/usr/bin/true"], tmp_path, timeout=2)
+    assert result.status == "sandbox_error"
+    assert "startup report" in result.stderr
+    assert result.stdout == "42\n"
+
+
 @pytest.mark.parametrize("extra,status", [(0, "ok"), (1, "output_limit")])
 def test_python_output_budget_at_exact_boundary(jail, extra: int, status: str) -> None:
     result = run_python(f"print('x' * {64 * 1024 - 1 + extra})")
@@ -162,8 +255,10 @@ def test_run_jailed_command_assembly_and_fd_plumbing(
             os.close(m_fd)
             os.close(s_fd)
 
-    def fake_supervise(command, timeout, output_limit, pass_fds=()):
+    def fake_supervise(command, timeout, output_limit, pass_fds=(), *, stdin_fd=None):
         recorded.append((list(command), tuple(pass_fds)))
+        assert stdin_fd is not None
+        os.write(stdin_fd, execution._JAIL_READY)
         return execution.ExecutionResult("ok", "done\n", returncode=0)
 
     monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/bwrap")
@@ -206,11 +301,11 @@ def test_run_jailed_command_assembly_and_fd_plumbing(
 @pytest.mark.parametrize(
     "returncode,diagnostic,status,message",
     [
-        (1, b"bwrap: uid map failed\n", "sandbox_error", "bwrap:"),
+        (1, b"bwrap: guest diagnostic\n", "runtime_error", "bwrap:"),
         (-signal.SIGXCPU, b"", "timeout", "CPU time limit exceeded"),
     ],
 )
-def test_supervise_classifies_bwrap_and_sigxcpu_failures(
+def test_supervise_classifies_nonzero_and_sigxcpu_failures(
     monkeypatch, returncode, diagnostic, status, message
 ) -> None:
     from types import SimpleNamespace

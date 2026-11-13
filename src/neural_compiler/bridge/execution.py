@@ -11,6 +11,7 @@ import os
 import selectors
 import shutil
 import signal
+import socket
 import subprocess
 import tempfile
 import time
@@ -44,14 +45,23 @@ class ExecutionResult:
 MAX_CODE_BYTES = 64 * 1024
 MAX_OUTPUT_BYTES = 64 * 1024
 MEMORY_BYTES = 512 * 1024 * 1024
+_JAIL_READY = b"neural-compiler-jail-ready\n"
 
-_LAUNCHER = """
+_LAUNCHER = f"""
 import os, resource, sys
 resource.setrlimit(resource.RLIMIT_AS, (int(sys.argv[1]), int(sys.argv[1])))
 resource.setrlimit(resource.RLIMIT_CPU, (int(sys.argv[2]), int(sys.argv[2]) + 1))
 resource.setrlimit(resource.RLIMIT_FSIZE, (16 * 1024 * 1024, 16 * 1024 * 1024))
 resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
+status = os.dup(0)
+os.close(0)
+if os.open("/dev/null", os.O_RDONLY) != 0:
+    raise OSError("Failed to restore guest stdin")
+os.set_inheritable(0, True)
+if os.write(status, {_JAIL_READY!r}) != {len(_JAIL_READY)}:
+    raise OSError("Incomplete jail startup report")
+os.close(status)
 os.execv(sys.argv[3], sys.argv[3:])
 """
 
@@ -80,12 +90,14 @@ def _supervise(
     timeout: float,
     output_limit: int,
     pass_fds: tuple[int, ...] = (),
+    *,
+    stdin_fd: int | None = None,
 ) -> ExecutionResult:
     deadline = time.monotonic() + timeout
     try:
         process = subprocess.Popen(
             command,
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL if stdin_fd is None else stdin_fd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             start_new_session=True,
@@ -145,9 +157,7 @@ def _supervise(
     if diagnostic:
         stderr = f"{stderr}\n{diagnostic}".strip()
     elif process.returncode:
-        if stderr.startswith("bwrap:"):
-            status = "sandbox_error"
-        elif process.returncode == -signal.SIGXCPU:
+        if process.returncode == -signal.SIGXCPU:
             status = "timeout"
             stderr = f"{stderr}\nCPU time limit exceeded".strip()
         else:
@@ -170,8 +180,9 @@ def run_jailed(
 ) -> ExecutionResult:
     """Run a trusted command specification against guest files in a private jail.
 
-    Guest stdout is data, never a status/control protocol. There is deliberately
-    no unjailed fallback if bubblewrap or user namespaces are unavailable.
+    Guest stdout/stderr are data, never a status/control protocol. There is
+    deliberately no unjailed fallback if bubblewrap or user namespaces are
+    unavailable.
     Optional cgroups require an existing caller-delegated subtree; this function
     never enables controllers or changes host delegation. Synchronous setup is
     charged to the timeout but is not itself interruptible by the supervisor.
@@ -222,7 +233,12 @@ def run_jailed(
     ]
     result: ExecutionResult | None = None
     try:
+        startup_reader, startup_writer = socket.socketpair(
+            socket.AF_UNIX, socket.SOCK_DGRAM
+        )
         with (
+            startup_reader,
+            startup_writer,
             request_cgroup(cgroup)
             if cgroup is not None
             else nullcontext(None) as group_fds,
@@ -230,6 +246,7 @@ def run_jailed(
             if seccomp is not None
             else nullcontext(None) as filter_fd,
         ):
+            startup_reader.setblocking(False)
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 result = ExecutionResult(
@@ -260,7 +277,26 @@ def run_jailed(
                     *args,
                 ]
                 inherited += group_fds
-            result = _supervise(args, remaining, output_limit, pass_fds=inherited)
+            # The trusted launcher reports readiness and closes its writer before exec.
+            result = _supervise(
+                args,
+                remaining,
+                output_limit,
+                pass_fds=inherited,
+                stdin_fd=startup_writer.fileno(),
+            )
+            if result.status in {"ok", "runtime_error"}:
+                try:
+                    report = startup_reader.recv(len(_JAIL_READY) + 1)
+                except BlockingIOError:
+                    report = b""
+                if report != _JAIL_READY:
+                    result = ExecutionResult(
+                        "sandbox_error",
+                        result.stdout,
+                        f"{result.stderr}\nMissing or invalid jail startup report".strip(),
+                        result.returncode,
+                    )
             if group_fds is not None:
                 os.lseek(group_fds[1], 0, os.SEEK_SET)
                 diagnostic = os.read(group_fds[1], 4096)
@@ -272,7 +308,7 @@ def run_jailed(
                         result.returncode,
                     )
         return result
-    except (SeccompError, CgroupError) as exc:
+    except (SeccompError, CgroupError, OSError) as exc:
         return ExecutionResult(
             "sandbox_error",
             "" if result is None else result.stdout,
