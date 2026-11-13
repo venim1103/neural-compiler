@@ -1419,3 +1419,40 @@ existing CPU fixture evidence and compressed checkpoint estimates distinct.
 
 Next: inspect the actual session implementation's append-only state ownership,
 without executing the engine or turning parameter names into correctness evidence.
+
+### 2026-11-13: append-only session record ownership traced at the pinned source
+
+[Streaming session slots][sglang-streaming-session] own a shared `ReqKvInfo`
+record and prefix-tree lock; successive turns borrow that same record.
+Non-aborted completion retains it, while session release frees both KV rows and
+Mamba pool/ping-pong allocations. Runtime abort releases the borrowed record and
+leaves the previous successful request as the next prefill history. This is
+source-level ownership evidence, not a numerical Gated DeltaNet continuation test.
+
+[The controller][sglang-session-controller] rejects concurrent streaming turns,
+replace/drop controls and nonzero offsets. Successful completion commits one
+request node and token-array lengths; abort retains the preceding node.
+Its plain-append helper trims unconfirmed array tails, then appends the previous
+request's retained output IDs and the new input suffix. A future live-session
+adapter therefore must not submit our full-history resubmission input as an
+append suffix. The helper also strips a leading appended BOS; native template
+and stop-token accounting still require explicit end-to-end qualification.
+
+Close while a request is active defers cache release. Finished-length/speculative
+overshoot trimming, one-token logit reserve and backend page alignment appear
+in the cache path; none of these establishes the exact pending-token/recurrent
+state boundary without the actual backend checks.
+
+**Bounded ledger:** the complete pinned Python tree was 1,794,535 bytes under the
+4 MiB cap. The actual streaming file was 12,478 bytes. The 20,999-byte controller
+exceeded the 20,000-character output cap, so its complete method inventory was
+emitted first, then two narrowly scoped reads emitted complete lifecycle and
+append helper definitions. All source bodies remained under 128 KiB; five
+requests succeeded, with no imports/exec, source checkout, engine/dependency,
+weights/data/GPU or shared-host changes. No unchanged code tests were rerun.
+
+[sglang-streaming-session]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/session/streaming_session.py
+[sglang-session-controller]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/session/session_controller.py
+
+Next: preserve these candidate/qualification limits and continue bounded local
+cache-boundary checks, without installing or executing the pinned engine.
