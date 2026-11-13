@@ -877,3 +877,55 @@ separate hardware/host gates.
 - All offline prerequisites across Queues 1–3 are implemented and verified in CI; further
   empirical/qualification work requires a privileged Linux host (namespaces, kernel `seccomp`,
   writable `cgroup2`) or a CUDA GPU (`Qwen/Qwen3.5-4B`).
+
+### 2026-11-13: review of intervening implementation and contract repairs
+
+The clean local worktree was still at WIP `636d8fc`; the configured upstream contained
+seven intervening commits through `57e441f`. A fast-forward preserved both histories.
+Direct review covered the new native dispatcher/CLI and candidate policies, synthetic
+families/checkers/uncertainty metrics, checkpoint store, serving adapters and their tests.
+[The latest hosted baseline][review-ci-baseline] and its preceding run were green;
+local baseline validation passed 201 cases with 14 existing Torch JIT warnings and no skips.
+
+Five reproduced contract/reporting issues were repaired:
+
+- `execute_program("python", ...)` ignored `BridgePolicy.output_limit`. Python now forwards
+  the same explicit cap to the supervisor as the other tiers; its unchanged default is
+  64 KiB, and exact-boundary/one-byte-over tests exercise the real jail.
+- Bootstrap cost intervals discarded zero-success resamples, conditioning uncertainty on
+  success. All 1,000 seeded resamples now count. Undefined zero-success costs sort above
+  finite costs; nonfinite interval bounds are emitted as JSON `null`, with explicit
+  `seconds_per_correct_ci_status` (`defined`, `unbounded_upper`, or `no_correct_answers`).
+  The existing point ratio and zero-correct `ratio_status` semantics are unchanged.
+- Call execution time now rejects nonfinite/negative measurements before they can poison
+  execution totals/quantiles.
+- Serving summaries reject duplicate/incomplete mode pairs, different family identities
+  and different evaluation paths rather than comparing unmatched cohorts.
+- Prefix-cached adapters no longer derive the per-snapshot default from the 256 MiB
+  aggregate store budget. The shared 64 MiB snapshot default is retained, additionally
+  bounded by store capacity; explicit adapter overrides remain explicit.
+
+**Bounded ledger:** the first eight repro cases had six failures and two passing controls;
+the snapshot-default repro also failed. After repair, 11 focused contract/logit controls
+and four snapshot/eviction/dispatcher controls passed. Pylance found all 35 Python executor
+call sites compatible and no harness/serving source diagnostics.
+The final root gate passed 210 cases with the same 14 warnings and no skips; Ruff lint,
+format checks for all nine changed Python files, whitespace and local documentation
+reference checks passed. Execution/native/session Pylance diagnostics were also clear.
+Existing jailed Python/C/assembly and Wasm/Unicorn regression controls actually ran.
+
+Five trusted jailed Wasm/hex controls were attempted once: result/parse-error checks passed;
+the fuel-loop check hit `output_limit` because its trap diagnostic exceeded the deliberately
+small 128-byte cap, not the expected `timeout`. This failed fixture expectation was retained,
+the cap was not raised, and unchanged successful checks were not repeated. Both remaining
+hex result/instruction-cap controls passed. Output-limit precedence remains explicit.
+
+These are offline/local contract checks, not pretrained-model accuracy, GPU/serving latency,
+accepted statistical evaluation or independent production containment evidence. Namespace
+and seccomp fixtures can run on this host without privilege changes; writable cgroup
+qualification and accepted production policies remain outstanding. The previous update's
+blanket all-prerequisites-complete/privileged-host conclusion was too strong. No new
+dependencies, model/data downloads, pretrained/GPU jobs or host-security changes occurred.
+This user-requested review does not resume separate project milestones.
+
+[review-ci-baseline]: https://github.com/venim1103/neural-compiler/actions/runs/43314457168

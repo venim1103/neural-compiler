@@ -75,9 +75,11 @@ blocked:
    jailed Python (`run_python` with optional static import pre-filter), in-jail C99/tcc and
    assembly (`run_c`, `run_asm`), jailed Wasm/Unicorn (`run_wat`, `run_hex`), opt-in seccomp
    and delegated cgroup plumbing, and candidate math/compute review baselines now exist.
-   Live `bubblewrap` user-namespace qualification, kernel `seccomp` enforcement and writable
-   `cgroup2` controller qualification remain blocked on privileged Linux host capabilities;
-   do not change host privileges/security or launch an untrusted service as a workaround.
+   Bounded trusted namespace/seccomp fixtures run where host support is available; their
+   passes are not production containment qualification. Writable `cgroup2` controller
+   qualification, accepted production syscall/import policies and real serving integration
+   remain outstanding. Do not change host privileges/security or launch an untrusted service
+   as a workaround.
 
 SFT, execution-rewarded RL, middle-level IR investment and production serving
 remain downstream of the relevant P0/P1 gates. Fine-tuning is part of the project

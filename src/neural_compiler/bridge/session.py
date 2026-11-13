@@ -18,6 +18,8 @@ from transformers.cache_utils import (
 )
 from transformers.modeling_outputs import CausalLMOutputWithPast
 
+DEFAULT_CHECKPOINT_BYTES = 64 * 1024 * 1024
+
 
 @dataclass(frozen=True)
 class DecodeResult:
@@ -181,7 +183,9 @@ class LiveSession:
         self._pending = None
         self._tokens.extend(response_ids)
 
-    def checkpoint(self, max_cache_bytes: int = 64 * 1024 * 1024) -> SessionCheckpoint:
+    def checkpoint(
+        self, max_cache_bytes: int = DEFAULT_CHECKPOINT_BYTES
+    ) -> SessionCheckpoint:
         """Capture this exact boundary without flushing or replaying pending tokens."""
         if type(max_cache_bytes) is not int or max_cache_bytes <= 0:
             raise ValueError("max_cache_bytes must be a positive integer")

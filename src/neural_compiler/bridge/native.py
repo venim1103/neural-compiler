@@ -179,7 +179,9 @@ def _run_jailed_runtime(
     if type(budget) is not int or budget <= 0:
         raise ValueError("execution budget must be a positive integer")
     runtime_source = Path(runtime.__file__).read_text(encoding="utf-8")
-    with tempfile.TemporaryDirectory(prefix=f"neural-compiler-{language}-") as directory:
+    with tempfile.TemporaryDirectory(
+        prefix=f"neural-compiler-{language}-"
+    ) as directory:
         work = Path(directory)
         (work / "runtime.py").write_text(runtime_source, encoding="utf-8")
         (work / "program").write_text(code, encoding="utf-8")
@@ -308,6 +310,7 @@ def execute_program(
         return run_python(
             code,
             timeout=effective_timeout,
+            output_limit=policy.output_limit,
             seccomp=policy.seccomp,
             cgroup=policy.cgroup,
             allowed_imports=policy.allowed_imports,

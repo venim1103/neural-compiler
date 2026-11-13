@@ -446,6 +446,21 @@ def test_invalid_time_cannot_produce_a_success_shaped_cost(elapsed):
         CaseResult("a", "unit", "no_tool", "correct", "", "42", elapsed, 3, 0, ())
 
 
+def test_bootstrap_does_not_discard_zero_success_resamples():
+    good = CaseResult("good", "unit", "no_tool", "correct", "", "", 1, 3, 0, ())
+    bad = replace(good, case_id="bad", outcome="wrong_answer", elapsed_seconds=10)
+    summary = summarize([good, bad])
+    assert summary["seconds_per_correct"] == 11
+    low, high = summary["seconds_per_correct_ci_95"]
+    assert low == 1 and high is None
+    assert summary["seconds_per_correct_ci_status"] == "unbounded_upper"
+
+
+def test_execution_time_cannot_produce_nonfinite_report_metrics():
+    with pytest.raises(ValueError, match="finite and nonnegative"):
+        CallRecord("ok", float("nan"), 0)
+
+
 @pytest.mark.parametrize(
     "expected,answer,correct,valid",
     [
@@ -590,7 +605,9 @@ def test_matched_report_aggregates_tokens_calls_and_outcome_matrix():
     assert report["paired_cases"] == 2
     assert report["by_outcome"]["correct"]["python_tool"] == 1
     assert report["by_outcome"]["protocol_error"]["no_tool"] == 1
-    assert report["by_family"]["harmonic_partial_sum"]["current_best"]["tool_calls"] == 0
+    assert (
+        report["by_family"]["harmonic_partial_sum"]["current_best"]["tool_calls"] == 0
+    )
 
 
 def test_end_to_end_multi_family_suite_on_tiny_cpu_model(

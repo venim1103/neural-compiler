@@ -177,8 +177,8 @@ def run_jailed(
     """
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("timeout must be a finite positive number")
-    if output_limit <= 0:
-        raise ValueError("output_limit must be positive")
+    if type(output_limit) is not int or output_limit <= 0:
+        raise ValueError("output_limit must be a positive integer")
     bwrap = shutil.which("bwrap")
     if bwrap is None:
         return ExecutionResult("sandbox_error", stderr="bubblewrap (bwrap) is required")
@@ -277,6 +277,7 @@ def run_python(
     code: str,
     timeout: float = 20,
     *,
+    output_limit: int = MAX_OUTPUT_BYTES,
     seccomp: SeccompPolicy | None = None,
     cgroup: CgroupLimits | None = None,
     allowed_imports: Set[str] | None = None,
@@ -311,6 +312,7 @@ def run_python(
             ["/usr/bin/python3", "-I", "-u", "/work/prog.py"],
             work,
             timeout,
+            output_limit=output_limit,
             seccomp=seccomp,
             cgroup=cgroup,
         )

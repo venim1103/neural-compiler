@@ -8,8 +8,10 @@ from pathlib import Path
 import pytest
 
 from neural_compiler.bridge import (
+    BridgePolicy,
     ExecutionResult,
     SeccompPolicy,
+    execute_program,
     run_asm,
     run_c,
     run_hex,
@@ -18,6 +20,19 @@ from neural_compiler.bridge import (
 )
 from neural_compiler.bridge.cgroups import CgroupLimits
 from neural_compiler.bridge.execution import MAX_CODE_BYTES
+
+
+@pytest.mark.parametrize("extra,status", [(0, "ok"), (1, "output_limit")])
+def test_python_dispatch_honors_custom_output_budget(extra: int, status: str) -> None:
+    probe = run_python("print(0)")
+    if probe.status == "sandbox_error":
+        pytest.skip(f"bubblewrap namespaces unavailable: {probe.stderr}")
+    assert probe.status == "ok", probe
+    result = execute_program(
+        "python", f"print('x' * {127 + extra})", BridgePolicy(output_limit=128)
+    )
+    assert result.status == status
+    assert len(result.stdout.encode("utf-8")) == 128
 
 
 def test_run_c_and_run_asm_command_contract(monkeypatch, tmp_path: Path) -> None:
@@ -56,7 +71,9 @@ def test_run_c_and_run_asm_command_contract(monkeypatch, tmp_path: Path) -> None
     policy = SeccompPolicy(("read", "write", "exit_group"))
     limits = CgroupLimits(tmp_path, 4096, 16)
 
-    c_res = run_c("int main(void){return 0;}", timeout=10, seccomp=policy, cgroup=limits)
+    c_res = run_c(
+        "int main(void){return 0;}", timeout=10, seccomp=policy, cgroup=limits
+    )
     assert c_res.status == "ok" and c_res.stdout.strip() == "42"
     assert len(calls) == 2
     assert calls[0]["command"] == [
@@ -208,7 +225,12 @@ def test_run_wat_and_run_hex_jail_contract_and_exit_mapping(
     policy = SeccompPolicy(("read", "write", "exit_group"))
     limits = CgroupLimits(tmp_path, 4096, 16)
 
-    wat_res = run_wat('(module (func (export "solve") (result i64) (i64.const 42)))', fuel=5000, seccomp=policy, cgroup=limits)
+    wat_res = run_wat(
+        '(module (func (export "solve") (result i64) (i64.const 42)))',
+        fuel=5000,
+        seccomp=policy,
+        cgroup=limits,
+    )
     assert wat_res.status == "ok" and wat_res.stdout.strip() == "42"
     assert seen[-1]["command"] == [
         sys.executable,
@@ -231,19 +253,25 @@ def test_run_wat_and_run_hex_jail_contract_and_exit_mapping(
     monkeypatch.setattr(
         native,
         "run_jailed",
-        lambda *a, **kw: ExecutionResult("runtime_error", stderr="parse failed", returncode=2),
+        lambda *a, **kw: ExecutionResult(
+            "runtime_error", stderr="parse failed", returncode=2
+        ),
     )
     assert run_wat("bad wat").status == "compile_error"
 
     monkeypatch.setattr(
         native,
         "run_jailed",
-        lambda *a, **kw: ExecutionResult("runtime_error", stderr="out of fuel", returncode=3),
+        lambda *a, **kw: ExecutionResult(
+            "runtime_error", stderr="out of fuel", returncode=3
+        ),
     )
     assert run_wat("(module)").status == "timeout"
 
     monkeypatch.setattr(
-        native, "run_jailed", lambda *a, **kw: pytest.fail("Invalid hex must not launch jail")
+        native,
+        "run_jailed",
+        lambda *a, **kw: pytest.fail("Invalid hex must not launch jail"),
     )
     assert run_hex("not-hex").status == "compile_error"
     assert run_hex("   ").status == "compile_error"

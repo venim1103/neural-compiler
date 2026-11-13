@@ -30,35 +30,39 @@ def test_bridge_policy_dispatch_and_validation(monkeypatch, tmp_path: Path) -> N
 
     seen: list[tuple[str, float]] = []
 
-    monkeypatch.setattr(
-        native,
-        "run_python",
-        lambda code, timeout=20, **kw: seen.append(("python", timeout))
-        or ExecutionResult("ok", "python\n"),
-    )
+    def fake_python(code, timeout=20, **kw):
+        assert kw["output_limit"] == 4096
+        seen.append(("python", timeout))
+        return ExecutionResult("ok", "python\n")
+
+    monkeypatch.setattr(native, "run_python", fake_python)
     monkeypatch.setattr(
         native,
         "run_c",
-        lambda code, timeout=20, **kw: seen.append(("c", timeout))
-        or ExecutionResult("ok", "c\n"),
+        lambda code, timeout=20, **kw: (
+            seen.append(("c", timeout)) or ExecutionResult("ok", "c\n")
+        ),
     )
     monkeypatch.setattr(
         native,
         "run_asm",
-        lambda code, timeout=20, **kw: seen.append(("asm", timeout))
-        or ExecutionResult("ok", "asm\n"),
+        lambda code, timeout=20, **kw: (
+            seen.append(("asm", timeout)) or ExecutionResult("ok", "asm\n")
+        ),
     )
     monkeypatch.setattr(
         native,
         "run_wat",
-        lambda code, fuel=1, timeout=20, **kw: seen.append(("wat", timeout))
-        or ExecutionResult("ok", "wat\n"),
+        lambda code, fuel=1, timeout=20, **kw: (
+            seen.append(("wat", timeout)) or ExecutionResult("ok", "wat\n")
+        ),
     )
     monkeypatch.setattr(
         native,
         "run_hex",
-        lambda code, max_insns=1, timeout=20, **kw: seen.append(("hex", timeout))
-        or ExecutionResult("ok", "hex\n"),
+        lambda code, max_insns=1, timeout=20, **kw: (
+            seen.append(("hex", timeout)) or ExecutionResult("ok", "hex\n")
+        ),
     )
 
     policy = BridgePolicy(
@@ -144,7 +148,9 @@ def test_supervise_contains_output_flood_and_reaps_process_group(monkeypatch) ->
         "    sys.stdout.buffer.write(chunk)\n"
         "    sys.stdout.buffer.flush()\n"
     )
-    res = _supervise([sys.executable, "-I", "-c", flood_code], timeout=5, output_limit=2048)
+    res = _supervise(
+        [sys.executable, "-I", "-c", flood_code], timeout=5, output_limit=2048
+    )
     assert res.status == "output_limit"
     assert len(res.stdout.encode("utf-8")) <= 2048
     assert "Output exceeds 2048 bytes" in res.stderr

@@ -16,7 +16,12 @@ import torch
 from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 from neural_compiler.bridge import run_python
-from neural_compiler.bridge.session import CheckpointStore, DecodeResult, LiveSession
+from neural_compiler.bridge.session import (
+    DEFAULT_CHECKPOINT_BYTES,
+    CheckpointStore,
+    DecodeResult,
+    LiveSession,
+)
 
 from .harness import (
     Budgets,
@@ -91,7 +96,7 @@ class PrefixCachedSession:
         self.model = model
         self.store = store
         self.max_checkpoint_bytes = (
-            store.max_total_bytes
+            min(DEFAULT_CHECKPOINT_BYTES, store.max_total_bytes)
             if max_checkpoint_bytes is None
             else max_checkpoint_bytes
         )
@@ -258,9 +263,7 @@ def run_serving_comparison(
     results: list[ServingCaseResult] = []
     for task in tasks:
         for mode in modes:
-            sampler = (
-                None if on_token_factory is None else on_token_factory(task, mode)
-            )
+            sampler = None if on_token_factory is None else on_token_factory(task, mode)
             store = CheckpointStore(
                 max_total_bytes=max_store_bytes, max_entries=max_store_entries
             )
@@ -276,7 +279,6 @@ def run_serving_comparison(
                         model,
                         prompt_ids,
                         store,
-                        max_checkpoint_bytes=max_store_bytes,
                         on_token_override=sampler,
                     )
                 else:
@@ -297,9 +299,7 @@ def run_serving_comparison(
                 ServingCaseResult(
                     mode=mode,
                     case=case_result,
-                    final_tokens=()
-                    if last_session is None
-                    else last_session.tokens,
+                    final_tokens=() if last_session is None else last_session.tokens,
                     final_logits=None
                     if last_session is None
                     else last_session.logits.detach().cpu(),
@@ -318,20 +318,33 @@ def run_serving_comparison(
 
 
 def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]:
-    """Aggregate failure-inclusive case and cache/prefill metrics by serving mode."""
+    """Aggregate failure-inclusive metrics for complete matched serving cases."""
     if not results:
         raise ValueError("Serving summary requires at least one result")
+    paired: dict[str, dict[ServingMode, ServingCaseResult]] = {}
+    for row in results:
+        if row.mode not in ALL_SERVING_MODES:
+            raise ValueError(f"Unknown serving mode: {row.mode}")
+        case = paired.setdefault(row.case.case_id, {})
+        if row.mode in case:
+            raise ValueError(f"Duplicate serving pair: {row.case.case_id}/{row.mode}")
+        case[row.mode] = row
     modes_present = [
         mode for mode in ALL_SERVING_MODES if any(r.mode == mode for r in results)
     ]
+    if len({row.case.path for row in results}) != 1:
+        raise ValueError("Serving comparisons require the same evaluation path")
+    for case_id, case in paired.items():
+        if set(case) != set(modes_present):
+            raise ValueError(f"Missing serving modes for {case_id}")
+        if len({row.case.family for row in case.values()}) != 1:
+            raise ValueError(f"Family identity differs between modes for {case_id}")
     by_mode: dict[str, object] = {}
     for mode in modes_present:
         subset = [r for r in results if r.mode == mode]
         base = summarize([r.case for r in subset])
         base["prefill_tokens"] = sum(r.prefill_tokens for r in subset)
-        base["checkpoint_bytes_peak"] = max(
-            r.checkpoint_bytes_peak for r in subset
-        )
+        base["checkpoint_bytes_peak"] = max(r.checkpoint_bytes_peak for r in subset)
         base["cache_hits"] = sum(r.cache_hits for r in subset)
         base["cache_misses"] = sum(r.cache_misses for r in subset)
         base["checkpoints_evicted"] = sum(r.checkpoints_evicted for r in subset)

@@ -45,9 +45,7 @@ _FINAL = re.compile(r"Final answer:\s*([+-]?[0-9]+)\s*")
 _FINAL_RATIONAL = re.compile(
     r"Final answer:\s*([+-]?[0-9]+)(?:\s*/\s*([+-]?[0-9]+))?\s*"
 )
-_FINAL_SEQUENCE = re.compile(
-    r"Final answer:\s*([+-]?[0-9]+(?:\s*,\s*[+-]?[0-9]+)*)\s*"
-)
+_FINAL_SEQUENCE = re.compile(r"Final answer:\s*([+-]?[0-9]+(?:\s*,\s*[+-]?[0-9]+)*)\s*")
 
 
 def _parse_decimal_int(raw: str) -> int:
@@ -248,6 +246,10 @@ class CallRecord:
     execution_seconds: float
     response_tokens: int
 
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.execution_seconds) or self.execution_seconds < 0:
+            raise ValueError("Call execution time must be finite and nonnegative")
+
 
 @dataclass(frozen=True)
 class CaseResult:
@@ -330,9 +332,7 @@ class EvaluationHarness:
             return call is not None
 
         try:
-            system_prompt = (
-                f"Solve the task. End your response with Final answer: {task.answer_format}."
-            )
+            system_prompt = f"Solve the task. End your response with Final answer: {task.answer_format}."
             prompt = self.tokenizer.apply_chat_template(
                 [
                     {"role": "system", "content": system_prompt},
@@ -493,10 +493,7 @@ def _bootstrap_seconds_per_correct_ci(
             idx = rng.randrange(n)
             tot_elapsed += elapsed_vals[idx]
             tot_correct += correct_vals[idx]
-        if tot_correct > 0:
-            ratios.append(tot_elapsed / tot_correct)
-    if not ratios:
-        return None
+        ratios.append(tot_elapsed / tot_correct if tot_correct else math.inf)
     low = _quantile(ratios, 0.025)
     high = _quantile(ratios, 0.975)
     assert low is not None and high is not None
@@ -516,14 +513,18 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, object]:
     generated_tokens = sum(result.generated_tokens for result in results)
     injected_tokens = sum(result.injected_tokens for result in results)
     tool_calls = sum(len(result.calls) for result in results)
-    exec_list = [
-        call.execution_seconds for result in results for call in result.calls
-    ]
+    exec_list = [call.execution_seconds for result in results for call in result.calls]
     execution_seconds = sum(exec_list)
     outcomes = {
         outcome: sum(result.outcome == outcome for result in results)
         for outcome in ALL_OUTCOMES
     }
+    ratio_ci = _bootstrap_seconds_per_correct_ci(results)
+    ratio_ci_status = (
+        "no_correct_answers"
+        if ratio_ci is None
+        else ("defined" if math.isfinite(ratio_ci[1]) else "unbounded_upper")
+    )
     return {
         "cases": total,
         "correct": correct,
@@ -536,7 +537,10 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, object]:
         "execution_p50_seconds": _quantile(exec_list, 0.50),
         "execution_p95_seconds": _quantile(exec_list, 0.95),
         "seconds_per_correct": elapsed / correct if correct else None,
-        "seconds_per_correct_ci_95": _bootstrap_seconds_per_correct_ci(results),
+        "seconds_per_correct_ci_95": None
+        if ratio_ci is None
+        else tuple(bound if math.isfinite(bound) else None for bound in ratio_ci),
+        "seconds_per_correct_ci_status": ratio_ci_status,
         "ratio_status": "defined" if correct else "no_correct_answers",
         "generated_tokens": generated_tokens,
         "injected_tokens": injected_tokens,

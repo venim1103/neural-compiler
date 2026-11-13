@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 import torch
 
@@ -9,10 +11,14 @@ from neural_compiler.bridge import ExecutionResult
 from neural_compiler.eval import (
     ALL_SERVING_MODES,
     IntegerChecker,
+    PrefixCachedSession,
+    ServingCaseResult,
     Task,
     run_serving_comparison,
     summarize_serving,
 )
+from neural_compiler.eval.harness import CaseResult
+from neural_compiler.bridge.session import CheckpointStore
 
 
 def _call_text(code: str) -> str:
@@ -22,9 +28,7 @@ def _call_text(code: str) -> str:
     )
 
 
-def test_serving_modes_match_logits_and_reduce_prefill_tokens(
-    tokenizer, hybrid_model
-):
+def test_serving_modes_match_logits_and_reduce_prefill_tokens(tokenizer, hybrid_model):
     task = Task(
         "two-step-calc",
         "unit-serving",
@@ -150,3 +154,31 @@ def test_serving_comparison_validation(tokenizer, hybrid_model):
         )
     with pytest.raises(ValueError, match="at least one result"):
         summarize_serving([])
+
+
+@pytest.mark.parametrize("fault", ["missing", "duplicate", "family", "path"])
+def test_serving_summary_rejects_unmatched_results(fault):
+    case = CaseResult("a", "unit", "python_tool", "correct", "", "", 1, 3, 0, ())
+    first = ServingCaseResult("live_pause_resume", case, (), None, 3, 0, 0, 0, 0)
+    second = replace(first, mode="prefix_cached_resubmission")
+    rows = [first, second]
+    if fault == "missing":
+        rows.append(replace(first, case=replace(case, case_id="b")))
+    elif fault == "duplicate":
+        rows.append(first)
+    elif fault == "family":
+        rows[1] = replace(second, case=replace(case, family="other"))
+    else:
+        rows[1] = replace(second, case=replace(case, path="current_best"))
+    with pytest.raises(ValueError):
+        summarize_serving(rows)
+
+
+def test_default_snapshot_limit_is_not_the_aggregate_store_budget(
+    hybrid_model, monkeypatch
+):
+    from neural_compiler.bridge import session
+
+    monkeypatch.setattr(session, "_snapshot_bytes", lambda *_: 64 * 1024 * 1024 + 1)
+    with pytest.raises(ValueError, match="exceeding"):
+        PrefixCachedSession(hybrid_model, [1, 2, 3], CheckpointStore())
