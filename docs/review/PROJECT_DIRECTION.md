@@ -972,3 +972,35 @@ There were no accepted data, inference studies, dependency or host changes.
 
 Next: check whether stateless resubmission retains initial model identity when a
 fresh session is constructed, rather than silently accepting mid-sequence model changes.
+
+### 2026-11-13: stateless model identity and deterministic CI classification
+
+Three tiny CPU repros showed full re-prefill accepting mid-sequence weight/configuration
+changes and prefix-cached resubmission doing the same after its store was cleared.
+Adapters now retain the initial session's supported CPU metadata and reuse the owning
+live-session guard before resubmission. No live cache is retained solely for this guard.
+Full re-prefill commits new history only after successful reconstruction; refused
+decode/injection preserves the exact boundary. GPU/unversioned live-only behavior remains
+unchanged; this is not concurrent model-mutation safety.
+
+Seven focused drift/refusal, unversioned, pending-token, eviction and multi-call logit
+controls passed after three initial failures. The first root gate passed 221 cases.
+At that checkpoint, [earlier hosted CI][classification-ci-failure] showed one Python 3.12
+failure (181 passed, 30 skipped): the SIGXCPU classification fixture received a wall-clock
+timeout/SIGKILL instead of its expected CPU-limit diagnostic. Python 3.10 passed, and
+[the newer record-validation CI][record-validation-ci] passed both runtimes. The log does
+not establish host load or core-dump handling as the cause.
+
+Classification now uses deterministic completed-process pipes/exit codes, independent of
+interpreter startup and signal handling. Seven focused classification plus unchanged real
+deadline/output/process-reaping controls passed; no deadlines/assertions were loosened or
+tests skipped. Final root gate: 222 passed, 14 existing warnings, no skips; Ruff lint,
+all four changed-file format checks, whitespace and session/serving diagnostics passed.
+No dependencies, model/data downloads, pretrained/GPU jobs or host changes occurred.
+
+Next: recover exact primary SGLang package/revision/cache documentation routes for the
+still-unverified serving compatibility prerequisite; do not install dependencies or run
+models under this read-only research scope.
+
+[classification-ci-failure]: https://github.com/venim1103/neural-compiler/actions/runs/43411265117
+[record-validation-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43411652981

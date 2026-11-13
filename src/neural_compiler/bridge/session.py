@@ -78,6 +78,17 @@ def _is_eval_mode(model: PreTrainedModel) -> bool:
     return all(not module.training for module in model.modules())
 
 
+def _validate_prefix_model(
+    model: PreTrainedModel,
+    versions: tuple[tuple[int, int, int], ...] | None,
+    config: str | None,
+) -> None:
+    if versions is not None and (
+        _tensor_versions(model) != versions or model.config.to_json_string() != config
+    ):
+        raise ValueError("Model weights or configuration changed after initial prefill")
+
+
 class LiveSession:
     """Own a live cache; sampled stop/EOS tokens are pending until the next feed."""
 
@@ -111,13 +122,9 @@ class LiveSession:
         return tuple(self._tokens)
 
     def _check_prefix_model(self) -> None:
-        if self._prefix_tensor_versions is not None and (
-            _tensor_versions(self.model) != self._prefix_tensor_versions
-            or self.model.config.to_json_string() != self._prefix_config
-        ):
-            raise ValueError(
-                "Model weights or configuration changed after initial prefill"
-            )
+        _validate_prefix_model(
+            self.model, self._prefix_tensor_versions, self._prefix_config
+        )
 
     @torch.no_grad()
     def _forward(self, ids: Sequence[int]) -> None:

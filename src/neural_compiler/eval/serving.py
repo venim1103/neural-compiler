@@ -21,6 +21,7 @@ from neural_compiler.bridge.session import (
     CheckpointStore,
     DecodeResult,
     LiveSession,
+    _validate_prefix_model,
 )
 
 from .harness import (
@@ -103,6 +104,8 @@ class PrefixCachedSession:
         self._on_token_override = on_token_override
         self._session: LiveSession | None
         self._session, self.prefill_tokens = store.resume_prefix(model, prompt_ids)
+        self._prefix_tensor_versions = self._session._prefix_tensor_versions
+        self._prefix_config = self._session._prefix_config
         self._bind_sampler(self._session)
         self._last_tokens: tuple[int, ...] = self._session.tokens
         self._last_logits: torch.Tensor = self._session.logits.detach().clone()
@@ -132,6 +135,9 @@ class PrefixCachedSession:
         on_token: Callable[[int], bool] | None = None,
     ) -> DecodeResult:
         if self._session is None:
+            _validate_prefix_model(
+                self.model, self._prefix_tensor_versions, self._prefix_config
+            )
             self._session, step_prefilled = self.store.resume_prefix(
                 self.model, self._last_tokens
             )
@@ -153,6 +159,9 @@ class PrefixCachedSession:
     def inject(self, response_ids: Sequence[int]) -> None:
         if not response_ids:
             raise ValueError("Tool response must not be empty")
+        _validate_prefix_model(
+            self.model, self._prefix_tensor_versions, self._prefix_config
+        )
         base_tokens = (
             self._last_tokens if self._session is None else self._session.tokens
         )
@@ -178,6 +187,8 @@ class FullReprefillSession:
         self.model = model
         self._on_token_override = on_token_override
         self._session: LiveSession | None = LiveSession(model, prompt_ids)
+        self._prefix_tensor_versions = self._session._prefix_tensor_versions
+        self._prefix_config = self._session._prefix_config
         self._bind_sampler(self._session)
         self._tokens = list(prompt_ids)
         self._last_logits: torch.Tensor = self._session.logits.detach().clone()
@@ -201,6 +212,9 @@ class FullReprefillSession:
         on_token: Callable[[int], bool] | None = None,
     ) -> DecodeResult:
         if self._session is None:
+            _validate_prefix_model(
+                self.model, self._prefix_tensor_versions, self._prefix_config
+            )
             self._session = LiveSession(self.model, self._tokens)
             self._bind_sampler(self._session)
             self.prefill_tokens += len(self._tokens)
@@ -214,12 +228,16 @@ class FullReprefillSession:
     def inject(self, response_ids: Sequence[int]) -> None:
         if not response_ids:
             raise ValueError("Tool response must not be empty")
-        self._tokens = list(self.tokens)
-        self._tokens.extend(response_ids)
-        self._session = LiveSession(self.model, self._tokens)
-        self._bind_sampler(self._session)
-        self.prefill_tokens += len(self._tokens)
-        self._last_logits = self._session.logits.detach().clone()
+        _validate_prefix_model(
+            self.model, self._prefix_tensor_versions, self._prefix_config
+        )
+        tokens = [*self.tokens, *response_ids]
+        session = LiveSession(self.model, tokens)
+        self._bind_sampler(session)
+        self._tokens = tokens
+        self._session = session
+        self.prefill_tokens += len(tokens)
+        self._last_logits = session.logits.detach().clone()
 
 
 @dataclass(frozen=True)

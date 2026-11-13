@@ -28,10 +28,13 @@ def test_stdout_cannot_forge_success() -> None:
     assert "ValueError: regression" in result.stderr
 
 
-@pytest.mark.parametrize("prefix", [
-    "import os; os.write(1, b'partial'); ",
-    "import os; os.close(1); os.close(2); ",
-])
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "import os; os.write(1, b'partial'); ",
+        "import os; os.close(1); os.close(2); ",
+    ],
+)
 def test_deadline_covers_partial_output_and_closed_pipes(prefix: str) -> None:
     start = time.monotonic()
     result = supervise(prefix + "import time; time.sleep(10)", timeout=0.15)
@@ -135,7 +138,9 @@ def test_cli_runs_python_with_structured_failure(jail, tmp_path: Path, capsys) -
     assert "cli regression" in result["stderr"]
 
 
-def test_run_jailed_command_assembly_and_fd_plumbing(monkeypatch, tmp_path: Path) -> None:
+def test_run_jailed_command_assembly_and_fd_plumbing(
+    monkeypatch, tmp_path: Path
+) -> None:
     from contextlib import contextmanager
     from neural_compiler.bridge import execution
     from neural_compiler.bridge.cgroups import CgroupLimits
@@ -198,32 +203,37 @@ def test_run_jailed_command_assembly_and_fd_plumbing(monkeypatch, tmp_path: Path
     assert cmd_rw[seccomp_idx + 1] == "17"
 
 
-def test_supervise_classifies_bwrap_and_sigxcpu_failures() -> None:
-    bwrap_res = _supervise(
-        [
-            sys.executable,
-            "-I",
-            "-c",
-            "import sys; sys.stderr.write('bwrap: uid map failed\\n'); raise SystemExit(1)",
-        ],
-        timeout=2,
-        output_limit=1024,
-    )
-    assert bwrap_res.status == "sandbox_error"
-    assert "bwrap:" in bwrap_res.stderr
+@pytest.mark.parametrize(
+    "returncode,diagnostic,status,message",
+    [
+        (1, b"bwrap: uid map failed\n", "sandbox_error", "bwrap:"),
+        (-signal.SIGXCPU, b"", "timeout", "CPU time limit exceeded"),
+    ],
+)
+def test_supervise_classifies_bwrap_and_sigxcpu_failures(
+    monkeypatch, returncode, diagnostic, status, message
+) -> None:
+    from types import SimpleNamespace
 
-    xcpu_res = _supervise(
-        [
-            sys.executable,
-            "-I",
-            "-c",
-            "import os, signal; os.kill(os.getpid(), signal.SIGXCPU)",
-        ],
-        timeout=2,
-        output_limit=1024,
-    )
-    assert xcpu_res.status == "timeout"
-    assert "CPU time limit exceeded" in xcpu_res.stderr
+    stdout_read, stdout_write = os.pipe()
+    os.close(stdout_write)
+    stderr_read, stderr_write = os.pipe()
+    try:
+        os.write(stderr_write, diagnostic)
+    finally:
+        os.close(stderr_write)
+    with os.fdopen(stdout_read, "rb") as stdout, os.fdopen(stderr_read, "rb") as stderr:
+        process = SimpleNamespace(
+            stdout=stdout,
+            stderr=stderr,
+            returncode=returncode,
+            wait=lambda timeout=None: returncode,
+        )
+        monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: process)
+        result = _supervise(["fixture-not-executed"], timeout=2, output_limit=1024)
+    assert result.status == status
+    assert message in result.stderr
+    assert result.returncode == returncode
 
 
 def test_run_python_static_import_policy_prefilter(monkeypatch) -> None:
@@ -245,9 +255,7 @@ def test_run_python_static_import_policy_prefilter(monkeypatch) -> None:
     assert unresolved.status == "sandbox_error"
     assert "__import__" in unresolved.stderr
 
-    syntax_err = run_python(
-        "def broken(:\n", allowed_imports=CANDIDATE_MATH_MODULES
-    )
+    syntax_err = run_python("def broken(:\n", allowed_imports=CANDIDATE_MATH_MODULES)
     assert syntax_err.status == "sandbox_error"
     assert "syntax" in syntax_err.stderr.lower()
 
@@ -255,7 +263,9 @@ def test_run_python_static_import_policy_prefilter(monkeypatch) -> None:
     monkeypatch.setattr(
         execution,
         "run_jailed",
-        lambda cmd, *a, **kw: launched.append(list(cmd)) or execution.ExecutionResult("ok", "6\n"),
+        lambda cmd, *a, **kw: (
+            launched.append(list(cmd)) or execution.ExecutionResult("ok", "6\n")
+        ),
     )
     allowed = run_python(
         "import math\nprint(math.factorial(3))\n",

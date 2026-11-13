@@ -224,3 +224,37 @@ def test_full_reprefill_retains_pending_token_after_callback_abort(hybrid_model)
         adapter.inject([5, 6])
         assert adapter.tokens == (1, 2, 3, 4, 5, 6)
     torch.testing.assert_close(reprefill.logits, live.logits, atol=1e-6, rtol=1e-5)
+
+
+@pytest.mark.parametrize("changed", ["weights", "configuration"])
+def test_full_reprefill_rejects_model_drift_across_turns(hybrid_model, changed):
+    adapter = FullReprefillSession(hybrid_model, [1, 2, 3], lambda _session: 4)
+    adapter.decode_until(1, lambda _token: True)
+    boundary = adapter.tokens
+    if changed == "weights":
+        with torch.no_grad():
+            next(hybrid_model.parameters()).add_(0.1)
+    else:
+        hybrid_model.config.rope_parameters["rope_theta"] = 20000
+    with pytest.raises(ValueError, match="weights|configuration"):
+        adapter.inject([5, 6])
+    with pytest.raises(ValueError, match="weights|configuration"):
+        adapter.decode_until(1)
+    assert adapter.tokens == boundary
+
+
+def test_prefix_cache_miss_does_not_relabel_a_changed_model(hybrid_model):
+    store = CheckpointStore()
+    adapter = PrefixCachedSession(
+        hybrid_model, [1, 2, 3], store, on_token_override=lambda _session: 4
+    )
+    adapter.decode_until(1, lambda _token: True)
+    boundary = adapter.tokens
+    store.clear()
+    with torch.no_grad():
+        next(hybrid_model.parameters()).add_(0.1)
+    with pytest.raises(ValueError, match="weights|configuration"):
+        adapter.inject([5, 6])
+    with pytest.raises(ValueError, match="weights|configuration"):
+        adapter.decode_until(1)
+    assert adapter.tokens == boundary
