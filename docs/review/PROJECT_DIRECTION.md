@@ -1206,3 +1206,22 @@ both scoped format checks, whitespace and serving diagnostics passed.
 
 Next: verify target model-loader/output compatibility from local configuration
 and installed classes before any separately authorized pretrained-model run.
+
+### 2026-11-13: target loader metadata supports the existing causal interface
+
+The cached architecture label prompted an output-type compatibility hypothesis.
+Five bounded source/metadata probes disproved it: with the verified Pylance
+interpreter `/opt/venv/bin/python` and installed Transformers 5.22.1,
+`AutoModelForCausalLM` resolves the cached top-level `Qwen3_5Config` to
+`Qwen3_5ForCausalLM`, whose declared configuration is `Qwen3_5TextConfig`.
+Required `input_ids`, `past_key_values`, `use_cache` and `logits_to_keep`
+arguments exist. `Qwen3_5CausalLMOutputWithPast` inherits
+`CausalLMOutputWithPast`, so the existing output guard need not be weakened.
+
+No model was instantiated, no weights loaded, and no unchanged code gate repeated.
+Registry/signature compatibility does not prove weight loading, real 4B cache
+behavior, GPU fit, accuracy or serving latency. Actual pretrained runs, pins,
+dependencies and resource scopes remain separately gated.
+
+Next: inspect the pinned SGLang release's actual cache/API boundary hooks, rather
+than treating current documentation as version-bound checkpoint evidence.
