@@ -1072,3 +1072,36 @@ pretrained/GPU runs, dependency or host changes occurred.
 
 Next: continue the P1 resource-budget boundary prerequisites with bounded trusted
 fixtures; real cgroup enforcement still requires separately qualified host support.
+
+### 2026-11-13: jail setup consumes the execution allowance
+
+Optional cgroup/seccomp setup previously finished before the child received its
+full timeout, extending the remaining allowance passed by native compilation.
+The executor now starts accounting before setup, passes only the remaining
+allowance to child wall/CPU limits and refuses to launch when setup exhausts it.
+Owned contexts still clean up, and timeout/setup failures remain explicit.
+Synchronous host setup and cleanup are not made interruptible; this is not a
+new hard whole-host deadline or cgroup kernel-enforcement qualification.
+
+**Bounded ledger:** two synthetic control-file/clock repros failed before repair:
+a 2-second request still granted 2 seconds after 1.5 seconds of setup, and launched
+after 3 seconds of setup. Both now pass, including cleanup and the exact remaining
+0.5-second allowance. All 56 focused cgroup/execution/native controls passed.
+The first root gate passed 233 cases. One coupled real-child CPU-limit integration
+case plus one namespace probe extended the routine verification plan: after a
+synthetic 10-second setup debit under a 20-second allowance, the actual jailed
+child reported the kernel CPU limit derived from the remaining supervisor
+allowance. This read-only resource query used no busy loop, sleep or large
+allocation and is not cgroup controller qualification. The new selector passed;
+the revised root gate passed 234 cases, with 14 existing warnings and no skips.
+Ruff lint, both scoped format checks, whitespace and executor diagnostics passed. Actual jailed
+Python/C/assembly/Wasm/Unicorn controls ran; no deadlines, output caps or
+assertions were relaxed. No downloads, pretrained/GPU jobs, dependencies or
+host changes occurred.
+
+Next: inspect remaining bounded resource-limit evidence prerequisites without
+changing the shared host or accepting production policies.
+
+The EOS checkpoint's [hosted baseline][eos-repair-ci] also completed successfully.
+
+[eos-repair-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43415037944

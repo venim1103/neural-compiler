@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import math
 import os
+import time
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -109,6 +114,79 @@ def test_controls_and_private_fds_are_cleaned(controls) -> None:
     for fd in fds:
         with pytest.raises(OSError):
             os.fstat(fd)
+
+
+@pytest.mark.parametrize("setup_seconds", [1.5, 3])
+def test_cgroup_setup_consumes_the_request_deadline(
+    monkeypatch, controls, setup_seconds
+) -> None:
+    root, group, retained = controls
+    clock = [0.0]
+    request = cgroups.request_cgroup
+
+    @contextmanager
+    def delayed(limits):
+        with request(limits) as fds:
+            clock[0] = setup_seconds
+            yield fds
+
+    def supervise(command, timeout, output_limit, pass_fds=()):
+        if setup_seconds >= 2:
+            pytest.fail("Guest launched after setup exhausted the deadline")
+        assert timeout == 0.5
+        assert command[command.index(execution._LAUNCHER) + 2] == "1"
+        return execution.ExecutionResult("ok", "42\n", returncode=0)
+
+    monkeypatch.setattr(execution, "request_cgroup", delayed)
+    monkeypatch.setattr(execution.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(execution.shutil, "which", lambda _: "/usr/bin/true")
+    monkeypatch.setattr(execution, "_supervise", supervise)
+    result = run_python("print(42)", timeout=2, cgroup=CgroupLimits(root, 2048, 32))
+    assert result.status == ("ok" if setup_seconds < 2 else "timeout")
+    if result.status == "timeout":
+        assert "setup" in result.stderr.lower()
+    assert retained["cgroup.kill"] == "1"
+    assert not group.exists()
+
+
+def test_remaining_cpu_limit_reaches_the_jailed_child(monkeypatch, controls) -> None:
+    probe = run_python("print(42)")
+    if probe.status == "sandbox_error":
+        pytest.skip(f"bubblewrap namespaces unavailable: {probe.stderr}")
+    assert probe.status == "ok", probe
+    root, group, _ = controls
+    offset = [0]
+    request = cgroups.request_cgroup
+    supervise = execution._supervise
+    remaining = []
+
+    @contextmanager
+    def delayed(limits):
+        with request(limits) as fds:
+            offset[0] = 10
+            yield fds
+
+    def capture(command, timeout, output_limit, pass_fds=()):
+        remaining.append(timeout)
+        return supervise(command, timeout, output_limit, pass_fds=pass_fds)
+
+    monkeypatch.setattr(execution, "request_cgroup", delayed)
+    monkeypatch.setattr(
+        execution,
+        "time",
+        SimpleNamespace(monotonic=lambda: time.monotonic() + offset[0]),
+    )
+    monkeypatch.setattr(execution, "_supervise", capture)
+    result = run_python(
+        "import json, resource\nprint(json.dumps(resource.getrlimit(resource.RLIMIT_CPU)))",
+        timeout=20,
+        cgroup=CgroupLimits(root, 2048, 32),
+    )
+    assert result.status == "ok", result
+    assert 0 < remaining[0] <= 10
+    soft = math.ceil(remaining[0])
+    assert json.loads(result.stdout) == [soft, soft + 1]
+    assert not group.exists()
 
 
 def test_cpu_quota_is_explicit_and_written_before_join(controls) -> None:

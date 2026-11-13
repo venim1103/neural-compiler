@@ -173,12 +173,14 @@ def run_jailed(
     Guest stdout is data, never a status/control protocol. There is deliberately
     no unjailed fallback if bubblewrap or user namespaces are unavailable.
     Optional cgroups require an existing caller-delegated subtree; this function
-    never enables controllers or changes host delegation.
+    never enables controllers or changes host delegation. Synchronous setup is
+    charged to the timeout but is not itself interruptible by the supervisor.
     """
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("timeout must be a finite positive number")
     if type(output_limit) is not int or output_limit <= 0:
         raise ValueError("output_limit must be a positive integer")
+    deadline = time.monotonic() + timeout
     bwrap = shutil.which("bwrap")
     if bwrap is None:
         return ExecutionResult("sandbox_error", stderr="bubblewrap (bwrap) is required")
@@ -228,6 +230,12 @@ def run_jailed(
             if seccomp is not None
             else nullcontext(None) as filter_fd,
         ):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                result = ExecutionResult(
+                    "timeout", stderr="Jail setup exhausted the wall-clock deadline"
+                )
+                return result
             if filter_fd is not None:
                 args += ["--seccomp", str(filter_fd)]
             args += [
@@ -236,7 +244,7 @@ def run_jailed(
                 "-c",
                 _LAUNCHER,
                 str(MEMORY_BYTES),
-                str(math.ceil(timeout)),
+                str(math.ceil(remaining)),
                 *command,
             ]
             inherited = () if filter_fd is None else (filter_fd,)
@@ -252,7 +260,7 @@ def run_jailed(
                     *args,
                 ]
                 inherited += group_fds
-            result = _supervise(args, timeout, output_limit, pass_fds=inherited)
+            result = _supervise(args, remaining, output_limit, pass_fds=inherited)
             if group_fds is not None:
                 os.lseek(group_fds[1], 0, os.SEEK_SET)
                 diagnostic = os.read(group_fds[1], 4096)
