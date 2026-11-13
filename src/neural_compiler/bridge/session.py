@@ -99,6 +99,11 @@ def _validate_prefix_model(
         raise ValueError("Model weights or configuration changed after initial prefill")
 
 
+def _validate_decode_budget(max_new_tokens: int) -> None:
+    if type(max_new_tokens) is not int or max_new_tokens <= 0:
+        raise ValueError("max_new_tokens must be a positive integer")
+
+
 class LiveSession:
     """Own a live cache; sampled stop/EOS tokens are pending until the next feed."""
 
@@ -170,8 +175,7 @@ class LiveSession:
         max_new_tokens: int,
         on_token: Callable[[int], bool] | None = None,
     ) -> DecodeResult:
-        if max_new_tokens <= 0:
-            raise ValueError("max_new_tokens must be positive")
+        _validate_decode_budget(max_new_tokens)
         if not _is_eval_mode(self.model):
             raise ValueError("LiveSession requires a model in eval mode")
         self._check_prefix_model()

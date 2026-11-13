@@ -1456,3 +1456,32 @@ weights/data/GPU or shared-host changes. No unchanged code tests were rerun.
 
 Next: preserve these candidate/qualification limits and continue bounded local
 cache-boundary checks, without installing or executing the pinned engine.
+
+### 2026-11-13: reject decode budgets before touching a continuation boundary
+
+The [live decoder][decode-budget-session] checked only positivity before
+forwarding a pending stop token. Fractional budgets then failed in `range`
+after that work, while boolean budgets were treated as integers. The
+[stateless adapters][decode-budget-serving] also restored a checkpoint or
+re-prefilled the full history before rejecting even a zero budget.
+
+One shared positive-exact-integer guard now runs before those operations.
+Valid decode behavior, pending-token accounting, model-identity checks and
+existing token caps remain unchanged; invalid requests raise explicit
+`ValueError` without forwarding tokens or reconstructing a session.
+
+**Bounded ledger:** four tiny CPU failing-first cases reproduced pending-token
+forwarding for `1.5`/`True` and stateless reconstruction for zero. After the
+guard repair, all four passed; the coupled checkpoint/serving/protocol gate
+passed **67 tests** in 5.50 s. The required root gate passed **257 tests** in
+14.37 s, with 14 existing Torch JIT warnings and no skips; root Ruff,
+four-file format checks, whitespace and both owning-file Pylance diagnostics
+passed. No dependencies, pretrained/data/GPU jobs or host changes were made.
+Hosted CI for the preceding `52dbc5e` push succeeded (run `43432446483`);
+that workflow status is not additional containment qualification.
+
+[decode-budget-session]: ../../src/neural_compiler/bridge/session.py
+[decode-budget-serving]: ../../src/neural_compiler/eval/serving.py
+
+Next: checkpoint and synchronize the verified local repair, then continue the
+remaining bounded offline evaluation/cache/containment prerequisites.

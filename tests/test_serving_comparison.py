@@ -20,7 +20,7 @@ from neural_compiler.eval import (
     summarize_serving,
 )
 from neural_compiler.eval.harness import CaseResult
-from neural_compiler.bridge.session import CheckpointStore
+from neural_compiler.bridge.session import CheckpointStore, LiveSession
 
 
 def _call_text(code: str) -> str:
@@ -28,6 +28,42 @@ def _call_text(code: str) -> str:
         "<tool_call>\n<function=run>\n<parameter=code>\n"
         f"{code}\n</parameter>\n</function>\n</tool_call>"
     )
+
+
+@pytest.mark.parametrize("mode", ["prefix", "full"])
+def test_invalid_decode_budget_does_not_reconstruct_session(
+    hybrid_model, monkeypatch, mode
+):
+    if mode == "prefix":
+        store = CheckpointStore(max_total_bytes=1024 * 1024)
+        session = PrefixCachedSession(
+            hybrid_model, [1, 2, 3], store, on_token_override=lambda _: 4
+        )
+    else:
+        session = FullReprefillSession(
+            hybrid_model, [1, 2, 3], on_token_override=lambda _: 4
+        )
+    session.decode_until(1, lambda _: True)
+    assert session._session is None
+    tokens = session.tokens
+    prefill_tokens = session.prefill_tokens
+    if mode == "prefix":
+        monkeypatch.setattr(
+            store,
+            "resume_prefix",
+            lambda *a, **kw: pytest.fail("Invalid budget restored a checkpoint"),
+        )
+    else:
+        monkeypatch.setattr(
+            LiveSession,
+            "_forward",
+            lambda *a, **kw: pytest.fail("Invalid budget re-prefilled the model"),
+        )
+    with pytest.raises(ValueError, match="positive integer"):
+        session.decode_until(0)
+    assert session._session is None
+    assert session.tokens == tokens
+    assert session.prefill_tokens == prefill_tokens
 
 
 def test_serving_modes_match_logits_and_reduce_prefill_tokens(tokenizer, hybrid_model):
