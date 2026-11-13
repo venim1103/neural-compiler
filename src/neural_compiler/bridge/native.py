@@ -34,24 +34,32 @@ ASM_HARNESS = (
 )
 
 
+def _request_deadline(timeout: float, output_limit: int) -> float:
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("timeout must be a finite positive number")
+    if output_limit <= 0:
+        raise ValueError("output_limit must be positive")
+    return time.monotonic() + timeout
+
+
 def _compile_and_run(
     compile_command: list[str],
     workdir: Path,
-    timeout: float,
+    deadline: float,
     *,
     output_limit: int = MAX_OUTPUT_BYTES,
     seccomp: SeccompPolicy | None = None,
     cgroup: CgroupLimits | None = None,
 ) -> ExecutionResult:
-    if not math.isfinite(timeout) or timeout <= 0:
-        raise ValueError("timeout must be a finite positive number")
-    if output_limit <= 0:
-        raise ValueError("output_limit must be positive")
-    deadline = time.monotonic() + timeout
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return ExecutionResult(
+            "timeout", stderr="Native setup exhausted the wall-clock deadline"
+        )
     compiled = run_jailed(
         compile_command,
         workdir,
-        timeout,
+        remaining,
         writable=True,
         output_limit=output_limit,
         cgroup=cgroup,
@@ -121,13 +129,14 @@ def run_c(
     if compiler not in _C_COMPILER_COMMANDS:
         raise ValueError(f"Unsupported C compiler: {compiler!r}")
     validate_code(code)
+    deadline = _request_deadline(timeout, output_limit)
     with tempfile.TemporaryDirectory(prefix="neural-compiler-c-") as directory:
         work = Path(directory)
         (work / "prog.c").write_text(code, encoding="utf-8")
         return _compile_and_run(
             list(_C_COMPILER_COMMANDS[compiler]),
             work,
-            timeout,
+            deadline,
             output_limit=output_limit,
             seccomp=seccomp,
             cgroup=cgroup,
@@ -144,6 +153,7 @@ def run_asm(
 ) -> ExecutionResult:
     """Assemble and link a `long long solve(void)` routine inside the jail."""
     validate_code(code)
+    deadline = _request_deadline(timeout, output_limit)
     with tempfile.TemporaryDirectory(prefix="neural-compiler-asm-") as directory:
         work = Path(directory)
         (work / "solve.s").write_text(code + "\n", encoding="utf-8")
@@ -158,7 +168,7 @@ def run_asm(
                 "/work/solve.s",
             ],
             work,
-            timeout,
+            deadline,
             output_limit=output_limit,
             seccomp=seccomp,
             cgroup=cgroup,
@@ -178,6 +188,7 @@ def _run_jailed_runtime(
     validate_code(code)
     if type(budget) is not int or budget <= 0:
         raise ValueError("execution budget must be a positive integer")
+    deadline = _request_deadline(timeout, output_limit)
     runtime_source = Path(runtime.__file__).read_text(encoding="utf-8")
     with tempfile.TemporaryDirectory(
         prefix=f"neural-compiler-{language}-"
@@ -185,6 +196,11 @@ def _run_jailed_runtime(
         work = Path(directory)
         (work / "runtime.py").write_text(runtime_source, encoding="utf-8")
         (work / "program").write_text(code, encoding="utf-8")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return ExecutionResult(
+                "timeout", stderr="Native setup exhausted the wall-clock deadline"
+            )
         result = run_jailed(
             [
                 sys.executable,
@@ -195,7 +211,7 @@ def _run_jailed_runtime(
                 str(budget),
             ],
             work,
-            timeout,
+            remaining,
             writable=False,
             output_limit=output_limit,
             runtime_prefix=Path(sys.prefix),

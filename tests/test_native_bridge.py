@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -122,18 +123,21 @@ def test_run_c_maps_compile_failure_and_deadline_exhaustion(monkeypatch) -> None
     assert err.status == "compile_error"
     assert "syntax error" in err.stderr
 
-    clock = iter([10.0, 25.0])
-    monkeypatch.setattr(native.time, "monotonic", lambda: next(clock))
+    clock = iter([10.0, 10.0, 25.0])
+    monkeypatch.setattr(native, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+    compiled = []
 
     def slow_compile(command, workdir, timeout=20, **kwargs):
         if kwargs.get("writable"):
+            compiled.append(command)
             return ExecutionResult("ok", returncode=0)
         pytest.fail("Binary must not launch after compilation exhausts deadline")
 
     monkeypatch.setattr(native, "run_jailed", slow_compile)
     timed_out = run_c("int main(void){return 0;}", timeout=5)
     assert timed_out.status == "timeout"
-    assert "deadline" in timed_out.stderr.lower()
+    assert "Compilation exhausted" in timed_out.stderr
+    assert len(compiled) == 1
 
 
 def test_run_c_validates_inputs_before_jail(monkeypatch) -> None:
@@ -150,6 +154,53 @@ def test_run_c_validates_inputs_before_jail(monkeypatch) -> None:
         run_c("int main(void){return 0;}", output_limit=0)
     with pytest.raises(ValueError, match="Unsupported C compiler"):
         run_c("int main(void){return 0;}", compiler="clang")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "execute,code,write_delay,expected_timeouts",
+    [
+        (run_c, "int main(void){return 0;}", 11, []),
+        (run_asm, "mov eax, 42\nret", 1, [8, 6]),
+        (
+            run_wat,
+            '(module (func (export "solve") (result i64) (i64.const 42)))',
+            1,
+            [8],
+        ),
+        (run_hex, "b8 2a 00 00 00 c3", 6, []),
+    ],
+    ids=["c", "asm", "wat", "hex"],
+)
+def test_native_preparation_consumes_shared_deadline(
+    monkeypatch, execute, code, write_delay, expected_timeouts
+):
+    from neural_compiler.bridge import native
+
+    now = 0
+    received = []
+    write_text = Path.write_text
+
+    def delayed_write(path, *args, **kwargs):
+        nonlocal now
+        result = write_text(path, *args, **kwargs)
+        now += write_delay
+        return result
+
+    def fake_run_jailed(command, workdir, timeout=20, **kwargs):
+        nonlocal now
+        received.append(timeout)
+        if kwargs.get("writable"):
+            now += 2
+        return ExecutionResult("ok", stdout="42\n", returncode=0)
+
+    monkeypatch.setattr(native, "time", SimpleNamespace(monotonic=lambda: now))
+    monkeypatch.setattr(Path, "write_text", delayed_write)
+    monkeypatch.setattr(native, "run_jailed", fake_run_jailed)
+    result = execute(code, timeout=10)
+    assert received == expected_timeouts
+    assert result.status == ("ok" if expected_timeouts else "timeout")
+    if not expected_timeouts:
+        assert "setup" in result.stderr.lower()
 
 
 def test_run_c_supports_tcc_fast_path_inside_jail(monkeypatch) -> None:

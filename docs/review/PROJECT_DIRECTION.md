@@ -1510,3 +1510,44 @@ GPU jobs or shared-host changes occurred; no temporary artifacts remain.
 
 Next: retain the valid low-cap overflow controls, checkpoint the repair and
 continue bounded offline evaluation/containment prerequisites.
+
+### 2026-11-13: native preparation shares the execution wall allowance
+
+The [native bridge][native-preparation-source] started C/assembly deadlines
+after writing source files, and gave Wasm/hex workers a fresh allowance after
+copying their trusted runtime and source. Deterministic fixtures showed these
+outer setup stages were not charged even though inner jail setup already was.
+
+A shared validated deadline now starts before temporary-directory/runtime
+preparation. Compilation and worker launch receive only the remaining time;
+expired setup returns `timeout` without launching a child. Compile/run
+classification, writable compile/read-only execution mounts, seccomp/cgroup
+forwarding, source/output bounds and backend work limits remain unchanged.
+Setup I/O and cleanup are still synchronous, not interruptible hard host
+deadlines; this repair is not production containment qualification.
+
+**Bounded ledger:** four failing-first controls covered C setup expiry,
+assembly's remaining compile/run allowances, Wasm worker allowance and hex
+setup expiry. After repair, those plus the existing compilation-expiry case
+passed. The latter now explicitly confirms compilation occurred, using three
+isolated clock observations. One formatting failure concerned only the new
+clock fixture's line layout; scoped normalization repaired it.
+Native/execution/cgroup controls passed **67 tests** in 1.75 s; root validation
+passed **263 tests** in 13.12 s, with 14 existing warnings and no skips.
+Root lint/whitespace, two-file formatting, native diagnostics and both resolved
+private-helper callers' signature compatibility passed. Existing jailed
+Python/C/assembly/Wasm/Unicorn and trusted seccomp controls ran; writable-cgroup
+kernel enforcement remains unqualified. No downloads, dependencies, model/
+data/GPU jobs, services or host changes occurred; temporary workdirs were cleaned.
+
+The preceding serving checkpoints' hosted CI succeeded: [decode admission
+`5b2a085`][decode-admission-ci] and [snapshot admission
+`422d184`][snapshot-admission-ci]. This is workflow-status evidence, not a new
+kernel/engine qualification result.
+
+[native-preparation-source]: ../../src/neural_compiler/bridge/native.py
+[decode-admission-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43436029043
+[snapshot-admission-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43436974498
+
+Next: checkpoint the verified deadline repair, then continue bounded offline
+prerequisites while retaining the separate real-engine and containment gates.
