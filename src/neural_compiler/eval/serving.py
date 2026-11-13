@@ -22,6 +22,7 @@ from neural_compiler.bridge.session import (
     CheckpointStore,
     DecodeResult,
     LiveSession,
+    _validate_checkpoint_budget,
     _validate_decode_budget,
     _validate_prefix_model,
 )
@@ -103,6 +104,7 @@ class PrefixCachedSession:
             if max_checkpoint_bytes is None
             else max_checkpoint_bytes
         )
+        _validate_checkpoint_budget(self.max_checkpoint_bytes)
         self._on_token_override = on_token_override
         self._session: LiveSession | None
         self._session, self.prefill_tokens = store.resume_prefix(model, prompt_ids)

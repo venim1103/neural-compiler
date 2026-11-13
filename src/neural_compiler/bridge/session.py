@@ -104,6 +104,11 @@ def _validate_decode_budget(max_new_tokens: int) -> None:
         raise ValueError("max_new_tokens must be a positive integer")
 
 
+def _validate_checkpoint_budget(max_cache_bytes: int) -> None:
+    if type(max_cache_bytes) is not int or max_cache_bytes <= 0:
+        raise ValueError("max_cache_bytes must be a positive integer")
+
+
 class LiveSession:
     """Own a live cache; sampled stop/EOS tokens are pending until the next feed."""
 
@@ -208,8 +213,7 @@ class LiveSession:
         self, max_cache_bytes: int = DEFAULT_CHECKPOINT_BYTES
     ) -> SessionCheckpoint:
         """Capture this exact boundary without flushing or replaying pending tokens."""
-        if type(max_cache_bytes) is not int or max_cache_bytes <= 0:
-            raise ValueError("max_cache_bytes must be a positive integer")
+        _validate_checkpoint_budget(max_cache_bytes)
         if self.cache is None:
             raise RuntimeError("Cannot checkpoint an absent cache")
         if not _is_eval_mode(self.model):

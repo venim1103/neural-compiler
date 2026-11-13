@@ -1485,3 +1485,28 @@ that workflow status is not additional containment qualification.
 
 Next: checkpoint and synchronize the verified local repair, then continue the
 remaining bounded offline evaluation/cache/containment prerequisites.
+
+### 2026-11-13: snapshot overrides are admitted before prefix-cache work
+
+The snapshot and store primitives already rejected non-integer/nonpositive
+limits. However, the [prefix adapter][decode-budget-serving] checked its
+selected snapshot override only on a later capture: cold construction did
+prefill work first, while warm exact-prefix hits skipped constructor capture
+and could accept an invalid override indefinitely.
+
+The adapter now reuses the snapshot primitive's extracted private validator
+before prefix lookup. Existing `max_cache_bytes` diagnostics, default bounds,
+valid cache hits and genuine `CheckpointBudgetError` overflow classification
+remain unchanged; no new snapshot or store cap was introduced.
+
+**Bounded ledger:** cold-zero and warm-NaN CPU cases initially both reached
+prefix resumption; after the guard repair both passed in 0.06 s. One formatting
+failure identified only the new constructor call's line layout; scoped Ruff
+normalization repaired it. Coupled checkpoint/serving controls passed **48
+tests** in 3.74 s; the root gate passed **259 tests** in 15.22 s with 14 existing
+warnings and no skips. Root lint/whitespace, three-file format checks and both
+source Pylance diagnostics passed. No dependencies, model studies, dataset,
+GPU jobs or shared-host changes occurred; no temporary artifacts remain.
+
+Next: retain the valid low-cap overflow controls, checkpoint the repair and
+continue bounded offline evaluation/containment prerequisites.

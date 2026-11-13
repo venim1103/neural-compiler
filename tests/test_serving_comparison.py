@@ -66,6 +66,25 @@ def test_invalid_decode_budget_does_not_reconstruct_session(
     assert session.prefill_tokens == prefill_tokens
 
 
+@pytest.mark.parametrize("warm,budget", [(False, 0), (True, float("nan"))])
+def test_invalid_snapshot_override_is_rejected_before_prefix_lookup(
+    hybrid_model, monkeypatch, warm, budget
+):
+    store = CheckpointStore(max_total_bytes=1024 * 1024)
+    if warm:
+        store.put(LiveSession(hybrid_model, [1, 2, 3]).checkpoint())
+    stored_bytes = store.total_bytes
+    monkeypatch.setattr(
+        store,
+        "resume_prefix",
+        lambda *a, **kw: pytest.fail("Invalid snapshot limit resumed a prefix"),
+    )
+    with pytest.raises(ValueError, match="max_cache_bytes must be a positive integer"):
+        PrefixCachedSession(hybrid_model, [1, 2, 3], store, max_checkpoint_bytes=budget)
+    assert store.total_bytes == stored_bytes
+    assert store.hits == store.misses == 0
+
+
 def test_serving_modes_match_logits_and_reduce_prefill_tokens(tokenizer, hybrid_model):
     task = Task(
         "two-step-calc",
