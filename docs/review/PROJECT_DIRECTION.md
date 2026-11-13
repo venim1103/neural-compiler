@@ -1380,3 +1380,42 @@ inspected.
 Next: finish bounded inspection of the pinned engine's remaining declaration;
 do not infer exact token-boundary checkpoint hooks from a truncated page or
 install an incompatible engine without a separately scoped runtime directive.
+
+### 2026-11-13: pinned engine sessions are an integration candidate, not a cache proof
+
+The complete concrete `Engine` declaration exposes `open_session`/
+`close_session` in addition to generation and memory-release/resume operations.
+Its `open_session` documentation describes `streaming=True` as a low-overhead,
+append-only conversation path; `capacity_of_str_len` is documented as string
+capacity, not a measured token/tensor memory limit. This is a concrete candidate
+for future multi-turn integration, not proof that host iterator backpressure
+pauses decoding or that native call-boundary Gated DeltaNet state is preserved.
+
+[Pinned request definitions][sglang-session-requests] include `session_id`,
+`session_params` and token `input_ids`; `SessionParams` contains `id`, `rid`,
+`offset`, `replace` and `drop_previous_output`. Do not apply those rewind/replace
+controls to hybrid state without exact-boundary qualification. The concrete
+declaration defines no dedicated token pause/inject/checkpoint method, but it
+inherits mixins and exposes `collective_rpc`; this is not an absence claim about
+inherited, scheduler or private interfaces. Memory resume remains a different
+operation from demonstrated decode continuation.
+
+**Bounded ledger:** three capped 20,000-character source pages still ended within
+the 86,357-byte/2,097-line engine file. One necessary parse-only recovery read
+capped the body at 128 KiB and metadata output at 20,000 characters, then inspected
+the complete concrete method inventory without importing/executing source.
+One directly referenced request-definition read (111,191 bytes, same caps)
+established the fields above. Five requests succeeded; no partial oversized body
+was accepted. Source was not checked out or installed, and no plugins, subprocess
+launchers, weights, data or model/host jobs were run. No unchanged code tests were
+repeated for these documentation facts.
+
+Exact stop-token inclusion, pending-token placement, multi-call hybrid logits,
+session cache retention/precision, resource accounting and fit remain runtime
+qualification gates under a separate dependency/model directive. Keep the
+existing CPU fixture evidence and compressed checkpoint estimates distinct.
+
+[sglang-session-requests]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/managers/io_struct.py
+
+Next: inspect the actual session implementation's append-only state ownership,
+without executing the engine or turning parameter names into correctness evidence.
