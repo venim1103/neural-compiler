@@ -1136,3 +1136,20 @@ before advancing other matched-family reporting prerequisites.
 The setup-deadline checkpoint's [hosted baseline][setup-deadline-ci] passed.
 
 [setup-deadline-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43416605746
+
+### 2026-11-13: invalid final-answer formats cannot count as correct
+
+Caller-supplied checkers can distinguish a semantically correct value from valid
+final-answer formatting. The harness previously prioritized `correct=True` over
+`valid=False`, counting invalid output as success. It now checks validity first
+and retains the supplied diagnostic. Built-in checker behavior, outcome labels,
+metrics and generation accounting are unchanged.
+
+**Bounded ledger:** one tiny scripted CPU repro failed before repair; all 66
+evaluation controls passed afterward. Root gate: 238 passed, 14 existing warnings,
+no skips; Ruff lint, both scoped format checks, whitespace and harness diagnostics
+passed. No accepted labels/data, pretrained/GPU runs, downloads, dependencies or
+host changes occurred.
+
+Next: recover the cached target configuration and owning hybrid-state shapes for
+a bounded offline checkpoint-budget estimate, not a model run or fit claim.

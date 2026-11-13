@@ -20,6 +20,7 @@ from neural_compiler.eval.harness import (
     Budgets,
     CallRecord,
     CaseResult,
+    CheckResult,
     EvaluationHarness,
     IntegerChecker,
     IntegerSequenceChecker,
@@ -76,6 +77,26 @@ def test_checker_retains_valid_wrong_large_integer_answer():
     checked = IntegerChecker(10**4499)("Final answer: " + "2" + "0" * 4499)
     assert checked.valid and not checked.correct
     assert checked.diagnostic
+
+
+def test_invalid_format_is_not_scored_as_correct(tokenizer, hybrid_model, monkeypatch):
+    diagnostic = "Correct value, but invalid final-answer format"
+    task = Task(
+        "invalid-format",
+        "unit-checker",
+        "Compute six times seven.",
+        lambda answer: CheckResult(True, False, diagnostic),
+    )
+    runner = harness_for(
+        tokenizer,
+        hybrid_model,
+        monkeypatch,
+        "Final answer: 42 trailing text<|im_end|>",
+    )
+    result = runner.run(task, "no_tool")
+    assert result.outcome == "invalid_answer"
+    assert result.diagnostic == diagnostic
+    assert result.generated_tokens > 0
 
 
 def test_checker_handles_large_mixed_decimal_blocks():

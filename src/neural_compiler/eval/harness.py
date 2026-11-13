@@ -61,6 +61,8 @@ def _parse_decimal_int(raw: str) -> int:
 
 @dataclass(frozen=True)
 class CheckResult:
+    """Semantic correctness and final-answer-format validity."""
+
     correct: bool
     valid: bool
     diagnostic: str
@@ -393,9 +395,9 @@ class EvaluationHarness:
                         )
                     checked = task.checker(answer)
                     outcome = (
-                        "correct"
-                        if checked.correct
-                        else ("wrong_answer" if checked.valid else "invalid_answer")
+                        "invalid_answer"
+                        if not checked.valid
+                        else ("correct" if checked.correct else "wrong_answer")
                     )
                     diagnostic = checked.diagnostic
                     break
