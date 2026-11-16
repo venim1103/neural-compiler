@@ -347,7 +347,7 @@ def run_serving_comparison(
                     else last_session.tokens,
                     final_logits=None
                     if last_session is None
-                    else last_session.logits.detach().cpu(),
+                    else last_session.logits.detach().to("cpu", copy=True),
                     prefill_tokens=len(failed_prompt)
                     if last_session is None
                     else last_session.prefill_tokens,

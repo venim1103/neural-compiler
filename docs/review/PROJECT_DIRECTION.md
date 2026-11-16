@@ -2349,3 +2349,27 @@ Next: test ownership of captured serving logits. The CPU
 `detach().cpu()` result can alias a live sampler session's tensor; a retained
 mutable session could change earlier comparison evidence after capture.
 Copy diagnostic output rather than restricting the sampler interface.
+
+### 2026-11-16: capture independent serving logit evidence
+
+Serving comparison now captures a detached CPU copy of final logits. The
+previous `detach().cpu()` capture shared storage on CPU, so a retained mutable
+sampler session could alter earlier evidence, or editing evidence could alter
+the session. The copy preserves shape, dtype and boundary semantics without
+restricting sampler access or changing execution/cost definitions.
+
+**Bounded ledger:** one three-mode CPU fixture reproduced the alias (0.29 s):
+editing a retained session changed all 262 captured elements by one. After the
+repair, bidirectional source/evidence independence passed with exact comparisons
+(0.19 s), with no executor invocation. Coupled checkpoint/serving:
+**69 passed** (5.35 s); root: **327 passed** (18.95 s). Root Ruff, two-file format
+and whitespace passed; owning-source diagnostics empty. Fourteen existing Torch
+warnings, no skips; existing jailed native/trusted controls ran. One failing-first,
+one focused, one coupled and one root attempt were spent. Fixtures cleaned
+normally; no model/data/GPU, dependency, download, service or host action occurred.
+The GPU transfer/copy path was not qualified by these CPU fixtures.
+
+Next: make the captured logit-prefix boundary explicit in comparison results.
+`final_tokens` includes a pending stop/EOS sample, while captured logits can
+still belong to the prefix before it. Preserve that convention, report the
+observed prefix length separately, and leave legacy/unobserved records unknown.

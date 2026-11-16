@@ -88,6 +88,41 @@ def test_invalid_snapshot_override_is_rejected_before_prefix_lookup(
     assert store.hits == store.misses == 0
 
 
+def test_captured_logits_are_independent_of_mutable_sampler_sessions(
+    tokenizer, hybrid_model
+):
+    captured = {}
+
+    def sampler_factory(task, mode):
+        scripted = iter(
+            tokenizer.encode("Final answer: 42<|im_end|>", add_special_tokens=False)
+        )
+
+        def sample(session):
+            captured[mode] = session
+            return next(scripted)
+
+        return sample
+
+    rows = run_serving_comparison(
+        [Task("logit-ownership", "unit", "Compute.", IntegerChecker(42))],
+        tokenizer,
+        hybrid_model,
+        lambda: None,
+        executor=lambda *args, **kwargs: pytest.fail("Must not execute"),
+        on_token_factory=sampler_factory,
+    )
+    for row in rows:
+        assert row.case.outcome == "correct" and row.final_logits is not None
+        expected = row.final_logits.clone()
+        source = captured[row.mode]
+        source.logits.add_(1)
+        torch.testing.assert_close(row.final_logits, expected, atol=0, rtol=0)
+        source_after = source.logits.clone()
+        row.final_logits.zero_()
+        torch.testing.assert_close(source.logits, source_after, atol=0, rtol=0)
+
+
 def test_serving_modes_match_logits_and_reduce_prefill_tokens(tokenizer, hybrid_model):
     task = Task(
         "two-step-calc",
