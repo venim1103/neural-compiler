@@ -420,8 +420,10 @@ class EvaluationHarness:
                 add_generation_prompt=True,
                 enable_thinking=False,
             )
-            if not isinstance(prompt, list) or not all(
-                type(token) is int for token in prompt
+            if (
+                not isinstance(prompt, list)
+                or not prompt
+                or not all(type(token) is int for token in prompt)
             ):
                 raise ProtocolError("Chat template must return one token sequence")
             prompt_count = len(prompt)

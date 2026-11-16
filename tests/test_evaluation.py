@@ -355,7 +355,7 @@ def test_prompt_limit_prevents_model_prefill(tokenizer, monkeypatch):
     assert result.prompt_tokens == len(rendered[0]) > runner.budgets.prompt_tokens
 
 
-@pytest.mark.parametrize("prompt", ["bad", [True], [1.5]])
+@pytest.mark.parametrize("prompt", ["bad", [True], [1.5], []])
 def test_invalid_template_does_not_impute_prompt_tokens(tokenizer, monkeypatch, prompt):
     monkeypatch.setattr(
         tokenizer, "apply_chat_template", lambda *args, **kwargs: prompt

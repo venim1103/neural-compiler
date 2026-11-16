@@ -13,6 +13,15 @@ This document answers **what the best approach is**. It draws on:
 
 The second-round whitepaper review is in [WHITEPAPER_REVIEW_ROUND2.md](WHITEPAPER_REVIEW_ROUND2.md).
 
+**Reading map:** [architecture][architecture-map] and [roadmap][roadmap-map]
+are accepted targets; [implementation audit][audit-map] and the dated updates
+below distinguish implemented, tested and still-gated work. E1-E3 remain
+historical prototype evidence, not renewed model-study authority.
+
+[architecture-map]: #4-recommended-architecture
+[roadmap-map]: #6-roadmap-with-gono-go-gates
+[audit-map]: #implementation-audit-2026-11-12
+
 ---
 
 ## 0. Decision in one paragraph
@@ -2557,3 +2566,45 @@ download, service or host change occurred.
 Next: reassess the held-out-family, serving and containment queues against
 owning code/tests and current resources, selecting another compatible offline
 prerequisite rather than treating a green checkpoint as completion.
+
+### 2026-11-16: reject empty templates and reassess remaining gates
+
+Template admission also rejects empty ID lists before committing a prompt
+observation or calling the session factory. This matches native prefill's
+nonempty-sequence contract, retaining the existing protocol-error diagnostic.
+
+**Bounded ledger:** the added empty-list case reached the factory spy; three
+existing malformed controls passed (0.13 s). All four passed after repair
+(0.04 s), with no model/guest execution. One scoped formatter application
+wrapped the admission guard. Coupled evaluation/serving: **164 passed**
+(11.92 s); root: **359 passed** (16.74 s). Root Ruff, two-file format and
+whitespace passed; owning-source diagnostics empty. Fourteen existing Torch
+warnings, no skips; existing jailed native/trusted controls ran. One failing-first,
+focused, coupled and root attempt spent; fixtures cleaned normally. No
+pretrained-model/data/GPU study, dependency, download, service or host change.
+
+**Queue reassessment:** bounded reads of family generators, exact checkers and
+reporting, three serving adapters and their multi-call controls, and jailed
+runtime/cgroup/policy code and controls confirmed the compatible offline
+prerequisites remain implemented. No additional concrete source repair was
+identified after empty-template admission. Next milestone actions need:
+
+- **Held-out evaluation:** accepted family/cohort/split inputs and a fresh exact
+  pretrained-run/trajectory scope. Deterministic synthetic generators and matched
+  uncertainty/paired reporting exist; those fixtures are not accepted task data.
+- **Serving:** separately scoped engine dependencies/runtime and kernel/model
+  qualification. Current `/opt/venv` is Python 3.12.3; neither SGLang nor vLLM
+  is available. FLA is present, but CPU-reference fixtures do not qualify its
+  accelerator kernels. CPU snapshot/LRU/three-strategy adapters already exist.
+- **Containment/multi-tier:** writable predelegated cgroup-v2 controllers and
+  accepted production syscall/import policies for qualification. Current
+  `/sys/fs/cgroup` is read-only, advertises `cpu memory pids`, and has empty
+  subtree control. Five jailed tier dispatchers and trusted/synthetic controls
+  exist, without production qualification or an unjailed fallback.
+
+Disk inspection found 362.85 GiB free, not download authority. No privileges,
+controllers, credentials, dependencies or services were changed. The short
+reading map above exposes decisions versus implementation evidence without
+rewriting historical reviews. Latest actual user intent remains autonomous
+continuation, not the historical WIP pause; protected prerequisites require a
+new directive rather than fabricated data, qualifications or routine reruns.
