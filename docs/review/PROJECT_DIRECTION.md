@@ -2191,3 +2191,40 @@ Next: retain the already-counted prompt tokens in case/report diagnostics.
 Different executor declarations change input length, but the current report
 only exposes generated/injected tokens. Preserve that existing total definition
 and report observed prompt size separately, with explicit missing coverage.
+
+### 2026-11-16: retain observed prompt size separately from generated tokens
+
+`CaseResult.prompt_tokens` now retains the valid tokenized prompt size already
+used by admission checks, including prompts rejected before model prefill.
+Legacy records and invalid template outputs remain explicitly unmeasured
+(`None`). This is requested input size, not a claim that rejected tokens were
+forwarded. Counts must be exact nonnegative integers.
+
+Summaries add the sum of observed prompt tokens and `prompt_token_samples`;
+serving mode/family summaries inherit those diagnostics. The existing
+`total_tokens` definition remains generated plus injected tokens, and primary
+cost/accuracy/uncertainty formulas and budgets are unchanged. The C declaration
+fixture checks the exact initial session-token count rather than a text-length
+proxy.
+
+**Bounded ledger:** the existing rejected-prompt case exposed the missing field
+(0.28 s) without model prefill. Five new metadata/coverage cases and two existing
+controls passed (1.50 s). Coupled evaluation/serving/checkpoints:
+**154 passed** (74.68 s, within the 120-second plan); no cause was inferred
+for the increased elapsed time. Root: **308 passed** (38.12 s), root Ruff,
+three-file format and whitespace passed; owning-source diagnostics empty.
+Fourteen existing Torch warnings, no skips. Existing jailed native/trusted
+controls ran; the C replay fixture used nine supervised invocations across
+the three gates, not refunded from earlier scopes. Fixtures cleaned normally.
+No model/data/GPU, dependencies/downloads, service or host action occurred.
+
+The declaration checkpoint's [hosted CI][executor-description-ci] succeeded
+at `d09d103`; the prior [fixture alignment CI][harmonic-alignment-ci] also
+succeeded at `a9bf176`. These statuses do not certify kernel/containment coverage.
+
+Next: validate sampled IDs before they enter live history/pending state.
+Currently a callback stop can return a fractional/boolean sampler ID before
+the forward-time ID guard runs, leaving a malformed pending token.
+
+[executor-description-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43856600039
+[harmonic-alignment-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43852744628

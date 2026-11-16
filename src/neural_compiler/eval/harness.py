@@ -280,6 +280,7 @@ class CaseResult:
     generated_tokens: int
     injected_tokens: int
     calls: tuple[CallRecord, ...]
+    prompt_tokens: int | None = None
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.elapsed_seconds) or self.elapsed_seconds < 0:
@@ -292,6 +293,10 @@ class CaseResult:
             value = getattr(self, name)
             if type(value) is not int or value < 0:
                 raise ValueError(f"{name} must be a nonnegative integer")
+        if self.prompt_tokens is not None and (
+            type(self.prompt_tokens) is not int or self.prompt_tokens < 0
+        ):
+            raise ValueError("prompt_tokens must be a nonnegative integer or None")
         if self.path == "no_tool" and (self.calls or self.injected_tokens):
             raise ValueError(
                 "no_tool results must not record tool calls or injected tokens"
@@ -355,6 +360,7 @@ class EvaluationHarness:
         calls: list[CallRecord] = []
         generated = injected = 0
         prompt_count = 0
+        prompt_tokens: int | None = None
         answer = ""
         outcome: Outcome = "invalid_answer"
         diagnostic = ""
@@ -399,6 +405,7 @@ class EvaluationHarness:
             ):
                 raise ProtocolError("Chat template must return one token sequence")
             prompt_count = len(prompt)
+            prompt_tokens = prompt_count
             if prompt_count > min(
                 self.budgets.prompt_tokens, self.budgets.context_tokens
             ):
@@ -509,6 +516,7 @@ class EvaluationHarness:
             generated,
             injected,
             tuple(calls),
+            prompt_tokens=prompt_tokens,
         )
 
 
@@ -576,6 +584,9 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, object]:
     elapsed = sum(elapsed_list)
     generated_tokens = sum(result.generated_tokens for result in results)
     injected_tokens = sum(result.injected_tokens for result in results)
+    prompt_list = [
+        result.prompt_tokens for result in results if result.prompt_tokens is not None
+    ]
     tool_calls = sum(len(result.calls) for result in results)
     exec_list = [call.execution_seconds for result in results for call in result.calls]
     execution_seconds = sum(exec_list)
@@ -618,6 +629,8 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, object]:
         "ratio_status": "defined" if correct else "no_correct_answers",
         "generated_tokens": generated_tokens,
         "injected_tokens": injected_tokens,
+        "prompt_tokens": sum(prompt_list),
+        "prompt_token_samples": len(prompt_list),
         "total_tokens": generated_tokens + injected_tokens,
         "tool_calls": tool_calls,
         "outcomes": outcomes,

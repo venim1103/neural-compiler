@@ -208,7 +208,16 @@ def test_total_token_budget_does_not_reset_after_a_tool_call(
     assert result.generated_tokens == limit and len(result.calls) == 1
 
 
-def test_prompt_limit_prevents_model_prefill(tokenizer):
+def test_prompt_limit_prevents_model_prefill(tokenizer, monkeypatch):
+    rendered = []
+    original_template = tokenizer.apply_chat_template
+
+    def render(*args, **kwargs):
+        prompt = original_template(*args, **kwargs)
+        rendered.append(prompt)
+        return prompt
+
+    monkeypatch.setattr(tokenizer, "apply_chat_template", render)
     runner = EvaluationHarness(
         tokenizer,
         lambda ids: pytest.fail("Model must not run"),
@@ -219,6 +228,63 @@ def test_prompt_limit_prevents_model_prefill(tokenizer):
         Task("prompt", "unit", "Compute.", IntegerChecker(42)), "no_tool"
     )
     assert result.outcome == "budget_exhausted" and result.generated_tokens == 0
+    assert len(rendered) == 1
+    assert result.prompt_tokens == len(rendered[0]) > runner.budgets.prompt_tokens
+
+
+def test_invalid_template_does_not_impute_prompt_tokens(tokenizer, monkeypatch):
+    monkeypatch.setattr(tokenizer, "apply_chat_template", lambda *args, **kwargs: "bad")
+    runner = EvaluationHarness(
+        tokenizer,
+        lambda ids: pytest.fail("Must not prefill"),
+        lambda: None,
+    )
+    result = runner.run(
+        Task("bad-template", "unit", "Compute.", IntegerChecker(42)), "no_tool"
+    )
+    assert result.outcome == "protocol_error" and result.prompt_tokens is None
+    assert summarize([result])["prompt_token_samples"] == 0
+
+
+def test_prompt_summary_keeps_observations_separate_from_generated_totals():
+    first = CaseResult(
+        "first",
+        "unit",
+        "no_tool",
+        "wrong_answer",
+        "",
+        "Final answer: 0",
+        1,
+        3,
+        0,
+        (),
+        prompt_tokens=7,
+    )
+    second = replace(first, case_id="second", generated_tokens=5, prompt_tokens=11)
+    legacy = replace(first, case_id="legacy", generated_tokens=4, prompt_tokens=None)
+    summary = summarize([first, second, legacy])
+    assert summary["prompt_tokens"] == 18
+    assert summary["prompt_token_samples"] == 2
+    assert summary["total_tokens"] == summary["generated_tokens"] == 12
+    assert summarize([legacy])["prompt_token_samples"] == 0
+
+
+@pytest.mark.parametrize("count", [-1, 1.5, True])
+def test_invalid_prompt_count_is_explicit(count):
+    with pytest.raises(ValueError, match="prompt_tokens"):
+        CaseResult(
+            "bad-count",
+            "unit",
+            "no_tool",
+            "invalid_answer",
+            "",
+            "",
+            0,
+            0,
+            0,
+            (),
+            prompt_tokens=count,
+        )
 
 
 @pytest.mark.parametrize("path", ["python_tool", "no_tool"])

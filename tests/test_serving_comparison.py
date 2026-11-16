@@ -178,6 +178,7 @@ def test_declared_c_executor_preserves_matched_framing_and_logits(
     )
     script = _call_text(program) + "Final answer: 42<|im_end|>"
     prompts = {}
+    prompt_counts = {}
     native_results: list[ExecutionResult] = []
     replayed_sources = []
 
@@ -186,6 +187,7 @@ def test_declared_c_executor_preserves_matched_framing_and_logits(
 
         def sample(session):
             if mode not in prompts:
+                prompt_counts[mode] = len(session.tokens)
                 prompts[mode] = tokenizer.decode(
                     session.tokens, skip_special_tokens=False
                 )
@@ -228,6 +230,9 @@ def test_declared_c_executor_preserves_matched_framing_and_logits(
         assert declaration["function"]["description"] not in prompts[row.mode]
         assert row.case.outcome == "correct"
         assert row.case.calls[0].status == "ok"
+        assert row.case.prompt_tokens is not None
+        assert row.case.prompt_tokens == prompt_counts[row.mode]
+        assert row.prefill_tokens > row.case.prompt_tokens
         assert row.final_tokens == rows[0].final_tokens
         assert row.final_logits is not None and rows[0].final_logits is not None
         torch.testing.assert_close(
