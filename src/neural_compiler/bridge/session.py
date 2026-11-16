@@ -183,6 +183,15 @@ class LiveSession:
             )
         if output.logits is None:
             raise RuntimeError("Model returned no logits")
+        if (
+            not isinstance(output.logits, torch.Tensor)
+            or output.logits.ndim != 3
+            or output.logits.shape[0] != 1
+            or output.logits.numel() == 0
+        ):
+            raise RuntimeError(
+                "Model must return nonempty single-sequence causal logits"
+            )
         self.cache = output.past_key_values
         self.logits = output.logits[:, -1, :]
         self._cache_usable = True

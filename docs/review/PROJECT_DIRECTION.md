@@ -2401,3 +2401,28 @@ Next: falsify model-output shape admission before healthy cache commitment.
 The owning forward currently checks missing logits but does not explicitly
 enforce the existing single-sequence, nonempty causal-logit shape; malformed
 batch/rank/vocabulary output can otherwise be retained as healthy state.
+
+### 2026-11-16: validate causal logit shape before healthy cache commitment
+
+Live forwards now require a nonempty rank-three Torch logit tensor for one
+sequence before committing cache/logits as healthy. The existing missing-logit
+error remains distinct; nonempty full-sequence logits are still supported by
+selecting their last position. No dtype/masked-value policy or per-token finite
+scan was added. Invalid output leaves the potentially mutated session unusable,
+with recovery only through a valid prior checkpoint or fresh prefill.
+
+**Bounded ledger:** four malformed-output cases failed before admission
+(0.18 s): extra batch/rank and empty vocabulary were accepted, while empty token
+axis raised an opaque indexing error after a real cache update. All four passed
+afterward (0.11 s), including rejected reuse and unchanged-model prior-checkpoint
+recovery at existing reference tolerances. Coupled checkpoint/serving:
+**79 passed** (6.32 s); root: **337 passed** (18.30 s). Root Ruff, two-file format
+and whitespace passed; owning-source diagnostics empty. Fourteen existing Torch
+warnings, no skips; existing jailed native/trusted controls ran. One failing-first,
+one focused, one coupled and one root attempt were spent. Fixtures cleaned
+normally; no model/data/GPU, dependency, download, service or host action occurred.
+
+Next: move remaining serving configuration validation ahead of sampler-factory
+side effects and cold prefill. Unknown paths/store limits can currently be
+silently ignored for empty tasks or rejected only after calling the factory;
+a provided factory returning `None` can silently select greedy sampling.

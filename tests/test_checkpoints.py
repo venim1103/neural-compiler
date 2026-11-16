@@ -179,6 +179,44 @@ def test_failed_forward_cannot_reuse_or_checkpoint_mutated_cache(
     assert_reference(recovered)
 
 
+@pytest.mark.parametrize("shape", ["batch", "rank", "tokens", "vocabulary"])
+def test_invalid_logit_shape_cannot_commit_a_healthy_boundary(
+    hybrid_model, monkeypatch, shape
+):
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    checkpoint = session.checkpoint()
+    original_forward = hybrid_model.forward
+
+    def invalid_shape(*args, **kwargs):
+        output = original_forward(*args, **kwargs)
+        assert output.logits is not None
+        if shape == "batch":
+            output.logits = output.logits.expand(2, -1, -1)
+        elif shape == "rank":
+            output.logits = output.logits.unsqueeze(1)
+        elif shape == "tokens":
+            output.logits = output.logits[:, :0, :]
+        else:
+            output.logits = output.logits[:, :, :0]
+        return output
+
+    monkeypatch.setattr(hybrid_model, "forward", invalid_shape)
+    with pytest.raises(RuntimeError, match="single-sequence"):
+        session.inject([4])
+    assert session.tokens == checkpoint.tokens
+    for operation in (
+        session.checkpoint,
+        lambda: session.decode_until(1),
+        lambda: session.inject([5]),
+    ):
+        with pytest.raises(RuntimeError, match="unusable after a failed forward"):
+            operation()
+    monkeypatch.setattr(hybrid_model, "forward", original_forward)
+    recovered = LiveSession.from_checkpoint(hybrid_model, checkpoint)
+    recovered.inject([5, 6])
+    assert_reference(recovered)
+
+
 def test_invalid_prefix_ids_cannot_alias_a_cached_integer_prompt(hybrid_model):
     store = CheckpointStore()
     checkpoint = LiveSession(hybrid_model, [1, 2, 3]).checkpoint()
