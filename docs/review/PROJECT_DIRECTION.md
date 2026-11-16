@@ -2115,3 +2115,32 @@ This reporting prerequisite is not held-out-family or serving qualification.
 Next: align the harmonic unit fixture's wording with the accepted exact-rational
 checker. The fixture asks for a reduced representation, while the existing
 checker/tests intentionally accept mathematically equivalent fractions.
+
+### 2026-11-16: harmonic fixture wording matches exact equivalence
+
+The seed-17 unit fixture asked for a reduced representation of the sum from
+9 through 18, but its doubled fraction `1269742/1633632` was accepted as
+correct/valid by the existing exact-rational checker. The accepted checker
+and regression explicitly permit equivalent fractions (`22/12` for `11/6`).
+Only the unsupported word `reduced` was removed from the synthetic prompt;
+the reference value, parameter ranges, seeds, answer format and scoring are
+unchanged. This neither adopts task data nor changes accepted study prompts.
+
+**Bounded ledger:** one generated unit-fixture/value probe; **18 existing**
+rational/generator/end-to-end controls passed (3.80 s). Root: **296 passed**
+(24.11 s), root Ruff, one-file format and whitespace passed; owning-source
+diagnostics empty. Fourteen existing Torch warnings, no skips; jailed native/
+trusted containment controls ran. No constant-string tests or new cohort
+cases were added. No model/data/GPU, engine/dependency, service or host action
+occurred; fixtures cleaned normally. Source inspection also confirmed the
+existing 16 MiB file-size and disabled-core limits; no resource policy changed.
+
+The resumed slices added return timing, paired/family serving metrics and
+prefill deadline admission while preserving the accepted primary metric.
+They are offline prerequisites, not a target-model latency or containment
+qualification. Further measurement still needs accepted evaluation/study
+inputs; real serving needs its separately authorized isolated dependencies
+and runtime scope; real controller/PID-cap qualification needs a writable
+predelegated subtree and accepted production policies. The earlier resource
+and milestone table remains a gate inventory, not a claim that no possible
+offline improvement or bug can exist.

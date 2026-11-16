@@ -84,7 +84,7 @@ def _sample_harmonic_partial_sum(
         case_id=case_id,
         family=family,
         prompt=(
-            f"Compute the exact reduced fraction sum(1/k for k from {start} to {end}) "
+            f"Compute the exact fraction sum(1/k for k from {start} to {end}) "
             "as <numerator>/<denominator>."
         ),
         checker=RationalChecker(expected),
