@@ -208,6 +208,83 @@ def test_total_token_budget_does_not_reset_after_a_tool_call(
     assert result.generated_tokens == limit and len(result.calls) == 1
 
 
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "returned_ids",
+        "finish_reason",
+        "spurious_stop",
+        "ignored_stop",
+        "overrun",
+        "missing_callback",
+    ],
+)
+def test_decoder_faults_cannot_be_scored_or_execute(
+    tokenizer, hybrid_model, monkeypatch, fault
+):
+    text = f"Final answer: {41 if fault == 'returned_ids' else 42}<|im_end|>"
+    if fault == "ignored_stop":
+        text = call_text("print(6 * 7)") + text
+    budgets = Budgets()
+    if fault == "overrun":
+        budgets = replace(
+            budgets,
+            turn_tokens=len(tokenizer.encode(text, add_special_tokens=False)) - 1,
+        )
+    events = []
+    original_decode = LiveSession.decode_until
+
+    def decode(session, max_new_tokens, on_token=None):
+        events.append("decode-started")
+        callback = on_token
+        if fault == "missing_callback":
+            callback = None
+        elif fault == "ignored_stop":
+
+            def ignore_stop(token):
+                if on_token is not None:
+                    on_token(token)
+                return False
+
+            callback = ignore_stop
+        limit = max_new_tokens + 1 if fault == "overrun" else max_new_tokens
+        try:
+            result = original_decode(session, limit, callback)
+            if fault == "returned_ids":
+                return replace(
+                    result,
+                    token_ids=tuple(
+                        tokenizer.encode(
+                            "Final answer: 42<|im_end|>", add_special_tokens=False
+                        )
+                    ),
+                )
+            if fault == "finish_reason":
+                return replace(result, reason="unexpected")
+            if fault == "spurious_stop":
+                return replace(result, reason="stop")
+            return result
+        finally:
+            events.append("decode-ended")
+
+    monkeypatch.setattr(LiveSession, "decode_until", decode)
+    runner = harness_for(
+        tokenizer,
+        hybrid_model,
+        monkeypatch,
+        text,
+        budgets=budgets,
+        executor=lambda *args, **kwargs: pytest.fail("Invalid provider executed"),
+    )
+    runner.synchronize = lambda: events.append("sync")
+    with pytest.raises(RuntimeError, match="DecodeSession"):
+        runner.run(
+            Task("invalid-provider", "unit", "Compute.", IntegerChecker(42)),
+            "python_tool",
+        )
+    assert events[-1] == "sync" and "decode-ended" in events
+
+
 def test_prompt_limit_prevents_model_prefill(tokenizer, monkeypatch):
     rendered = []
     original_template = tokenizer.apply_chat_template

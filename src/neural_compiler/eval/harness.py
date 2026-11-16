@@ -22,7 +22,11 @@ from neural_compiler.bridge.protocol import (
     QwenToolProtocol,
     ToolCall,
 )
-from neural_compiler.bridge.session import CheckpointBudgetError, DecodeResult
+from neural_compiler.bridge.session import (
+    CheckpointBudgetError,
+    DecodeResult,
+    _validate_token_ids,
+)
 
 Path = Literal["no_tool", "python_tool", "current_best"]
 _PATHS: tuple[Path, ...] = ("no_tool", "python_tool", "current_best")
@@ -232,6 +236,12 @@ class Budgets:
 
 
 class DecodeSession(Protocol):
+    """Invoke a supplied callback once per sampled ID and honor its stop.
+
+    Returned IDs must match that callback stream within the requested limit.
+    The stop reason denotes a callback stop; EOS and length are distinct.
+    """
+
     def decode_until(
         self,
         max_new_tokens: int,
@@ -330,6 +340,7 @@ class EvaluationHarness:
     Model deadlines are cooperative; only the supervised executor supplies a
     hard subprocess deadline. An optional tool description declares a configured
     executor without changing the supported run(code) schema or Python default.
+    Invalid decoder providers raise explicitly without producing scored records.
     """
 
     def __init__(
@@ -364,6 +375,9 @@ class EvaluationHarness:
         answer = ""
         outcome: Outcome = "invalid_answer"
         diagnostic = ""
+        call: ToolCall | None = None
+        observed_tokens: list[int] = []
+        turn_limit = 0
         protocol = QwenToolProtocol(
             self.tokenizer,
             self.budgets.call_body_tokens,
@@ -378,7 +392,13 @@ class EvaluationHarness:
 
         def on_token(token: int) -> bool:
             nonlocal generated, call
+            _validate_token_ids((token,))
+            observed_tokens.append(token)
             generated += 1
+            if len(observed_tokens) > turn_limit:
+                raise RuntimeError("DecodeSession exceeded the requested turn limit")
+            if call is not None:
+                raise RuntimeError("DecodeSession continued after a callback stop")
             remaining_time()
             if prompt_count + generated + injected > self.budgets.context_tokens:
                 raise _RunFailure("budget_exhausted", "Context-token budget exhausted")
@@ -417,16 +437,32 @@ class EvaluationHarness:
             session = self.session_factory(prompt)
             while generated < self.budgets.generated_tokens:
                 remaining_time()
-                call: ToolCall | None = None
-                decoded = session.decode_until(
-                    min(
-                        self.budgets.turn_tokens,
-                        self.budgets.generated_tokens - generated,
-                    ),
-                    on_token,
+                call = None
+                observed_tokens = []
+                turn_limit = min(
+                    self.budgets.turn_tokens,
+                    self.budgets.generated_tokens - generated,
                 )
+                decoded = session.decode_until(turn_limit, on_token)
                 self.synchronize()
                 remaining_time()
+                if decoded.reason not in ("stop", "eos", "length"):
+                    raise RuntimeError(
+                        "DecodeSession returned an unsupported finish reason"
+                    )
+                if len(decoded.token_ids) != len(observed_tokens):
+                    raise RuntimeError(
+                        "DecodeSession returned IDs differ from callbacks"
+                    )
+                _validate_token_ids(decoded.token_ids)
+                if tuple(decoded.token_ids) != tuple(observed_tokens):
+                    raise RuntimeError(
+                        "DecodeSession returned IDs differ from callbacks"
+                    )
+                if (decoded.reason == "stop") != (call is not None):
+                    raise RuntimeError(
+                        "DecodeSession finish reason disagrees with callback stop"
+                    )
                 protocol.finish()
                 if call is None:
                     answer = self.tokenizer.decode(
@@ -498,7 +534,8 @@ class EvaluationHarness:
             outcome, diagnostic = "budget_exhausted", str(exc)
         except _RunFailure as exc:
             outcome, diagnostic = exc.outcome, str(exc)
-        self.synchronize()
+        finally:
+            self.synchronize()
         elapsed = time.perf_counter() - started
         if (
             outcome in ("correct", "wrong_answer", "invalid_answer")

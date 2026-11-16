@@ -2256,3 +2256,36 @@ finish reasons and requested turn limits. A provider that continues after a
 tool boundary can overwrite the recognized call and incorrectly score later
 text. Reject provider-contract faults explicitly, rather than manufacturing
 model outcomes, dropping tokens or rolling back cache state.
+
+### 2026-11-16: enforce decoder callback/result conformance before scoring
+
+The evaluation harness now checks the actual callback stream against the
+requested turn limit and returned IDs, validates finish reasons, and rejects
+continued decoding or inconsistent results after a callback stop. Previously
+continued callbacks could overwrite a recognized native call; unreported or
+substituted tokens and unsupported finish reasons could also evade accounting.
+Provider faults raise explicitly before execution/scoring, rather than becoming
+model outcomes or corrected token streams. Final synchronization runs even when
+such faults escape. Valid decoder behavior and existing outcome/cost definitions
+are unchanged; the interface documents the already-implemented live semantics.
+
+**Bounded ledger:** six tiny CPU provider faults (substituted IDs, unknown finish
+reason, spurious stop, ignored real stop, one-token turn overrun, omitted
+callbacks) were not rejected before the repair (0.75 s). All six passed afterward
+(0.89 s), with no executor invocation and synchronization after decoder exit.
+Coupled evaluation/checkpoint/serving: **164 passed** (23.71 s); root:
+**318 passed** (21.14 s). Root Ruff, two-file format and whitespace passed;
+owning-source diagnostics empty. Fourteen existing Torch warnings, no skips;
+existing jailed native/trusted controls ran. One failing-first, one focused,
+one coupled and one root attempt were spent within the recorded limits.
+Fixtures cleaned normally; the bounded failure-output inspection retained no
+new model/data artifacts. No model/data/GPU, dependency, download, service or
+host-security action occurred. These guards are not engine/kernel/cache
+qualification.
+
+The next-candidate-harness hypothesis was disproved by prior art:
+`run_matched` already accepts per-path harnesses and checks common budgets.
+No API change was made. Next: test whether an interrupted/invalid model forward
+can mutate recurrent cache while leaving a live session reusable or
+checkpointable. Preserve valid pre-forward checkpoints and fail closed on a
+potentially damaged session, without automatic recurrent-state rollback.
