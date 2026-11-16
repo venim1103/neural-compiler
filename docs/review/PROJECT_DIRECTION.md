@@ -2030,3 +2030,39 @@ currently validates matching cases but exposes only independently aggregated
 mode summaries.
 
 [return-timing-harness]: ../../src/neural_compiler/eval/harness.py
+
+### 2026-11-16: matched serving deltas, including family effects
+
+The [serving summary][paired-serving-summary] now retains its existing
+`by_mode` aggregates and adds `paired_cases`, `paired_deltas` and
+`paired_deltas_by_family`. It reuses the evaluation report's paired arithmetic
+for shared correctness counts, accuracy delta and wall-time mean/median delta;
+no metric formula or confidence contract changed.
+
+Comparisons use the first present mode in the existing canonical order as
+baseline: live pause/resume when present, otherwise prefix-cached resubmission.
+Every other present mode is compared with that baseline. Single-mode summaries
+produce empty paired deltas, not comparisons with absent modes. Existing
+complete-ID/mode/family/path preflight and failure inclusion remain intact.
+The synthetic regression has equal aggregate accuracy/time deltas but opposing
+family effects, demonstrating why independent mode aggregates are insufficient.
+This does not establish matched hardware/prompts, accepted cohorts, serving
+latency or statistical qualification.
+
+**Bounded ledger:** three failing-first report cases exposed missing paired
+fields (0.11 s); all three passed after reuse (0.06 s). One scoped format check
+reported a wrapped test lookup, repaired with Ruff without changing behavior.
+Coupled evaluation/serving controls: **115 passed** (11.22 s).
+Root: **294 passed** (18.23 s), root Ruff, three-file format and whitespace
+passed, both owning-source diagnostics empty. Private helper signature checks
+confirmed two original callers before label generalization and all three
+callers afterward. Fourteen existing Torch warnings, no skips; native jailed
+and trusted containment controls ran. No model/data/GPU, engine/dependency,
+service or host action occurred; fixtures cleaned normally. Three new report
+cases stayed within the four-case plan; no assertions or budgets relaxed.
+
+Next: check the return-stage deadline boundary. Formatting is charged to case
+wall time, but an expired wall budget currently has no admission check between
+response formatting/context validation and model injection.
+
+[paired-serving-summary]: ../../src/neural_compiler/eval/serving.py

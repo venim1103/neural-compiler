@@ -231,6 +231,100 @@ def test_serving_summary_rejects_unmatched_results(fault):
         summarize_serving(rows)
 
 
+def test_serving_summary_exposes_opposing_paired_family_effects():
+    rows = []
+    for case_id, family, cached_time, live_correct in (
+        ("a", "family-a", 6, True),
+        ("b", "family-b", 2, False),
+    ):
+        case = CaseResult(
+            case_id,
+            family,
+            "python_tool",
+            "correct" if live_correct else "wrong_answer",
+            "",
+            "",
+            4,
+            3,
+            0,
+            (),
+        )
+        live = ServingCaseResult("live_pause_resume", case, (), None, 3, 0, 0, 0, 0)
+        rows.extend(
+            [
+                live,
+                replace(
+                    live,
+                    mode="prefix_cached_resubmission",
+                    case=replace(
+                        case,
+                        outcome="wrong_answer" if live_correct else "correct",
+                        elapsed_seconds=cached_time,
+                    ),
+                ),
+                replace(
+                    live,
+                    mode="full_reprefill_resubmission",
+                    case=replace(case, elapsed_seconds=5 if live_correct else 7),
+                ),
+            ]
+        )
+    summary = summarize_serving(list(reversed(rows)))
+    assert summary["paired_cases"] == 2
+    cached_key = "prefix_cached_resubmission_vs_live_pause_resume"
+    cached = summary["paired_deltas"][cached_key]
+    assert cached["accuracy_delta"] == cached["elapsed_delta_mean_seconds"] == 0
+    assert cached["target_only_correct"] == cached["baseline_only_correct"] == 1
+    family_a = summary["paired_deltas_by_family"]["family-a"][cached_key]
+    family_b = summary["paired_deltas_by_family"]["family-b"][cached_key]
+    assert family_a["accuracy_delta"] == -1
+    assert family_b["accuracy_delta"] == 1
+    assert family_a["elapsed_delta_mean_seconds"] == 2
+    assert family_b["elapsed_delta_mean_seconds"] == -2
+    full = summary["paired_deltas"]["full_reprefill_resubmission_vs_live_pause_resume"]
+    assert full["both_correct"] == full["neither_correct"] == 1
+    assert full["elapsed_delta_mean_seconds"] == 2
+
+
+@pytest.mark.parametrize(
+    "modes",
+    [
+        ("prefix_cached_resubmission", "full_reprefill_resubmission"),
+        ("full_reprefill_resubmission",),
+    ],
+)
+def test_serving_paired_deltas_use_only_present_modes(modes):
+    case = CaseResult("a", "unit", "python_tool", "correct", "", "", 1, 3, 0, ())
+    rows = [
+        ServingCaseResult(
+            mode,
+            case
+            if mode == "full_reprefill_resubmission"
+            else replace(case, outcome="wrong_answer", elapsed_seconds=2),
+            (),
+            None,
+            3,
+            0,
+            0,
+            0,
+            0,
+        )
+        for mode in reversed(modes)
+    ]
+    summary = summarize_serving(rows)
+    assert summary["paired_cases"] == 1
+    assert set(summary["by_mode"]) == set(modes)
+    if len(modes) == 1:
+        assert summary["paired_deltas"] == {}
+        assert summary["paired_deltas_by_family"] == {"unit": {}}
+    else:
+        key = "full_reprefill_resubmission_vs_prefix_cached_resubmission"
+        assert set(summary["paired_deltas"]) == {key}
+        delta = summary["paired_deltas"][key]
+        assert delta["accuracy_delta"] == 1
+        assert delta["elapsed_delta_mean_seconds"] == -1
+
+
 def test_default_snapshot_limit_is_not_the_aggregate_store_budget(
     hybrid_model, monkeypatch
 ):

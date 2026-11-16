@@ -8,7 +8,7 @@ execution contracts or claiming unmeasured hardware speedups.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -34,6 +34,7 @@ from .harness import (
     Executor,
     Path,
     Task,
+    _paired_comparison,
     summarize,
 )
 
@@ -358,7 +359,12 @@ def run_serving_comparison(
 
 
 def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]:
-    """Aggregate failure-inclusive metrics for complete matched serving cases."""
+    """Failure-inclusive matched metrics and aggregate/per-family paired deltas.
+
+    Comparisons use the first present mode in canonical order as baseline:
+    live pause/resume when present, otherwise prefix-cached resubmission.
+    A single-mode summary has no paired deltas.
+    """
     if not results:
         raise ValueError("Serving summary requires at least one result")
     paired: dict[str, dict[ServingMode, ServingCaseResult]] = {}
@@ -389,4 +395,30 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
         base["cache_misses"] = sum(r.cache_misses for r in subset)
         base["checkpoints_evicted"] = sum(r.checkpoints_evicted for r in subset)
         by_mode[mode] = base
-    return {"by_mode": by_mode}
+    paired_cases: dict[str, dict[str, CaseResult]] = {
+        case_id: {mode: row.case for mode, row in case.items()}
+        for case_id, case in paired.items()
+    }
+    baseline = modes_present[0]
+
+    def deltas(cases: Mapping[str, Mapping[str, CaseResult]]) -> dict[str, object]:
+        return {
+            f"{mode}_vs_{baseline}": _paired_comparison(cases, mode, baseline)
+            for mode in modes_present[1:]
+        }
+
+    return {
+        "by_mode": by_mode,
+        "paired_cases": len(paired_cases),
+        "paired_deltas": deltas(paired_cases),
+        "paired_deltas_by_family": {
+            family: deltas(
+                {
+                    case_id: case
+                    for case_id, case in paired_cases.items()
+                    if case[baseline].family == family
+                }
+            )
+            for family in sorted({row.case.family for row in results})
+        },
+    }

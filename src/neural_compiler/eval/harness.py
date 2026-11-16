@@ -626,8 +626,8 @@ def run_matched(
 
 def _paired_comparison(
     paired: Mapping[str, Mapping[str, CaseResult]],
-    target: Path,
-    baseline: Path,
+    target: str,
+    baseline: str,
 ) -> dict[str, object]:
     n = len(paired)
     both = target_only = baseline_only = neither = 0
