@@ -109,6 +109,13 @@ def _validate_checkpoint_budget(max_cache_bytes: int) -> None:
         raise ValueError("max_cache_bytes must be a positive integer")
 
 
+def _validate_store_limits(max_total_bytes: int, max_entries: int) -> None:
+    if type(max_total_bytes) is not int or max_total_bytes <= 0:
+        raise ValueError("max_total_bytes must be a positive integer")
+    if type(max_entries) is not int or max_entries <= 0:
+        raise ValueError("max_entries must be a positive integer")
+
+
 def _validate_token_ids(ids: Sequence[int]) -> None:
     if any(type(token) is not int for token in ids):
         raise ValueError("Token IDs must be integers")
@@ -312,10 +319,7 @@ class CheckpointStore:
         max_total_bytes: int = 256 * 1024 * 1024,
         max_entries: int = 32,
     ) -> None:
-        if type(max_total_bytes) is not int or max_total_bytes <= 0:
-            raise ValueError("max_total_bytes must be a positive integer")
-        if type(max_entries) is not int or max_entries <= 0:
-            raise ValueError("max_entries must be a positive integer")
+        _validate_store_limits(max_total_bytes, max_entries)
         self.max_total_bytes = max_total_bytes
         self.max_entries = max_entries
         self._entries: OrderedDict[tuple[int, ...], SessionCheckpoint] = OrderedDict()

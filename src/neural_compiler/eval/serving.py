@@ -25,6 +25,7 @@ from neural_compiler.bridge.session import (
     _validate_checkpoint_budget,
     _validate_decode_budget,
     _validate_prefix_model,
+    _validate_store_limits,
 )
 
 from .harness import (
@@ -34,6 +35,7 @@ from .harness import (
     Executor,
     Path,
     Task,
+    _PATHS,
     _paired_comparison,
     _validate_tool_description,
     summarize,
@@ -296,6 +298,8 @@ def run_serving_comparison(
     """Run matched tasks with shared budgets and an optional cached snapshot override."""
     if path == "no_tool":
         raise ValueError("Serving continuation comparison requires a tool-enabled path")
+    if path not in _PATHS:
+        raise ValueError(f"Unknown evaluation path: {path}")
     if not modes or len(set(modes)) != len(modes):
         raise ValueError("modes must be a non-empty sequence of unique serving modes")
     if max_checkpoint_bytes is not None and (
@@ -308,11 +312,14 @@ def run_serving_comparison(
     if len({task.case_id for task in tasks}) != len(tasks):
         raise ValueError("Tasks must have unique case IDs")
     _validate_tool_description(tool_description)
+    _validate_store_limits(max_store_bytes, max_store_entries)
 
     results: list[ServingCaseResult] = []
     for task in tasks:
         for mode in modes:
             sampler = None if on_token_factory is None else on_token_factory(task, mode)
+            if on_token_factory is not None and not callable(sampler):
+                raise ValueError("on_token_factory must return a callable sampler")
             store = CheckpointStore(
                 max_total_bytes=max_store_bytes, max_entries=max_store_entries
             )

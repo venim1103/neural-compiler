@@ -2426,3 +2426,38 @@ Next: move remaining serving configuration validation ahead of sampler-factory
 side effects and cold prefill. Unknown paths/store limits can currently be
 silently ignored for empty tasks or rejected only after calling the factory;
 a provided factory returning `None` can silently select greedy sampling.
+
+### 2026-11-16: preflight serving settings before factory side effects
+
+Serving comparison now validates known paths and existing store limits before
+calling sampler factories, including empty task inputs. Store-limit validation
+is shared with `CheckpointStore`, preserving exact-positive-integer constraints,
+defaults and diagnostics. A supplied factory must return a callable; only an
+absent factory selects default greedy sampling. Invalid configuration does not
+become a model outcome or trigger cold prefill.
+
+**Bounded ledger:** nine cases failed before the repair (0.39 s): three empty
+inputs accepted invalid settings, three populated inputs reached a factory spy,
+and three invalid factory results reached a model-forward spy. No model forward
+actually ran in these probes. All nine passed afterward (0.13 s). Coupled
+checkpoint/serving: **88 passed** (6.67 s); root: **346 passed** (17.21 s).
+Root Ruff, three-file format and whitespace passed; both owning-source diagnostics
+empty, and both shared-helper callers were signature-compatible. Fourteen
+existing Torch warnings, no skips; existing jailed native/trusted controls ran.
+One failing-first, one focused, one coupled and one root attempt were spent.
+Fixtures cleaned normally; no model/data/GPU, dependencies, downloads, service
+or host action occurred.
+
+A single bounded CI inspection confirmed success at [causal-shape
+admission][causal-shape-ci], [independent evidence capture][independent-logits-ci]
+and [failed-forward handling][failed-forward-ci]. These are hosted workflow
+results, not engine/kernel/production-containment qualification.
+
+Next: distinguish a response cut by the requested generation limit from a
+voluntary malformed native-call termination. The harness currently finalizes
+protocol parsing before checking a length stop, which can misclassify a
+host-truncated call as a protocol failure.
+
+[causal-shape-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43869402237
+[independent-logits-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43865992206
+[failed-forward-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43863627658

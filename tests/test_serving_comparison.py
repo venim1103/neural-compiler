@@ -33,6 +33,58 @@ def _call_text(code: str) -> str:
     )
 
 
+@pytest.mark.parametrize("has_tasks", [False, True])
+@pytest.mark.parametrize(
+    "options,error",
+    [
+        ({"path": "unsupported"}, "Unknown evaluation path"),
+        ({"max_store_bytes": 0}, "max_total_bytes must be a positive integer"),
+        ({"max_store_entries": 0}, "max_entries must be a positive integer"),
+    ],
+)
+def test_serving_configuration_precedes_factory_and_prefill(
+    tokenizer, hybrid_model, monkeypatch, has_tasks, options, error
+):
+    tasks = (
+        [Task("preflight", "unit", "Compute.", IntegerChecker(42))] if has_tasks else []
+    )
+    monkeypatch.setattr(
+        hybrid_model,
+        "forward",
+        lambda *args, **kwargs: pytest.fail("Invalid configuration ran model"),
+    )
+    with pytest.raises(ValueError, match=error):
+        run_serving_comparison(
+            tasks,
+            tokenizer,
+            hybrid_model,
+            lambda: None,
+            on_token_factory=lambda *args: pytest.fail(
+                "Invalid configuration called factory"
+            ),
+            **options,
+        )
+
+
+@pytest.mark.parametrize("sampler", [None, 42, "not-callable"])
+def test_invalid_sampler_factory_result_never_prefills(
+    tokenizer, hybrid_model, monkeypatch, sampler
+):
+    monkeypatch.setattr(
+        hybrid_model,
+        "forward",
+        lambda *args, **kwargs: pytest.fail("Invalid sampler prefills model"),
+    )
+    with pytest.raises(ValueError, match="on_token_factory must return a callable"):
+        run_serving_comparison(
+            [Task("invalid-sampler", "unit", "Compute.", IntegerChecker(42))],
+            tokenizer,
+            hybrid_model,
+            lambda: None,
+            on_token_factory=lambda *args: sampler,
+        )
+
+
 @pytest.mark.parametrize("mode", ["prefix", "full"])
 def test_invalid_decode_budget_does_not_reconstruct_session(
     hybrid_model, monkeypatch, mode
