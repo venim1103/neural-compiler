@@ -2144,3 +2144,50 @@ and runtime scope; real controller/PID-cap qualification needs a writable
 predelegated subtree and accepted production policies. The earlier resource
 and milestone table remains a gate inventory, not a claim that no possible
 offline improvement or bug can exist.
+
+### 2026-11-16: declare configured executors without changing native framing
+
+The harness accepted custom executors but always declared `run(code)` as
+Python. `EvaluationHarness` and `run_serving_comparison` now accept an optional
+keyword-only `tool_description`. It changes only the description of a private
+copy of the existing tool declaration; the function name, code parameter,
+schema, result envelope and tokenizer-derived boundaries are unchanged.
+Python's default prompt and the disabled no-tool baseline retain their exact
+token sequences. Invalid descriptions fail before sampler/model setup.
+
+For a separately scoped C comparison, callers can pass `executor=run_c` and
+`tool_description="Compile and run C99 code, returning structured stdout or errors."`
+together. The description does not select or dispatch an executor: callers
+remain responsible for matching declared capabilities to the actual backend,
+intrinsics and accepted study settings. No C cohort or benchmark policy was
+adopted here.
+
+**Bounded ledger:** four failing-first description cases exposed the missing
+keyword (0.21 s); the existing Python prompt control passed. Seven focused
+cases then passed (1.57 s). The plan grew by one callback-preflight case to
+verify invalid descriptions cannot invoke sampler setup. The trusted C fixture
+compiled/executed once and explicitly replayed that real result across three
+CPU cache strategies, keeping the result's timing fields identical. Native
+source, outcome, complete token stream and reference logits matched at the
+unchanged `atol=1e-6, rtol=1e-5`; this replay is not a latency/accuracy study.
+Across focused/coupled/root gates, the fixture used nine supervised invocations
+(one namespace probe plus C compile/run per gate), within the twelve-invocation
+plan. Existing root controls were additional required regressions.
+
+Coupled evaluation/serving/checkpoint controls: **149 passed** (14.30 s).
+Root: **303 passed** (23.57 s), root Ruff, four-file format and whitespace
+passed, both owning-source diagnostics empty. Fourteen existing Torch warnings,
+no skips. A static check caught the new test executor's mismatched parameter/
+default contract; its signature was corrected, and all thirteen serving
+callers are compatible. Formatting was repaired narrowly. The source and
+fixture program stayed unchanged after the root pass, so static-only repairs
+did not trigger another unchanged runtime gate. Earlier constructor-helper
+flags were checked against actual defaults, runtime binding and empty source
+diagnostics rather than worked around by changing existing callers.
+No model/data/GPU, dependencies/downloads, service or host actions occurred;
+fixtures cleaned normally.
+
+Next: retain the already-counted prompt tokens in case/report diagnostics.
+Different executor declarations change input length, but the current report
+only exposes generated/injected tokens. Preserve that existing total definition
+and report observed prompt size separately, with explicit missing coverage.

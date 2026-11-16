@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import shutil
+from copy import deepcopy
 from dataclasses import replace
 
 import pytest
 import torch
 
-from neural_compiler.bridge import ExecutionResult
+from neural_compiler.bridge import ExecutionResult, run_c, run_python
+from neural_compiler.bridge.protocol import RUN_TOOL
 from neural_compiler.eval import (
     ALL_SERVING_MODES,
     FullReprefillSession,
@@ -156,6 +159,82 @@ def test_serving_modes_match_logits_and_reduce_prefill_tokens(tokenizer, hybrid_
     )
 
 
+def test_declared_c_executor_preserves_matched_framing_and_logits(
+    tokenizer, hybrid_model
+):
+    if shutil.which("gcc") is None:
+        pytest.skip("gcc unavailable; no substitute compiler")
+    probe = run_python("print(0)")
+    if probe.status == "sandbox_error":
+        pytest.skip(f"Namespace support unavailable: {probe.stderr}")
+    assert probe.status == "ok", probe
+    declaration = deepcopy(RUN_TOOL)
+    description = "Compile and run C99 code, returning structured stdout or errors."
+    tokenizer.chat_template = (
+        "{% if tools %}{{ tools | tojson }}\n{% endif %}" + tokenizer.chat_template
+    )
+    program = (
+        '#include <stdio.h>\nint main(void) { printf("%d\\n", 6 * 7); return 0; }\n'
+    )
+    script = _call_text(program) + "Final answer: 42<|im_end|>"
+    prompts = {}
+    native_results: list[ExecutionResult] = []
+    replayed_sources = []
+
+    def make_sampler(_task, mode):
+        stream = iter(tokenizer.encode(script, add_special_tokens=False))
+
+        def sample(session):
+            if mode not in prompts:
+                prompts[mode] = tokenizer.decode(
+                    session.tokens, skip_special_tokens=False
+                )
+            return next(stream)
+
+        return sample
+
+    def execute(code: str, timeout: float = 20) -> ExecutionResult:
+        replayed_sources.append(code)
+        assert code == program
+        if not native_results:
+            result = run_c(code, timeout=timeout)
+            assert result.status == "ok", result
+            assert result.stdout == "42\n"
+            native_results.append(result)
+        # Replay one real result to keep timing fields identical in cache controls.
+        return native_results[0]
+
+    rows = run_serving_comparison(
+        [
+            Task(
+                "declared-c",
+                "unit-serving",
+                "Compute six times seven.",
+                IntegerChecker(42),
+            )
+        ],
+        tokenizer,
+        hybrid_model,
+        lambda: None,
+        path="current_best",
+        executor=execute,
+        tool_description=description,
+        on_token_factory=make_sampler,
+    )
+    assert len(native_results) == 1 and replayed_sources == [program] * 3
+    assert RUN_TOOL == declaration
+    for row in rows:
+        assert description in prompts[row.mode]
+        assert declaration["function"]["description"] not in prompts[row.mode]
+        assert row.case.outcome == "correct"
+        assert row.case.calls[0].status == "ok"
+        assert row.final_tokens == rows[0].final_tokens
+        assert row.final_logits is not None and rows[0].final_logits is not None
+        torch.testing.assert_close(
+            row.final_logits, rows[0].final_logits, atol=1e-6, rtol=1e-5
+        )
+
+
 def test_prefix_cached_resubmission_recovers_after_lru_eviction(
     tokenizer, hybrid_model
 ):
@@ -211,6 +290,18 @@ def test_serving_comparison_validation(tokenizer, hybrid_model):
         )
     with pytest.raises(ValueError, match="at least one result"):
         summarize_serving([])
+
+
+def test_invalid_tool_description_precedes_sampler_setup(tokenizer, hybrid_model):
+    with pytest.raises(ValueError, match="tool_description"):
+        run_serving_comparison(
+            [Task("bad-declaration", "unit", "Compute.", IntegerChecker(42))],
+            tokenizer,
+            hybrid_model,
+            lambda: pytest.fail("Must not synchronize"),
+            tool_description="",
+            on_token_factory=lambda *args: pytest.fail("Must not build a sampler"),
+        )
 
 
 @pytest.mark.parametrize("fault", ["missing", "duplicate", "family", "path"])

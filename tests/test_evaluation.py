@@ -9,7 +9,7 @@ from fractions import Fraction
 import pytest
 
 from neural_compiler.bridge import ExecutionResult, run_python
-from neural_compiler.bridge.protocol import ProtocolError, QwenToolProtocol
+from neural_compiler.bridge.protocol import RUN_TOOL, ProtocolError, QwenToolProtocol
 from neural_compiler.bridge.session import CheckpointBudgetError, LiveSession
 from neural_compiler.eval import (
     ALL_OUTCOMES,
@@ -219,6 +219,55 @@ def test_prompt_limit_prevents_model_prefill(tokenizer):
         Task("prompt", "unit", "Compute.", IntegerChecker(42)), "no_tool"
     )
     assert result.outcome == "budget_exhausted" and result.generated_tokens == 0
+
+
+@pytest.mark.parametrize("path", ["python_tool", "no_tool"])
+def test_executor_description_preserves_baseline_prompts(
+    tokenizer, hybrid_model, monkeypatch, path
+):
+    task = Task("declaration", "unit", "Compute six times seven.", IntegerChecker(42))
+    expected = tokenizer.apply_chat_template(
+        [
+            {
+                "role": "system",
+                "content": "Solve the task. End your response with Final answer: <integer>.",
+            },
+            {"role": "user", "content": task.prompt},
+        ],
+        tools=[RUN_TOOL] if path == "python_tool" else None,
+        tokenize=True,
+        return_dict=False,
+        add_generation_prompt=True,
+        enable_thinking=False,
+    )
+    prompts = []
+    scripted = iter(
+        tokenizer.encode("Final answer: 42<|im_end|>", add_special_tokens=False)
+    )
+    monkeypatch.setattr(LiveSession, "_next_token", lambda _: next(scripted))
+
+    def factory(ids):
+        prompts.append(list(ids))
+        return LiveSession(hybrid_model, ids)
+
+    kwargs = (
+        {"tool_description": "Compile and run C99 code."} if path == "no_tool" else {}
+    )
+    runner = EvaluationHarness(tokenizer, factory, lambda: None, **kwargs)
+    result = runner.run(task, path)
+    assert result.outcome == "correct" and result.calls == ()
+    assert prompts == [expected]
+
+
+@pytest.mark.parametrize("description", ["", "   ", 3])
+def test_invalid_executor_description_is_explicit(tokenizer, description):
+    with pytest.raises(ValueError, match="tool_description"):
+        EvaluationHarness(
+            tokenizer,
+            lambda ids: pytest.fail("Must not prefill"),
+            lambda: None,
+            tool_description=description,
+        )
 
 
 def test_call_budget_prevents_an_extra_execution(tokenizer, hybrid_model, monkeypatch):

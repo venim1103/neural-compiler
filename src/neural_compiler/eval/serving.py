@@ -35,6 +35,7 @@ from .harness import (
     Path,
     Task,
     _paired_comparison,
+    _validate_tool_description,
     summarize,
 )
 
@@ -269,6 +270,7 @@ def run_serving_comparison(
     path: Path = "python_tool",
     budgets: Budgets = Budgets(),
     executor: Executor = run_python,
+    tool_description: str | None = None,
     modes: Sequence[ServingMode] = ALL_SERVING_MODES,
     max_store_bytes: int = 256 * 1024 * 1024,
     max_store_entries: int = 32,
@@ -290,6 +292,7 @@ def run_serving_comparison(
             raise ValueError(f"Unknown serving mode: {mode}")
     if len({task.case_id for task in tasks}) != len(tasks):
         raise ValueError("Tasks must have unique case IDs")
+    _validate_tool_description(tool_description)
 
     results: list[ServingCaseResult] = []
     for task in tasks:
@@ -331,6 +334,7 @@ def run_serving_comparison(
                 synchronize,
                 budgets=budgets,
                 executor=executor,
+                tool_description=tool_description,
             )
             case_result = harness.run(task, path)
             last_session = active[-1] if active else None

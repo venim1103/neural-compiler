@@ -7,6 +7,7 @@ import random
 import re
 import time
 from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import Literal, Protocol
@@ -307,6 +308,13 @@ class _RunFailure(Exception):
         self.outcome = outcome
 
 
+def _validate_tool_description(description: str | None) -> None:
+    if description is not None and (
+        not isinstance(description, str) or not description.strip()
+    ):
+        raise ValueError("tool_description must be a non-empty string")
+
+
 class EvaluationHarness:
     """Same tasks, prompts, checker and budgets across caller-labelled paths.
 
@@ -315,7 +323,8 @@ class EvaluationHarness:
     includes framing, context admission, injection and synchronization in its
     response time, including failed attempts. Unattempted returns are unmeasured.
     Model deadlines are cooperative; only the supervised executor supplies a
-    hard subprocess deadline.
+    hard subprocess deadline. An optional tool description declares a configured
+    executor without changing the supported run(code) schema or Python default.
     """
 
     def __init__(
@@ -325,12 +334,18 @@ class EvaluationHarness:
         synchronize: Callable[[], None],
         budgets: Budgets = Budgets(),
         executor: Executor = run_python,
+        *,
+        tool_description: str | None = None,
     ):
+        _validate_tool_description(tool_description)
         self.tokenizer = tokenizer
         self.session_factory = session_factory
         self.synchronize = synchronize
         self.budgets = budgets
         self.executor = executor
+        self._run_tool = deepcopy(RUN_TOOL)
+        if tool_description is not None:
+            self._run_tool["function"]["description"] = tool_description
 
     def run(self, task: Task, path: Path) -> CaseResult:
         if path not in _PATHS:
@@ -373,7 +388,7 @@ class EvaluationHarness:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": task.prompt},
                 ],
-                tools=None if path == "no_tool" else [RUN_TOOL],
+                tools=None if path == "no_tool" else [self._run_tool],
                 tokenize=True,
                 return_dict=False,
                 add_generation_prompt=True,
