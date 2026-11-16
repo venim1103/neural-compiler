@@ -19,7 +19,7 @@ from collections.abc import Set
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
 from .cgroups import CgroupError, CgroupLimits, request_cgroup
 from .seccomp import SeccompError, SeccompPolicy, export_filter
@@ -34,12 +34,20 @@ Status = Literal[
 ]
 
 
+def _validate_execution_status(status: str) -> None:
+    if status not in get_args(Status):
+        raise ValueError(f"Unknown execution status: {status!r}")
+
+
 @dataclass(frozen=True)
 class ExecutionResult:
     status: Status
     stdout: str = ""
     stderr: str = ""
     returncode: int | None = None
+
+    def __post_init__(self) -> None:
+        _validate_execution_status(self.status)
 
 
 MAX_CODE_BYTES = 64 * 1024

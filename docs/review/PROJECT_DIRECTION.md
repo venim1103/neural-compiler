@@ -1739,3 +1739,36 @@ ran, with no accepted data, pretrained/model/GPU study, dependency or host work.
 
 Next: checkpoint/synchronize the reconciled records and continue the remaining
 bounded offline protocol/cache/execution prerequisites.
+
+### 2026-11-16: execution result and call labels use the closed status contract
+
+`ExecutionResult` declared a six-label `Status` contract but admitted arbitrary
+runtime labels, and `CallRecord` likewise accepted unrecognized statuses.
+Unknown labels could reach native result JSON or execution records rather than
+surfacing a trusted producer error.
+
+Both producers now reuse one private validator derived from the existing
+`Status` literal. Unknown labels raise explicit `ValueError` before serialization
+or reporting. All six existing statuses and payload fields remain unchanged;
+no execution failure is renamed, defaulted to success or silently discarded.
+
+**Bounded ledger:** two failing-first producer cases used `success` and
+`unrecorded_failure`; both passed after repair. Coupled execution/evaluation/
+native controls passed **123 tests** in 6.68 s; root validation passed **274
+tests** in 13.45 s with 14 existing warnings and no skips. Root lint/whitespace,
+three-file formatting and both source diagnostics passed. Test diagnostics
+contained only 17 existing unused-parameter hints, not new errors; those were
+left alone. Existing jailed/tiny CPU controls ran, without model/data/GPU,
+dependency or shared-host changes. Potential downstream scoring impact is a
+design risk, not a newly measured pretrained-model outcome.
+
+Hosted CI succeeded for the preceding [no-tool baseline checkpoint
+`9111792`][no-tool-record-ci] and [token reconciliation
+`4bc3129`][response-token-ci]; neither workflow status replaces study or
+containment qualification.
+
+[no-tool-record-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43828769679
+[response-token-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43829173823
+
+Next: checkpoint/synchronize closed-status admission and continue bounded
+offline prerequisites under the existing protected study/containment limits.

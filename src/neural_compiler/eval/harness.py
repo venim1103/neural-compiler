@@ -14,6 +14,7 @@ from typing import Literal, Protocol
 from transformers import PreTrainedTokenizerBase
 
 from neural_compiler.bridge import ExecutionResult, run_python
+from neural_compiler.bridge.execution import _validate_execution_status
 from neural_compiler.bridge.protocol import (
     RUN_TOOL,
     ProtocolError,
@@ -254,6 +255,7 @@ class CallRecord:
     response_tokens: int
 
     def __post_init__(self) -> None:
+        _validate_execution_status(self.status)
         if not math.isfinite(self.execution_seconds) or self.execution_seconds < 0:
             raise ValueError("Call execution time must be finite and nonnegative")
         if type(self.response_tokens) is not int or self.response_tokens < 0:

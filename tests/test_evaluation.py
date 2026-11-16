@@ -499,6 +499,16 @@ def test_execution_time_cannot_produce_nonfinite_report_metrics():
         CallRecord("ok", float("nan"), 0)
 
 
+def test_unknown_execution_result_status_cannot_enter_a_tool_response():
+    with pytest.raises(ValueError, match="execution status"):
+        ExecutionResult("success")
+
+
+def test_unknown_call_status_cannot_enter_execution_metrics():
+    with pytest.raises(ValueError, match="execution status"):
+        CallRecord("unrecorded_failure", 0.1, 0)
+
+
 @pytest.mark.parametrize(
     "field,value",
     [
