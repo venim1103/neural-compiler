@@ -515,6 +515,16 @@ def test_impossible_case_records_cannot_enter_aggregates(field, value):
         summarize([replace(record, **{field: value})])
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [("calls", (CallRecord("runtime_error", 0.1, 0),)), ("injected_tokens", 1)],
+)
+def test_no_tool_records_cannot_include_execution_or_injection(field, value):
+    record = CaseResult("a", "unit", "no_tool", "correct", "", "", 1, 3, 0, ())
+    with pytest.raises(ValueError, match="no_tool"):
+        summarize([replace(record, **{field: value})])
+
+
 def test_negative_response_count_cannot_enter_execution_metrics():
     with pytest.raises(ValueError, match="response_tokens"):
         call = CallRecord("ok", 0.1, -1)
@@ -669,9 +679,14 @@ def test_matched_report_aggregates_tokens_calls_and_outcome_matrix():
 
     rows = []
     for path in ("no_tool", "python_tool", "current_best"):
-        rows.extend([replace(c1, path=path), replace(c2, path=path)])
+        if path == "no_tool":
+            good = replace(c1, path=path, calls=(), injected_tokens=0)
+        else:
+            good = replace(c1, path=path)
+        rows.extend([good, replace(c2, path=path)])
     report = matched_report(rows)
     assert report["paired_cases"] == 2
+    assert report["by_path"]["no_tool"]["execution_seconds"] == 0
     assert report["by_outcome"]["correct"]["python_tool"] == 1
     assert report["by_outcome"]["protocol_error"]["no_tool"] == 1
     assert (

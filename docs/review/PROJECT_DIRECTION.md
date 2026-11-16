@@ -1685,3 +1685,33 @@ whitespace were checked; no unchanged code gate was rerun.
 
 Next: trace final response assembly only as needed for the exact token-ID
 qualification plan; do not substitute trimmed text for native protocol tokens.
+
+### 2026-11-16: no-tool records cannot include execution or injected tokens
+
+The [evaluation harness][no-tool-record-source] disables execution/injection
+for `no_tool`, but manually constructed `CaseResult` rows could still carry
+executed calls or positive injected-token counts under that label. Both entered
+summaries, contaminating the baseline's execution/token costs without rejection.
+
+The result producer now rejects those impossible combinations with explicit
+`ValueError`. Model-generated tool syntax can still produce `protocol_error`
+with zero executed calls; tool-enabled paths retain failure-inclusive calls
+and response accounting. No metric formulas, baseline prompts, accepted cohorts
+or outcome definitions changed. One existing report fixture incorrectly copied
+a tool-enabled row into all three paths; its no-tool row now removes calls and
+injection and verifies zero baseline execution cost.
+
+**Bounded ledger:** two producer-only failing-first cases covered a failed
+execution with zero response tokens and positive injection without calls.
+After repair, both plus the related report control passed. Coupled
+evaluation/serving controls passed **100 tests** in 7.69 s; root validation
+passed **270 tests** in 14.45 s, with 14 existing warnings and no skips.
+Root lint/whitespace, two-file formatting and harness diagnostics passed.
+Existing tiny CPU matched/no-tool controls actually ran; this is not accepted
+task data or pretrained-model evidence. No dependencies, model/data/GPU jobs,
+services or host changes occurred.
+
+[no-tool-record-source]: ../../src/neural_compiler/eval/harness.py
+
+Next: checkpoint/synchronize the verified baseline repair and continue
+compatible offline prerequisites without weakening the remaining study gates.

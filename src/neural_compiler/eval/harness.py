@@ -284,6 +284,10 @@ class CaseResult:
             value = getattr(self, name)
             if type(value) is not int or value < 0:
                 raise ValueError(f"{name} must be a nonnegative integer")
+        if self.path == "no_tool" and (self.calls or self.injected_tokens):
+            raise ValueError(
+                "no_tool results must not record tool calls or injected tokens"
+            )
 
 
 class _RunFailure(Exception):
