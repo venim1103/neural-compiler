@@ -196,6 +196,7 @@ class LiveSession:
         sampled = []
         for _ in range(max_new_tokens):
             token = self._next_token()
+            _validate_token_ids((token,))
             sampled.append(token)
             self._tokens.append(token)
             self._pending = token

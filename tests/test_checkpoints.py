@@ -45,6 +45,39 @@ def test_invalid_decode_budget_preserves_pending_boundary(
     torch.testing.assert_close(session.logits, logits, atol=0, rtol=0)
 
 
+@pytest.mark.parametrize("sampled", [1.5, True])
+@pytest.mark.parametrize("pending", [False, True])
+def test_invalid_sample_never_enters_history_or_callback(
+    hybrid_model, monkeypatch, sampled, pending
+):
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    if pending:
+        monkeypatch.setattr(session, "_next_token", lambda: 4)
+        session.decode_until(1, lambda _: True)
+    prefix = session.tokens
+    logits = session.logits.clone()
+    callbacks = []
+    monkeypatch.setattr(session, "_next_token", lambda: sampled)
+
+    def stop(token):
+        callbacks.append(token)
+        return True
+
+    with pytest.raises(ValueError, match="Token IDs must be integers"):
+        session.decode_until(1, stop)
+    assert callbacks == []
+    assert session.tokens == prefix and session._pending is None
+    if not pending:
+        torch.testing.assert_close(session.logits, logits, atol=0, rtol=0)
+    assert_reference(session)
+    monkeypatch.setattr(session, "_next_token", lambda: 5)
+    decoded = session.decode_until(1, lambda _: True)
+    assert decoded.token_ids == (5,) and decoded.reason == "stop"
+    session.inject([6, 7])
+    assert session.tokens == (*prefix, 5, 6, 7)
+    assert_reference(session)
+
+
 @pytest.mark.parametrize("boundary", ["stop", "eos", "length"])
 def test_checkpoint_preserves_pending_token_exactly_once(
     tokenizer, hybrid_model, monkeypatch, boundary

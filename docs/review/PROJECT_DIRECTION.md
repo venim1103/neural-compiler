@@ -2228,3 +2228,31 @@ the forward-time ID guard runs, leaving a malformed pending token.
 
 [executor-description-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43856600039
 [harmonic-alignment-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43852744628
+
+### 2026-11-16: reject malformed samples before terminal-boundary mutation
+
+Live decoding now applies the existing exact-integer token-ID guard immediately
+after sampling, before history/pending writes or the callback. Previously a
+callback stop could return a fractional/boolean ID without reaching the
+forward-time guard, poisoning the pending boundary. Valid prior pending work
+still completes once; the repair neither rewinds recurrent state nor changes
+greedy sampling, vocabulary/EOS policy or the mutable session sampler hook.
+
+**Bounded ledger:** four tiny CPU cases (fraction/boolean, with/without valid
+pending work) failed before the repair (0.13 s), then passed (0.12 s). They
+verify no malformed callback/history entry, bitwise unchanged fresh-prefix
+logits and valid recovery/injection against full prefill at the existing
+`atol=1e-6`, `rtol=1e-5`. Coupled checkpoint/serving controls:
+**60 passed** (6.65 s); root: **312 passed** (21.93 s). Root Ruff, two-file format
+and whitespace passed; owning-source diagnostics empty. Fourteen existing Torch
+warnings, no skips; existing jailed native/trusted controls ran and fixtures
+cleaned normally. One failing-first, one focused, one coupled and one root
+attempt were spent; no old ledger was refunded. No model/data/GPU, dependency,
+download, service or host-security action occurred.
+
+Next: falsify the decoder-consumer contract with bounded adapter fixtures.
+The harness currently trusts callback-stop adherence, returned token IDs,
+finish reasons and requested turn limits. A provider that continues after a
+tool boundary can overwrite the recognized call and incorrectly score later
+text. Reject provider-contract faults explicitly, rather than manufacturing
+model outcomes, dropping tokens or rolling back cache state.
