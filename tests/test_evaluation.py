@@ -188,6 +188,42 @@ def test_bad_calls_do_not_execute(tokenizer, hybrid_model, monkeypatch, path):
     assert result.diagnostic
 
 
+@pytest.mark.parametrize("path", ["no_tool", "python_tool"])
+@pytest.mark.parametrize("termination", ["length", "eos"])
+def test_incomplete_call_distinguishes_host_limit_from_eos(
+    tokenizer, hybrid_model, monkeypatch, path, termination
+):
+    partial = call_text("print(42)").removesuffix("</tool_call>")
+    text = partial + ("<|im_end|>" if termination == "eos" else "")
+    count = len(tokenizer.encode(text, add_special_tokens=False))
+    assert count <= 200
+    runner = harness_for(
+        tokenizer,
+        hybrid_model,
+        monkeypatch,
+        text,
+        budgets=replace(Budgets(), generated_tokens=count, turn_tokens=count),
+        executor=lambda *args: pytest.fail("Incomplete call must not execute"),
+    )
+    result = runner.run(
+        Task(
+            "incomplete-call",
+            "unit",
+            "Compute.",
+            lambda answer: pytest.fail("Incomplete response must not be scored"),
+        ),
+        path,
+    )
+    assert result.outcome == (
+        "budget_exhausted" if termination == "length" else "protocol_error"
+    )
+    assert result.generated_tokens == count
+    assert result.calls == () and result.injected_tokens == 0
+    assert result.diagnostic
+    if termination == "length":
+        assert "generation-token limit" in result.diagnostic
+
+
 def test_total_token_budget_does_not_reset_after_a_tool_call(
     tokenizer, hybrid_model, monkeypatch
 ):

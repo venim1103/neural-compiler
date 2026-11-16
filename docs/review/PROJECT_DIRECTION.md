@@ -2461,3 +2461,28 @@ host-truncated call as a protocol failure.
 [causal-shape-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43869402237
 [independent-logits-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43865992206
 [failed-forward-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43863627658
+
+### 2026-11-16: distinguish token-limit cuts from malformed call termination
+
+The harness checks a validated decoder length stop before finalizing native-call
+parsing. A host-truncated response now reports the existing `budget_exhausted`
+outcome, retaining partial text and exact generated-token accounting. Voluntary
+EOS inside an incomplete call remains `protocol_error`; incomplete calls never
+execute or reach the answer checker. Existing outcome/cost definitions and
+token/call limits are unchanged.
+
+**Bounded ledger:** four scripted tiny CPU cases (no-tool/Python-tool crossed
+with length/EOS, at most 200 generated IDs each) reproduced two length
+misclassifications; two EOS controls passed (0.74 s). All four passed after the
+repair (0.68 s), with exact generated counts and zero calls/injected IDs.
+Coupled evaluation/serving: **155 passed** (11.94 s); root: **350 passed**
+(16.35 s). Root Ruff, two-file format and whitespace passed; owning-source
+diagnostics empty. Fourteen existing Torch warnings, no skips; existing jailed
+native/trusted controls ran. One failing-first, one focused, one coupled and
+one root attempt spent; fixtures cleaned normally. No guest ran in the new
+cases, and no pretrained-model/data/GPU study, dependency, download, service
+or host change occurred. The earlier preflight-output temporary file was removed.
+
+Next: enforce the complementary decoder-provider contract. A claimed length
+stop must actually consume the requested turn allowance; short or empty
+provider output is not evidence that the host generation budget was exhausted.

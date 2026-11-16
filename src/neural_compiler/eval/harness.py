@@ -463,16 +463,19 @@ class EvaluationHarness:
                     raise RuntimeError(
                         "DecodeSession finish reason disagrees with callback stop"
                     )
+                if decoded.reason == "length":
+                    answer = self.tokenizer.decode(
+                        decoded.token_ids, skip_special_tokens=True
+                    )
+                    raise _RunFailure(
+                        "budget_exhausted",
+                        "Response turn ended at the generation-token limit",
+                    )
                 protocol.finish()
                 if call is None:
                     answer = self.tokenizer.decode(
                         decoded.token_ids, skip_special_tokens=True
                     )
-                    if decoded.reason == "length":
-                        raise _RunFailure(
-                            "budget_exhausted",
-                            "Answer turn ended at the generation-token limit",
-                        )
                     checked = task.checker(answer)
                     outcome = (
                         "invalid_answer"
