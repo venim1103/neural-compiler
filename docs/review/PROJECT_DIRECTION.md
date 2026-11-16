@@ -1806,3 +1806,25 @@ unchanged 274-test code gate was not rerun.
 
 Next: retain mode-specific token accounting in the engine qualification plan
 and continue compatible local prerequisites without installing the engine.
+
+### 2026-11-16: successful execution results cannot contain failed exits
+
+The supervisor and native workers already classify nonzero process exits as
+failures, but manually constructed `ExecutionResult` objects could combine
+`ok` with a nonzero or signal return code. The result producer now rejects
+that contradiction explicitly. Successful nonprocess results may still use
+`None`; successful process results use zero. Failure statuses retain their
+existing codes, including setup failures with a zero child exit.
+
+**Bounded ledger:** two producer-only cases for exit code one and SIGKILL
+initially failed, then passed with the existing deterministic classification
+controls. Coupled execution/native/evaluation controls passed **125 tests** in
+8.45 s; root validation passed **276 tests** in 17.34 s, with 14 existing Torch
+JIT warnings and no skips. Root lint/whitespace, two-file formatting and source
+diagnostics passed. One earlier focused run additionally emitted a CUDA
+initialization warning and two FLA CPU-fallback warnings; no hardware cause
+or CUDA/Triton qualification is inferred. No dependencies, model/data/GPU jobs
+or shared-host changes were made.
+
+Next: checkpoint the verified result-contract repair and continue useful
+offline evaluation and serving prerequisites within the existing gates.

@@ -34,6 +34,14 @@ def test_stdout_cannot_forge_success() -> None:
     assert "ValueError: regression" in result.stderr
 
 
+@pytest.mark.parametrize("returncode", [1, -signal.SIGKILL])
+def test_execution_result_cannot_label_a_failed_exit_as_ok(returncode):
+    from neural_compiler.bridge import ExecutionResult
+
+    with pytest.raises(ValueError, match="ok.*returncode"):
+        ExecutionResult("ok", returncode=returncode)
+
+
 @pytest.mark.parametrize(
     "prefix",
     [

@@ -48,6 +48,8 @@ class ExecutionResult:
 
     def __post_init__(self) -> None:
         _validate_execution_status(self.status)
+        if self.status == "ok" and self.returncode not in (None, 0):
+            raise ValueError("ok results require returncode 0 or None")
 
 
 MAX_CODE_BYTES = 64 * 1024
