@@ -313,6 +313,8 @@ def run_serving_comparison(
         raise ValueError("Tasks must have unique case IDs")
     _validate_tool_description(tool_description)
     _validate_store_limits(max_store_bytes, max_store_entries)
+    if on_token_factory is not None and not callable(on_token_factory):
+        raise ValueError("on_token_factory must be callable")
 
     results: list[ServingCaseResult] = []
     for task in tasks:

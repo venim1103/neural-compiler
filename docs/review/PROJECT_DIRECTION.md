@@ -2535,3 +2535,25 @@ changes occurred.
 Next: complete sampler-factory input preflight. Noncallable factory results now
 fail explicitly, but a noncallable factory itself remains silently accepted
 for empty task lists.
+
+### 2026-11-16: complete sampler-factory input preflight
+
+Serving comparison now rejects a supplied noncallable sampler factory before
+task iteration, retaining the callable-result check and `None`-only greedy
+default. Empty task lists no longer hide invalid factory configuration.
+
+**Bounded ledger:** four empty/nonempty-by-boolean/integer cases failed before
+the repair (0.15 s): empty tasks accepted the inputs, populated tasks raised
+an indirect call-site `TypeError`. After explicit admission, all four passed
+(0.09 s), with forward spies preventing model/guest execution. One formatter
+application wrapped the new fixture before scoped style checks. Coupled
+checkpoint/serving: **92 passed** (5.16 s); root: **358 passed** (16.60 s).
+Root Ruff, two-file format and whitespace passed; owning-source diagnostics
+empty. Fourteen existing Torch warnings, no skips; existing jailed native/trusted
+controls ran. One failing-first, focused, coupled and root attempt spent;
+fixtures cleaned normally. No pretrained-model/data/GPU study, dependency,
+download, service or host change occurred.
+
+Next: reassess the held-out-family, serving and containment queues against
+owning code/tests and current resources, selecting another compatible offline
+prerequisite rather than treating a green checkpoint as completion.

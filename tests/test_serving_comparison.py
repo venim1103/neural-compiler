@@ -85,6 +85,29 @@ def test_invalid_sampler_factory_result_never_prefills(
         )
 
 
+@pytest.mark.parametrize("has_tasks", [False, True])
+@pytest.mark.parametrize("factory", [False, 42])
+def test_noncallable_sampler_factory_is_rejected_before_iteration(
+    tokenizer, hybrid_model, monkeypatch, has_tasks, factory
+):
+    monkeypatch.setattr(
+        hybrid_model,
+        "forward",
+        lambda *args, **kwargs: pytest.fail("Invalid factory ran model"),
+    )
+    tasks = (
+        [Task("factory", "unit", "Compute.", IntegerChecker(42))] if has_tasks else []
+    )
+    with pytest.raises(ValueError, match="on_token_factory must be callable"):
+        run_serving_comparison(
+            tasks,
+            tokenizer,
+            hybrid_model,
+            lambda: None,
+            on_token_factory=factory,
+        )
+
+
 @pytest.mark.parametrize("mode", ["prefix", "full"])
 def test_invalid_decode_budget_does_not_reconstruct_session(
     hybrid_model, monkeypatch, mode
