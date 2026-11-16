@@ -253,6 +253,7 @@ class CallRecord:
     status: str
     execution_seconds: float
     response_tokens: int
+    response_seconds: float | None = None
 
     def __post_init__(self) -> None:
         _validate_execution_status(self.status)
@@ -260,6 +261,10 @@ class CallRecord:
             raise ValueError("Call execution time must be finite and nonnegative")
         if type(self.response_tokens) is not int or self.response_tokens < 0:
             raise ValueError("response_tokens must be a nonnegative integer")
+        if self.response_seconds is not None and (
+            not math.isfinite(self.response_seconds) or self.response_seconds < 0
+        ):
+            raise ValueError("Call response time must be finite and nonnegative")
 
 
 @dataclass(frozen=True)
@@ -306,8 +311,11 @@ class EvaluationHarness:
     """Same tasks, prompts, checker and budgets across caller-labelled paths.
 
     The caller supplies an already-loaded session factory and synchronization
-    function (CUDA synchronize for GPU timing). Model deadlines are cooperative;
-    only the supervised executor supplies a hard subprocess deadline.
+    function (CUDA synchronize for GPU timing). Each attempted result return
+    includes framing, context admission, injection and synchronization in its
+    response time, including failed attempts. Unattempted returns are unmeasured.
+    Model deadlines are cooperative; only the supervised executor supplies a
+    hard subprocess deadline.
     """
 
     def __init__(
@@ -434,18 +442,29 @@ class EvaluationHarness:
                 remaining_time()
                 if result.status == "sandbox_error":
                     raise _RunFailure("sandbox_error", result.stderr)
-                response = protocol.response_ids(call, result)
-                if (
-                    prompt_count + generated + injected + len(response)
-                    > self.budgets.context_tokens
-                ):
-                    raise _RunFailure(
-                        "budget_exhausted",
-                        "Tool response would exceed the context-token budget",
+                response_start = time.perf_counter()
+                response_count = 0
+                try:
+                    response = protocol.response_ids(call, result)
+                    if (
+                        prompt_count + generated + injected + len(response)
+                        > self.budgets.context_tokens
+                    ):
+                        raise _RunFailure(
+                            "budget_exhausted",
+                            "Tool response would exceed the context-token budget",
+                        )
+                    session.inject(response)
+                    response_count = len(response)
+                    injected += response_count
+                finally:
+                    self.synchronize()
+                    calls[-1] = CallRecord(
+                        result.status,
+                        execution_time,
+                        response_count,
+                        time.perf_counter() - response_start,
                     )
-                session.inject(response)
-                injected += len(response)
-                calls[-1] = CallRecord(result.status, execution_time, len(response))
             else:
                 raise _RunFailure(
                     "budget_exhausted", "Total generation-token budget exhausted"
@@ -544,6 +563,12 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, object]:
     tool_calls = sum(len(result.calls) for result in results)
     exec_list = [call.execution_seconds for result in results for call in result.calls]
     execution_seconds = sum(exec_list)
+    response_list = [
+        call.response_seconds
+        for result in results
+        for call in result.calls
+        if call.response_seconds is not None
+    ]
     outcomes = {
         outcome: sum(result.outcome == outcome for result in results)
         for outcome in ALL_OUTCOMES
@@ -565,6 +590,10 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, object]:
         "execution_seconds": execution_seconds,
         "execution_p50_seconds": _quantile(exec_list, 0.50),
         "execution_p95_seconds": _quantile(exec_list, 0.95),
+        "response_seconds": sum(response_list),
+        "response_timing_samples": len(response_list),
+        "response_p50_seconds": _quantile(response_list, 0.50),
+        "response_p95_seconds": _quantile(response_list, 0.95),
         "seconds_per_correct": elapsed / correct if correct else None,
         "seconds_per_correct_ci_95": None
         if ratio_ci is None

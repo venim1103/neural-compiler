@@ -1988,3 +1988,45 @@ routine testing/planning approval. This is a bounded handoff, not project
 completion, a user pause, or evidence that all possible bugs are absent.
 
 [workspace-io-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43848533674
+
+### 2026-11-16: synchronized result-return timing prerequisite
+
+On resumed autonomous work, the [evaluation harness][return-timing-harness]
+provided executor/case wall times but no separate result-return measurements.
+This is a useful offline P0 prerequisite missed by the previous bounded sweep;
+it does not require accepted tasks, model studies or a new serving dependency.
+
+`CallRecord.response_seconds` now measures response framing, context admission,
+cache restoration/prefill through `inject`, and the supplied synchronization
+hook. Failed framing, admission or injection attempts retain their elapsed
+time and explicit existing outcome. No attempted return (including isolation
+failure) and legacy records use `None`, not a zero-time substitute. Successful
+injection still records every response token once.
+
+The harness synchronizes after each attempted return so asynchronous prefill
+completion is charged to that stage rather than the next decode turn. This
+intentionally changes timing boundaries; comparisons use the same harness and
+hook. Summaries add measured response-time totals/p50/p95 and
+`response_timing_samples`, making incomplete measurement coverage visible.
+The primary failure-inclusive seconds-per-correct metric, checker/outcome
+contracts, confidence calculations and resource limits remain unchanged.
+These diagnostics neither isolate a pure GPU decode step nor establish the
+P0 latency gate on a real engine.
+
+**Bounded ledger:** four failing-first cases exposed the missing field
+(0.94 s); eight new synthetic clock/CPU cases then passed (0.67 s).
+They cover delayed completion, failed restore, rejected framing/context,
+unmeasured-record coverage and invalid timings. Coupled evaluation/serving/
+checkpoint controls: **137 passed** (9.75 s). Required root gate:
+**291 passed** (14.84 s), root Ruff, two-file format and whitespace passed;
+owning-source Pylance diagnostics were empty. Fourteen existing Torch warnings,
+no skips. Existing jailed native and trusted containment controls ran in the
+root gate; no new dependency, data/model/GPU, service or host actions occurred.
+Fixture workdirs cleaned normally. Finite plan: eight new cases, one
+failing-first run, one focused/coupled/root pass; no assertions or limits relaxed.
+
+Next: reuse existing paired-delta arithmetic for the serving report, which
+currently validates matching cases but exposes only independently aggregated
+mode summaries.
+
+[return-timing-harness]: ../../src/neural_compiler/eval/harness.py

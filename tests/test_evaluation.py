@@ -9,7 +9,8 @@ from fractions import Fraction
 import pytest
 
 from neural_compiler.bridge import ExecutionResult, run_python
-from neural_compiler.bridge.session import LiveSession
+from neural_compiler.bridge.protocol import ProtocolError, QwenToolProtocol
+from neural_compiler.bridge.session import CheckpointBudgetError, LiveSession
 from neural_compiler.eval import (
     ALL_OUTCOMES,
     SYNTHETIC_FAMILIES,
@@ -315,6 +316,142 @@ def test_wall_budget_is_counted_across_execution(tokenizer, hybrid_model, monkey
     )
     assert result.outcome == "timeout" and result.elapsed_seconds == 2
     assert len(result.calls) == 1 and result.calls[0].status == "timeout"
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_response_timing_includes_prefill_completion(
+    tokenizer, hybrid_model, monkeypatch, failed
+):
+    from neural_compiler.eval import harness
+
+    now = [0.0]
+    pending = [0.0]
+    monkeypatch.setattr(harness.time, "perf_counter", lambda: now[0])
+    original_response = QwenToolProtocol.response_ids
+    original_inject = LiveSession.inject
+
+    def response_ids(self, call, result):
+        now[0] += 0.25
+        return original_response(self, call, result)
+
+    def inject(self, ids):
+        now[0] += 2
+        pending[0] += 3
+        if failed:
+            raise CheckpointBudgetError("Synthetic restore capacity exhausted")
+        original_inject(self, ids)
+
+    def synchronize():
+        now[0] += pending[0]
+        pending[0] = 0
+
+    def execute(code, timeout):
+        now[0] += 1
+        return ExecutionResult("ok", "42\n")
+
+    monkeypatch.setattr(QwenToolProtocol, "response_ids", response_ids)
+    monkeypatch.setattr(LiveSession, "inject", inject)
+    runner = harness_for(
+        tokenizer,
+        hybrid_model,
+        monkeypatch,
+        call_text("print(42)") + "Final answer: 42<|im_end|>",
+        executor=execute,
+    )
+    runner.synchronize = synchronize
+    result = runner.run(
+        Task("return-time", "unit", "Compute.", IntegerChecker(42)), "python_tool"
+    )
+    assert result.outcome == ("budget_exhausted" if failed else "correct")
+    assert len(result.calls) == 1
+    call = result.calls[0]
+    assert call.execution_seconds == 1
+    assert call.response_seconds == 5.25
+    assert result.elapsed_seconds == 6.25
+    assert result.injected_tokens == call.response_tokens
+    assert (call.response_tokens == 0) == failed
+
+
+@pytest.mark.parametrize("stage", ["framing", "context"])
+def test_response_timing_retains_rejected_return_attempts(
+    tokenizer, hybrid_model, monkeypatch, stage
+):
+    from neural_compiler.eval import harness
+
+    now = [0.0]
+    monkeypatch.setattr(harness.time, "perf_counter", lambda: now[0])
+    original_response = QwenToolProtocol.response_ids
+
+    def response_ids(self, call, result):
+        now[0] += 0.75
+        if stage == "framing":
+            raise ProtocolError("Synthetic response framing failure")
+        return original_response(self, call, result)
+
+    monkeypatch.setattr(QwenToolProtocol, "response_ids", response_ids)
+    monkeypatch.setattr(
+        LiveSession, "inject", lambda *args: pytest.fail("Must not prefill")
+    )
+    runner = harness_for(
+        tokenizer,
+        hybrid_model,
+        monkeypatch,
+        call_text("print(42)"),
+        budgets=replace(Budgets(), context_tokens=200),
+        executor=lambda code, timeout: ExecutionResult("ok", "x" * 100),
+    )
+    result = runner.run(
+        Task("rejected-return", "unit", "Compute.", IntegerChecker(42)), "python_tool"
+    )
+    assert result.outcome == (
+        "protocol_error" if stage == "framing" else "budget_exhausted"
+    )
+    assert result.calls[0].response_seconds == 0.75
+    assert result.calls[0].response_tokens == result.injected_tokens == 0
+
+
+def test_response_timing_summary_keeps_unmeasured_calls_explicit():
+    measured = CaseResult(
+        "measured",
+        "unit",
+        "python_tool",
+        "correct",
+        "",
+        "Final answer: 42",
+        5,
+        10,
+        3,
+        (CallRecord("ok", 1, 3, response_seconds=2),),
+    )
+    rejected = replace(
+        measured,
+        case_id="rejected",
+        outcome="protocol_error",
+        injected_tokens=0,
+        calls=(CallRecord("ok", 1, 0, response_seconds=4),),
+    )
+    unmeasured = replace(
+        measured,
+        case_id="unmeasured",
+        outcome="sandbox_error",
+        injected_tokens=0,
+        calls=(CallRecord("sandbox_error", 1, 0),),
+    )
+    summary = summarize([measured, rejected, unmeasured])
+    assert summary["tool_calls"] == 3
+    assert summary["response_timing_samples"] == 2
+    assert summary["response_seconds"] == 6
+    assert summary["response_p50_seconds"] == 3
+    assert summary["response_p95_seconds"] == pytest.approx(3.9)
+    missing = summarize([unmeasured])
+    assert missing["response_timing_samples"] == 0
+    assert missing["response_p95_seconds"] is None
+
+
+@pytest.mark.parametrize("seconds", [-1, float("inf"), float("nan")])
+def test_invalid_response_timing_is_explicit(seconds):
+    with pytest.raises(ValueError, match="response time"):
+        CallRecord("ok", 0, 0, response_seconds=seconds)
 
 
 @pytest.mark.parametrize("stage", ["checker", "synchronize"])
