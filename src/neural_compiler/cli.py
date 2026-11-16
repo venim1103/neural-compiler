@@ -10,6 +10,16 @@ from pathlib import Path
 from neural_compiler import __version__
 
 
+def _read_program(path: Path) -> str:
+    from neural_compiler.bridge.execution import MAX_CODE_BYTES
+
+    with path.open("rb") as source:
+        raw = source.read(MAX_CODE_BYTES + 1)
+    if len(raw) > MAX_CODE_BYTES:
+        raise ValueError(f"Program exceeds {MAX_CODE_BYTES} UTF-8 bytes")
+    return raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="neural-compiler")
     parser.add_argument(
@@ -57,26 +67,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.check_imports:
         from neural_compiler.bridge import evaluate_import_policy
 
-        report = evaluate_import_policy(args.check_imports.read_text(encoding="utf-8"))
+        report = evaluate_import_policy(_read_program(args.check_imports))
         print(json.dumps(asdict(report)))
         return 0 if report.compliant else 1
     if args.run_python or args.run_c or args.run_asm:
         from neural_compiler.bridge import run_asm, run_c, run_python
 
         if args.run_python:
-            result = run_python(
-                args.run_python.read_text(encoding="utf-8"), timeout=args.timeout
-            )
+            result = run_python(_read_program(args.run_python), timeout=args.timeout)
         elif args.run_c:
             result = run_c(
-                args.run_c.read_text(encoding="utf-8"),
+                _read_program(args.run_c),
                 timeout=args.timeout,
                 compiler=args.compiler,
             )
         else:
-            result = run_asm(
-                args.run_asm.read_text(encoding="utf-8"), timeout=args.timeout
-            )
+            result = run_asm(_read_program(args.run_asm), timeout=args.timeout)
         print(json.dumps(asdict(result)))
         return 0 if result.status == "ok" else 1
     return 0

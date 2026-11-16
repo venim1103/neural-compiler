@@ -1585,3 +1585,32 @@ at `05ff5d9` (run `43438563896`).
 
 Next: checkpoint and synchronize this dependent repair, then continue bounded
 offline cache/evaluation prerequisites without reopening protected studies.
+
+### 2026-11-13: CLI source ingestion stops at the byte-budget sentinel
+
+All four [CLI file actions][cli-ingestion-source] previously read complete files
+before execution/import inventory enforced the 64 KiB source cap. A shared
+local reader now reads at most 65,537 bytes, rejects overflow before decoding
+or processing, and retains universal-newline normalization for in-limit UTF-8
+source. The raw-byte cap also prevents newline normalization from admitting
+oversized files. Existing explicit file/UTF-8/size errors and execution JSON
+remain; this is bounded ingestion, not untrusted-workload qualification.
+The README usage section documents this input contract without progress history.
+
+**Bounded ledger:** instrumented C/import-inventory reads both initially used
+unbounded text ingestion; the exact-65,536-byte multibyte/CRLF compatibility
+control already passed. All three passed after repair. Source fixtures were
+at most 65,538 bytes; no source was actually executed by the new fixtures.
+An initial patch's next-test anchor was wrong and changed nothing; a bounded
+read recovered the correct anchor. One ledger SQL syntax error was corrected
+before execution. A formatter failure concerned only two shortened CLI calls;
+scoped normalization repaired them.
+Coupled execution/native/import controls passed **57 tests** in 1.43 s; root
+validation passed **268 tests** in 15.40 s with 14 existing warnings and no
+skips. Root lint/whitespace, two-file formatting and CLI diagnostics passed.
+No dependencies, model/data/GPU jobs, services or host changes occurred.
+
+[cli-ingestion-source]: ../../src/neural_compiler/cli.py
+
+Next: checkpoint/synchronize the bounded reader, then retain native framing,
+exact cache boundaries and separately gated serving/containment qualification.

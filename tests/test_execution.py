@@ -232,6 +232,61 @@ def test_cli_runs_python_with_structured_failure(jail, tmp_path: Path, capsys) -
     assert "cli regression" in result["stderr"]
 
 
+def test_cli_accepts_exact_utf8_source_limit_without_changing_newlines(
+    tmp_path, monkeypatch, capsys
+):
+    from neural_compiler import bridge
+
+    raw = b"#" + b"\xc3\xa9" * (MAX_CODE_BYTES // 2 - 3) + b"\r\nabc"
+    source = tmp_path / "boundary.py"
+    source.write_bytes(raw)
+    received = []
+
+    def fake_python(code, timeout=20):
+        received.append(code)
+        return bridge.ExecutionResult("ok", "42\n")
+
+    monkeypatch.setattr(bridge, "run_python", fake_python)
+    assert main(["--run-python", str(source)]) == 0
+    assert received == [raw.decode("utf-8").replace("\r\n", "\n")]
+    assert '"status": "ok"' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("action", ["--run-c", "--check-imports"])
+def test_cli_source_ingestion_reads_only_the_bounded_prefix(
+    tmp_path, monkeypatch, action
+):
+    from contextlib import contextmanager
+    from neural_compiler import bridge
+
+    source = tmp_path / "oversized-source"
+    source.write_bytes(b"x" * (MAX_CODE_BYTES + 2))
+    open_file = Path.open
+    sizes = []
+
+    @contextmanager
+    def bounded_open(path, mode="r", **kwargs):
+        assert mode == "rb", "Source must be bounded by bytes before UTF-8 decoding"
+        with open_file(path, mode, **kwargs) as stream:
+
+            def bounded_read(size=-1):
+                assert 0 < size <= MAX_CODE_BYTES + 1
+                sizes.append(size)
+                return stream.read(size)
+
+            yield SimpleNamespace(read=bounded_read)
+
+    def reject_processing(*args, **kwargs):
+        pytest.fail("Oversized source must not reach execution or AST processing")
+
+    monkeypatch.setattr(Path, "open", bounded_open)
+    monkeypatch.setattr(bridge, "run_c", reject_processing)
+    monkeypatch.setattr(bridge, "evaluate_import_policy", reject_processing)
+    with pytest.raises(ValueError, match="Program exceeds .* UTF-8 bytes"):
+        main([action, str(source)])
+    assert sizes == [MAX_CODE_BYTES + 1]
+
+
 def test_run_jailed_command_assembly_and_fd_plumbing(
     monkeypatch, tmp_path: Path
 ) -> None:

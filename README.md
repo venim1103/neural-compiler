@@ -72,6 +72,8 @@ neural-compiler --run-python path/to/program.py
 ```
 
 This prints JSON with `status`, `stdout`, `stderr`, and `returncode`; the CLI exits nonzero for failed execution.
+CLI program files, including `--check-imports` inputs, must be UTF-8 and at most
+64 KiB before newline normalization; oversized files are rejected after a bounded read.
 On the audit host, 30 calls to the already-loaded Python API measured **23.92 ms p50 / 25.38 ms p95**,
 including fresh jail/interpreter startup. This excludes CLI/model startup and is not a production SLO.
 
