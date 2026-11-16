@@ -1922,3 +1922,44 @@ model/data/GPU jobs, services or host changes occurred; fixture workdirs cleaned
 
 Next: checkpoint/synchronize infrastructure failure handling, then continue
 compatible offline evaluation/cache prerequisites under the existing gates.
+
+### 2026-11-16: pinned scheduler emits through-stop token deltas
+
+The actual scheduler imports a composed output streamer, rather than inheriting
+the output implementation. Its [generation accumulator][sglang-output-streamer]
+selects `req.output_ids_through_stop`, emits the suffix after `send_token_offset`,
+then advances that offset to the retained length. Its payload constructor passes
+those deltas directly into `BatchTokenIDOutput.output_ids`. Finished requests
+emit once, marking `finished_output`; unfinished emission may be deferred by
+stream intervals or a possible stop-string prefix.
+
+Combined with the earlier request/detokenizer/tokenizer-manager reads, this
+closes the inspected Python non-beam source path: stop-inclusive internal IDs
+become scheduler deltas, remain separate from text trimming, and are exposed
+as delta or cumulative IDs according to public response mode. It is not a
+runtime acceptance result. Scheduler ordering, speculative/page effects,
+actual target markers and terminal recurrent/KV state still require integration
+qualification; Rust/disaggregated/beam modes are not certified by this trace.
+
+**Bounded ledger:** the 86,357-byte Engine established scheduler ownership.
+The first scheduler read exceeded 256 KiB and was not parsed; HEAD then reported
+282,156 bytes, recovered completely under a revised 320 KiB cap. Actual imports
+led to the 35,754-byte output streamer under 128 KiB. Its complete acceptance
+method fit the 15,500-character output cap; the payload method exceeded the
+remaining combined space, so one final query emitted that complete definition
+under 16,000 characters. Six requests total, including the failed size-bound
+attempt and metadata query, each with a 20-second timeout at the same pin.
+No imports/exec, checkout, engine/dependency/model/data/GPU or host actions
+occurred; no source files were retained. Documentation whitespace/references
+were checked, not the unchanged 283-test code gate.
+
+[sglang-output-streamer]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/managers/scheduler_components/output_streamer.py
+
+The token-ID checkpoint's [hosted CI][token-id-ci] succeeded at `c70f54f`.
+The workspace checkpoint was still running when inspected; no hosted success
+is inferred for it.
+
+[token-id-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43848048691
+
+Next: retain the mode-specific source contract as a qualification prerequisite,
+without substituting it for numerical/cache/resource tests on a real engine.
