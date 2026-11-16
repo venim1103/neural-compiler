@@ -1552,7 +1552,7 @@ kernel/engine qualification result.
 Next: checkpoint the verified deadline repair, then continue bounded offline
 prerequisites while retaining the separate real-engine and containment gates.
 
-### 2026-11-13: Python import/source preparation consumes the same allowance
+### 2026-11-16: Python import/source preparation consumes the same allowance
 
 The [Python wrapper][python-preparation-source] likewise passed a fresh timeout
 after static import-policy evaluation and source-file preparation. It now starts
@@ -1586,7 +1586,7 @@ at `05ff5d9` (run `43438563896`).
 Next: checkpoint and synchronize this dependent repair, then continue bounded
 offline cache/evaluation prerequisites without reopening protected studies.
 
-### 2026-11-13: CLI source ingestion stops at the byte-budget sentinel
+### 2026-11-16: CLI source ingestion stops at the byte-budget sentinel
 
 All four [CLI file actions][cli-ingestion-source] previously read complete files
 before execution/import inventory enforced the 64 KiB source cap. A shared
@@ -1614,3 +1614,45 @@ No dependencies, model/data/GPU jobs, services or host changes occurred.
 
 Next: checkpoint/synchronize the bounded reader, then retain native framing,
 exact cache boundaries and separately gated serving/containment qualification.
+
+### 2026-11-16: pinned internal stop-token retention is source-confirmed
+
+The pinned [request finish implementation][sglang-request-finish] uses
+`update_finish_state`, not the older `check_finished` name. Token/EOS stops set
+`finished_len` to the matched token's position plus one. Streaming completion
+then retains `output_ids[:finished_len]`, and the append helper carries that
+retained output before the new suffix. This establishes internal stop-token
+inclusion at this source revision, not public streaming output visibility or
+whether the terminal token has already entered recurrent/KV state.
+
+String/regex stops precede token/EOS checks; speculative stop positions beyond
+`max_new_tokens` are demoted to a length finish at that cap. `ignore_eos` skips
+the entire token-stop helper, including explicit `stop_token_ids`: a future
+native-delimiter adapter must account for that coupling rather than assuming
+independent controls. Public stop trimming, `no_stop_trim`, speculative/page
+alignment and pending-token numerical equivalence still need actual backend
+qualification before implementation/adoption.
+
+**Bounded ledger:** streaming/controller bodies were 12,478/20,999 bytes.
+The imported request source declared 178,701 bytes, exceeding the initial
+128 KiB cap; that attempt stopped and was not parsed as complete evidence.
+A narrowly revised 192 KiB recovery parsed it completely. Its legacy-name
+selector did not emit the actual finish methods; one final bounded query
+recovered the complete method inventory and five finish branches, under an
+18,000-character combined definition-output cap. Five requests total, including
+the failed size-bound attempt, used the same pinned revision with 20-second
+request limits. No imports/exec, checkout, installation, model/data/GPU jobs
+or host changes occurred; no source bodies were retained. Documentation-only
+validation checks whitespace/references; the unchanged code suite was not rerun.
+
+Hosted CI succeeded for [Python preparation `653b5ba`][python-preparation-ci]
+and [CLI ingestion `be14539`][cli-ingestion-ci]. UTC/commit metadata confirmed
+these checkpoints occurred on November 16; their two update headings were
+corrected rather than inheriting the older November 13 date.
+
+[sglang-request-finish]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/managers/schedule_batch.py
+[python-preparation-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43827061233
+[cli-ingestion-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43827565988
+
+Next: preserve the internal-versus-public/pending boundary distinction and
+continue compatible offline prerequisites without instantiating the engine.
