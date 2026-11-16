@@ -45,12 +45,14 @@ def test_invalid_decode_budget_preserves_pending_boundary(
     torch.testing.assert_close(session.logits, logits, atol=0, rtol=0)
 
 
-@pytest.mark.parametrize("sampled", [1.5, True])
+@pytest.mark.parametrize("sampled", [1.5, True, -1, "overflow"])
 @pytest.mark.parametrize("pending", [False, True])
 def test_invalid_sample_never_enters_history_or_callback(
     hybrid_model, monkeypatch, sampled, pending
 ):
     session = LiveSession(hybrid_model, [1, 2, 3])
+    if sampled == "overflow":
+        sampled = session.logits.shape[-1]
     if pending:
         monkeypatch.setattr(session, "_next_token", lambda: 4)
         session.decode_until(1, lambda _: True)
@@ -63,7 +65,12 @@ def test_invalid_sample_never_enters_history_or_callback(
         callbacks.append(token)
         return True
 
-    with pytest.raises(ValueError, match="Token IDs must be integers"):
+    expected = (
+        "Token IDs must be integers"
+        if type(sampled) is not int
+        else "outside the model logit vocabulary"
+    )
+    with pytest.raises(ValueError, match=expected):
         session.decode_until(1, stop)
     assert callbacks == []
     assert session.tokens == prefix and session._pending is None

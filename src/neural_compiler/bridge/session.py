@@ -204,8 +204,13 @@ class LiveSession:
             self._pending = None
         sampled = []
         for _ in range(max_new_tokens):
+            vocab_size = self.logits.shape[-1]
             token = self._next_token()
             _validate_token_ids((token,))
+            if token < 0 or token >= vocab_size:
+                raise ValueError(
+                    "Sampled token ID is outside the model logit vocabulary"
+                )
             sampled.append(token)
             self._tokens.append(token)
             self._pending = token

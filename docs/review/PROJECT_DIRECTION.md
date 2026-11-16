@@ -2324,3 +2324,28 @@ callback stop. The exact-integer guard alone still lets such a sample enter
 history/pending state without reaching model input validation.
 
 [sample-boundary-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43860590657
+
+### 2026-11-16: admit only valid model-logit column samples
+
+Sample admission now checks the current model-logit column domain as well as
+exact integer type, before history/pending mutation or callback delivery.
+Previously `-1` or the logit width could return at a callback stop without any
+model input validation. Width is captured before the mutable sampler executes;
+no tokenizer/config vocabulary constant, EOS setting or read-only sampler API
+was introduced. Default greedy output is unchanged.
+
+**Bounded ledger:** four new negative/upper-bound cases, each with/without valid
+pending work, failed before the guard while four earlier type controls passed
+(0.23 s). All eight passed afterward (0.27 s), including exact valid-prefix
+accounting and recovery/full-prefill checks at unchanged tolerances. Coupled
+checkpoint/serving: **68 passed** (5.79 s); root: **326 passed** (21.40 s).
+Root Ruff, two-file format and whitespace passed; owning-source diagnostics
+empty. Fourteen existing Torch warnings, no skips; existing jailed native/trusted
+controls ran. One failing-first, one focused, one coupled and one root attempt
+were spent; fixtures cleaned normally. No model/data/GPU, dependency, download,
+service or host-security action occurred.
+
+Next: test ownership of captured serving logits. The CPU
+`detach().cpu()` result can alias a live sampler session's tensor; a retained
+mutable session could change earlier comparison evidence after capture.
+Copy diagnostic output rather than restricting the sampler interface.
