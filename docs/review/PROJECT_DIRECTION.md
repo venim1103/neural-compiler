@@ -2511,3 +2511,27 @@ download, service or host change occurred.
 Next: align chat-template admission with exact integer token-ID validation
 before invoking the session factory. The harness's current `isinstance` guard
 accepts booleans even though native sessions reject them as invalid token IDs.
+
+### 2026-11-16: reject invalid template IDs before factory admission
+
+Chat-template admission now requires exact Python integer IDs, matching native
+session validation. Boolean IDs are rejected as a template protocol error before
+the session factory or prompt observation is committed. Existing malformed
+non-list/fractional controls and valid tokenizer prompts retain their behavior.
+
+**Bounded ledger:** three synthetic inputs exposed one boolean-factory admission
+failure; two malformed controls passed (0.13 s). All three passed afterward
+(0.04 s), with invalid prompts unobserved. Factory spies prevented model/guest
+execution. Scoped Ruff passed; one initial format failure needed a wrapped test
+call, repaired by one formatter application/style-only recheck without repeating
+the successful focus. Coupled evaluation/serving: **159 passed** (10.82 s);
+root: **354 passed** (17.98 s). Root Ruff, two-file format and whitespace passed;
+owning-source diagnostics empty. Fourteen existing Torch warnings, no skips;
+existing jailed native/trusted controls ran. One failing-first, focused, coupled
+and root attempt spent, plus failed/repaired style checks; fixtures cleaned.
+No pretrained-model/data/GPU study, dependencies, downloads, service or host
+changes occurred.
+
+Next: complete sampler-factory input preflight. Noncallable factory results now
+fail explicitly, but a noncallable factory itself remains silently accepted
+for empty task lists.
