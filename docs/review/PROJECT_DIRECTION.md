@@ -1656,3 +1656,32 @@ corrected rather than inheriting the older November 13 date.
 
 Next: preserve the internal-versus-public/pending boundary distinction and
 continue compatible offline prerequisites without instantiating the engine.
+
+### 2026-11-16: pinned detokenization separates text trimming from token output
+
+The request's `output_ids_through_stop` property explicitly includes the stop
+position and feeds incremental detokenization. The pinned
+[detokenizer][sglang-detokenizer] may remove a matched token before decoding text
+when `no_stop_trim` is false, with exceptions for configured tool-close IDs.
+String-stop trimming similarly changes rendered text. This is not evidence that
+all target-specific tool markers are configured as exceptions.
+
+`handle_batch_token_id_out` forwards `recv_obj.output_ids` unchanged into
+`BatchStrOutput`, separately from trimmed `output_strs`. A future adapter must
+therefore distinguish token-array framing from rendered-text visibility;
+`no_stop_trim` alone is not proof of exact terminal-token accounting. Final
+public response assembly and recurrent/KV pending-token behavior remain
+qualification checks, not implemented engine integration.
+
+**Bounded ledger:** two same-revision, parse-only requests recovered the
+178,701-byte request source under 192 KiB and 23,531-byte detokenizer under
+128 KiB, each with a 20-second timeout. Complete selected methods fit their
+16,000/15,000-character output caps; the optional third request was unnecessary.
+No imports/exec, checkout, dependency changes, engine/model/data/GPU or host
+actions occurred; no source files were retained. Documentation references and
+whitespace were checked; no unchanged code gate was rerun.
+
+[sglang-detokenizer]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/managers/detokenizer_manager.py
+
+Next: trace final response assembly only as needed for the exact token-ID
+qualification plan; do not substitute trimmed text for native protocol tokens.
