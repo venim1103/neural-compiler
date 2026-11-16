@@ -21,6 +21,7 @@ from .cgroups import CgroupLimits
 from .execution import (
     MAX_OUTPUT_BYTES,
     ExecutionResult,
+    _sandbox_error,
     _validate_execution_budget,
     run_jailed,
     run_python,
@@ -128,17 +129,22 @@ def run_c(
         raise ValueError(f"Unsupported C compiler: {compiler!r}")
     validate_code(code)
     deadline = _request_deadline(timeout, output_limit)
-    with tempfile.TemporaryDirectory(prefix="neural-compiler-c-") as directory:
-        work = Path(directory)
-        (work / "prog.c").write_text(code, encoding="utf-8")
-        return _compile_and_run(
-            list(_C_COMPILER_COMMANDS[compiler]),
-            work,
-            deadline,
-            output_limit=output_limit,
-            seccomp=seccomp,
-            cgroup=cgroup,
-        )
+    result = None
+    try:
+        with tempfile.TemporaryDirectory(prefix="neural-compiler-c-") as directory:
+            work = Path(directory)
+            (work / "prog.c").write_text(code, encoding="utf-8")
+            result = _compile_and_run(
+                list(_C_COMPILER_COMMANDS[compiler]),
+                work,
+                deadline,
+                output_limit=output_limit,
+                seccomp=seccomp,
+                cgroup=cgroup,
+            )
+        return result
+    except OSError as exc:
+        return _sandbox_error(exc, result)
 
 
 def run_asm(
@@ -152,25 +158,30 @@ def run_asm(
     """Assemble and link a `long long solve(void)` routine inside the jail."""
     validate_code(code)
     deadline = _request_deadline(timeout, output_limit)
-    with tempfile.TemporaryDirectory(prefix="neural-compiler-asm-") as directory:
-        work = Path(directory)
-        (work / "solve.s").write_text(code + "\n", encoding="utf-8")
-        (work / "main.c").write_text(ASM_HARNESS, encoding="utf-8")
-        return _compile_and_run(
-            [
-                "/usr/bin/gcc",
-                "-no-pie",
-                "-o",
-                "/work/prog",
-                "/work/main.c",
-                "/work/solve.s",
-            ],
-            work,
-            deadline,
-            output_limit=output_limit,
-            seccomp=seccomp,
-            cgroup=cgroup,
-        )
+    result = None
+    try:
+        with tempfile.TemporaryDirectory(prefix="neural-compiler-asm-") as directory:
+            work = Path(directory)
+            (work / "solve.s").write_text(code + "\n", encoding="utf-8")
+            (work / "main.c").write_text(ASM_HARNESS, encoding="utf-8")
+            result = _compile_and_run(
+                [
+                    "/usr/bin/gcc",
+                    "-no-pie",
+                    "-o",
+                    "/work/prog",
+                    "/work/main.c",
+                    "/work/solve.s",
+                ],
+                work,
+                deadline,
+                output_limit=output_limit,
+                seccomp=seccomp,
+                cgroup=cgroup,
+            )
+        return result
+    except OSError as exc:
+        return _sandbox_error(exc, result)
 
 
 def _run_jailed_runtime(
@@ -187,35 +198,39 @@ def _run_jailed_runtime(
     if type(budget) is not int or budget <= 0:
         raise ValueError("execution budget must be a positive integer")
     deadline = _request_deadline(timeout, output_limit)
-    runtime_source = Path(runtime.__file__).read_text(encoding="utf-8")
-    with tempfile.TemporaryDirectory(
-        prefix=f"neural-compiler-{language}-"
-    ) as directory:
-        work = Path(directory)
-        (work / "runtime.py").write_text(runtime_source, encoding="utf-8")
-        (work / "program").write_text(code, encoding="utf-8")
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return ExecutionResult(
-                "timeout", stderr="Native setup exhausted the wall-clock deadline"
+    result = None
+    try:
+        runtime_source = Path(runtime.__file__).read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory(
+            prefix=f"neural-compiler-{language}-"
+        ) as directory:
+            work = Path(directory)
+            (work / "runtime.py").write_text(runtime_source, encoding="utf-8")
+            (work / "program").write_text(code, encoding="utf-8")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return ExecutionResult(
+                    "timeout", stderr="Native setup exhausted the wall-clock deadline"
+                )
+            result = run_jailed(
+                [
+                    sys.executable,
+                    "-I",
+                    "/work/runtime.py",
+                    language,
+                    "/work/program",
+                    str(budget),
+                ],
+                work,
+                remaining,
+                writable=False,
+                output_limit=output_limit,
+                runtime_prefix=Path(sys.prefix),
+                seccomp=seccomp,
+                cgroup=cgroup,
             )
-        result = run_jailed(
-            [
-                sys.executable,
-                "-I",
-                "/work/runtime.py",
-                language,
-                "/work/program",
-                str(budget),
-            ],
-            work,
-            remaining,
-            writable=False,
-            output_limit=output_limit,
-            runtime_prefix=Path(sys.prefix),
-            seccomp=seccomp,
-            cgroup=cgroup,
-        )
+    except OSError as exc:
+        return _sandbox_error(exc, result)
     if result.status == "runtime_error":
         mapped = {2: "compile_error", 3: "timeout"}.get(result.returncode)
         if mapped is not None:

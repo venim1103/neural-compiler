@@ -1893,3 +1893,32 @@ containment qualification.
 
 Next: checkpoint/synchronize token-ID admission and continue useful offline
 protocol/cache/evaluation prerequisites without claiming engine qualification.
+
+### 2026-11-16: outer workspace I/O failures remain explicit execution results
+
+Jail setup already translated infrastructure `OSError` failures to
+`sandbox_error`, preserving any completed result. Outer Python/native temporary
+directory, source-write and trusted-runtime-read failures instead escaped that
+contract; cleanup errors could also discard completed output from the caller.
+
+The wrappers now classify only these infrastructure I/O exceptions through the
+same extracted result-preserving constructor. Cleanup failures retain stdout,
+existing diagnostics and child return code while surfacing `sandbox_error`.
+Invalid-input `ValueError` and unrelated non-I/O exceptions are not caught.
+Compilation/runtime status mapping, deadlines, jail mounts and all work/output
+caps remain unchanged; no unjailed fallback or best-effort cleanup success is
+introduced.
+
+**Bounded ledger:** four failing-first synthetic cases covered Python source
+write, C temporary-directory creation, Wasm trusted-runtime read and cleanup
+after a completed Python result. All passed after repair, including preserved
+output/diagnostics and zero child launches on preparation failure. Coupled
+execution/native/seccomp/cgroup controls passed **85 tests** in 2.07 s; root
+validation passed **283 tests** in 16.36 s with 14 existing warnings and no
+skips. Root lint/whitespace, three-file formatting and both source diagnostics
+passed. Existing real jailed Python/C/assembly/Wasm/Unicorn and trusted seccomp
+controls ran, without production containment qualification. No dependencies,
+model/data/GPU jobs, services or host changes occurred; fixture workdirs cleaned.
+
+Next: checkpoint/synchronize infrastructure failure handling, then continue
+compatible offline evaluation/cache prerequisites under the existing gates.

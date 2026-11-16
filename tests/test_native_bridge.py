@@ -203,6 +203,61 @@ def test_native_preparation_consumes_shared_deadline(
         assert "setup" in result.stderr.lower()
 
 
+@pytest.mark.parametrize(
+    "execute,stage",
+    [(run_python, "write"), (run_c, "directory"), (run_wat, "runtime")],
+)
+def test_preparation_io_failures_are_explicit_without_launch(
+    monkeypatch, execute, stage
+):
+    from neural_compiler.bridge import execution, native
+
+    def fail_io(*args, **kwargs):
+        raise OSError("fixture preparation failure")
+
+    def reject_launch(*args, **kwargs):
+        pytest.fail("Preparation failure must not launch a child")
+
+    if stage == "write":
+        monkeypatch.setattr(Path, "write_text", fail_io)
+    elif stage == "directory":
+        monkeypatch.setattr(native.tempfile, "TemporaryDirectory", fail_io)
+    else:
+        monkeypatch.setattr(Path, "read_text", fail_io)
+    monkeypatch.setattr(execution, "run_jailed", reject_launch)
+    monkeypatch.setattr(native, "run_jailed", reject_launch)
+    result = execute("print(42)")
+    assert result.status == "sandbox_error"
+    assert "fixture preparation failure" in result.stderr
+    assert result.returncode is None
+
+
+def test_workspace_cleanup_failure_preserves_completed_result(monkeypatch):
+    from contextlib import contextmanager
+    from neural_compiler.bridge import execution
+
+    temporary_directory = execution.tempfile.TemporaryDirectory
+
+    @contextmanager
+    def failing_cleanup(*args, **kwargs):
+        with temporary_directory(*args, **kwargs) as directory:
+            yield directory
+            raise OSError("fixture cleanup failure")
+
+    monkeypatch.setattr(execution.tempfile, "TemporaryDirectory", failing_cleanup)
+    monkeypatch.setattr(
+        execution,
+        "run_jailed",
+        lambda *a, **kw: ExecutionResult("ok", "42\n", "guest diagnostic", 0),
+    )
+    result = run_python("print(42)")
+    assert result.status == "sandbox_error"
+    assert result.stdout == "42\n"
+    assert result.returncode == 0
+    assert "guest diagnostic" in result.stderr
+    assert "fixture cleanup failure" in result.stderr
+
+
 def test_run_c_supports_tcc_fast_path_inside_jail(monkeypatch) -> None:
     from neural_compiler.bridge import native
 

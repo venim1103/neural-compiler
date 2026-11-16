@@ -52,6 +52,17 @@ class ExecutionResult:
             raise ValueError("ok results require returncode 0 or None")
 
 
+def _sandbox_error(
+    error: Exception, result: ExecutionResult | None = None
+) -> ExecutionResult:
+    return ExecutionResult(
+        "sandbox_error",
+        "" if result is None else result.stdout,
+        str(error) if result is None else f"{result.stderr}\n{error}".strip(),
+        None if result is None else result.returncode,
+    )
+
+
 MAX_CODE_BYTES = 64 * 1024
 MAX_OUTPUT_BYTES = 64 * 1024
 MEMORY_BYTES = 512 * 1024 * 1024
@@ -323,12 +334,7 @@ def run_jailed(
                     )
         return result
     except (SeccompError, CgroupError, OSError) as exc:
-        return ExecutionResult(
-            "sandbox_error",
-            "" if result is None else result.stdout,
-            str(exc) if result is None else f"{result.stderr}\n{exc}".strip(),
-            None if result is None else result.returncode,
-        )
+        return _sandbox_error(exc, result)
 
 
 def run_python(
@@ -368,19 +374,24 @@ def run_python(
                 "sandbox_error",
                 stderr=f"Blocked by static import policy: {', '.join(blocked)}",
             )
-    with tempfile.TemporaryDirectory(prefix="neural-compiler-") as directory:
-        work = Path(directory)
-        (work / "prog.py").write_text(code, encoding="utf-8")
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            return ExecutionResult(
-                "timeout", stderr="Python setup exhausted the wall-clock deadline"
+    result = None
+    try:
+        with tempfile.TemporaryDirectory(prefix="neural-compiler-") as directory:
+            work = Path(directory)
+            (work / "prog.py").write_text(code, encoding="utf-8")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return ExecutionResult(
+                    "timeout", stderr="Python setup exhausted the wall-clock deadline"
+                )
+            result = run_jailed(
+                ["/usr/bin/python3", "-I", "-u", "/work/prog.py"],
+                work,
+                remaining,
+                output_limit=output_limit,
+                seccomp=seccomp,
+                cgroup=cgroup,
             )
-        return run_jailed(
-            ["/usr/bin/python3", "-I", "-u", "/work/prog.py"],
-            work,
-            remaining,
-            output_limit=output_limit,
-            seccomp=seccomp,
-            cgroup=cgroup,
-        )
+        return result
+    except OSError as exc:
+        return _sandbox_error(exc, result)
