@@ -1963,3 +1963,28 @@ is inferred for it.
 
 Next: retain the mode-specific source contract as a qualification prerequisite,
 without substituting it for numerical/cache/resource tests on a real engine.
+
+### 2026-11-16: remaining queue gates checked against current resources
+
+The last source gate passed **283 tests**, root lint/whitespace, scoped formatting
+and diagnostics. Its [hosted workspace checkpoint][workspace-io-ci] subsequently
+succeeded at `a67a0ee`; the earlier in-progress observation remains historical.
+No unchanged successful tests were rerun for this reassessment.
+
+| Queue | Verified compatible prerequisites | Remaining action and constraint |
+|---|---|---|
+| Held-out evaluation | Exact checkers, five deterministic synthetic families, three matched paths, uncertainty/family reporting and consistent result records; tiny CPU end-to-end controls passed. | Accept task/family/split inputs and study policy/resource scope before collecting trajectories or measuring a pretrained model. Synthetic fixtures are not accepted evaluation data. No additional concrete offline implementation defect was identified in this sweep. |
+| Serving comparison | Live/exact-prefix/full-prefill CPU adapters, bounded LRU, multi-call reference logits and pending-token checks; pinned Python non-beam token-output source path traced. | Neither SGLang nor vLLM is installed. Dependency integration needs a separately authorized, compatible isolated environment; actual engine, hybrid-state, CUDA/FLA and resource measurements remain unqualified. Source evidence cannot substitute for those checks. |
+| Containment/native tiers | Actual trusted namespace/native/seccomp fixtures passed; import inventory, resource deadlines and delegated-cgroup plumbing exist. | The current cgroup-v2 mount is read-only and its subtree controllers are not enabled. Real controller/PID-cap qualification needs a writable predelegated subtree, plus accepted production policies and independent evidence. Do not enable controllers, remount, or expose an untrusted service. |
+
+**Current resource evidence:** `/opt/venv` is Python 3.12.3 with Torch
+2.10.0+cu128, Transformers 5.22.1, tokenizers 0.23.3, Wasmtime 50.0.1 and
+Unicorn 2.1.4. Bubblewrap, gcc and tcc are present. Free disk is 363.91 GiB,
+so disk headroom is not the current blocker. No GPU/model initialization or
+host modification was performed. The source/test/resource sweep identified
+no further concrete useful authorized implementation step; the remaining
+milestones require the protected inputs or environment above, not another
+routine testing/planning approval. This is a bounded handoff, not project
+completion, a user pause, or evidence that all possible bugs are absent.
+
+[workspace-io-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43848533674
