@@ -2486,3 +2486,28 @@ or host change occurred. The earlier preflight-output temporary file was removed
 Next: enforce the complementary decoder-provider contract. A claimed length
 stop must actually consume the requested turn allowance; short or empty
 provider output is not evidence that the host generation budget was exhausted.
+
+### 2026-11-16: reject premature decoder length claims
+
+A decoder reporting `length` must return the requested turn's full token count.
+Short/empty length claims now escape as provider errors before decoding/scoring
+or budget-outcome attribution; final synchronization still runs. Existing
+callback/returned-ID agreement checks and genuine length/EOS/stop behavior remain
+unchanged. No metric definitions or token allowances changed.
+
+**Bounded ledger:** two added malformed-provider controls failed before the
+repair (0.16 s), then passed (0.07 s). Each uses at most one sampled ID with
+ordinary tiny CPU prefill and no guest execution. Scoped Ruff passed; the first
+format check found the added import needed wrapping. One formatter application
+and one style-only recheck repaired that failure without repeating the successful
+focused test. Coupled evaluation/serving: **157 passed** (10.75 s); root:
+**352 passed** (16.75 s). Root Ruff, two-file format and whitespace passed;
+owning-source diagnostics empty. Fourteen existing Torch warnings, no skips;
+existing jailed native/trusted controls ran. One failing-first, one focused,
+one coupled and one root attempt spent, plus the failed/repaired style checks.
+Fixtures cleaned normally; no pretrained-model/data/GPU study, dependency,
+download, service or host change occurred.
+
+Next: align chat-template admission with exact integer token-ID validation
+before invoking the session factory. The harness's current `isinstance` guard
+accepts booleans even though native sessions reject them as invalid token IDs.

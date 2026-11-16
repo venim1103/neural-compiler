@@ -10,7 +10,11 @@ import pytest
 
 from neural_compiler.bridge import ExecutionResult, run_python
 from neural_compiler.bridge.protocol import RUN_TOOL, ProtocolError, QwenToolProtocol
-from neural_compiler.bridge.session import CheckpointBudgetError, LiveSession
+from neural_compiler.bridge.session import (
+    CheckpointBudgetError,
+    DecodeResult,
+    LiveSession,
+)
 from neural_compiler.eval import (
     ALL_OUTCOMES,
     SYNTHETIC_FAMILIES,
@@ -253,6 +257,8 @@ def test_total_token_budget_does_not_reset_after_a_tool_call(
         "ignored_stop",
         "overrun",
         "missing_callback",
+        "short_length",
+        "empty_length",
     ],
 )
 def test_decoder_faults_cannot_be_scored_or_execute(
@@ -284,7 +290,11 @@ def test_decoder_faults_cannot_be_scored_or_execute(
 
             callback = ignore_stop
         limit = max_new_tokens + 1 if fault == "overrun" else max_new_tokens
+        if fault == "short_length":
+            limit = 1
         try:
+            if fault == "empty_length":
+                return DecodeResult((), "length")
             result = original_decode(session, limit, callback)
             if fault == "returned_ids":
                 return replace(

@@ -464,6 +464,10 @@ class EvaluationHarness:
                         "DecodeSession finish reason disagrees with callback stop"
                     )
                 if decoded.reason == "length":
+                    if len(observed_tokens) != turn_limit:
+                        raise RuntimeError(
+                            "DecodeSession reported length before the requested turn limit"
+                        )
                     answer = self.tokenizer.decode(
                         decoded.token_ids, skip_special_tokens=True
                     )
