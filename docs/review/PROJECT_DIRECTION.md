@@ -1828,3 +1828,35 @@ or shared-host changes were made.
 
 Next: checkpoint the verified result-contract repair and continue useful
 offline evaluation and serving prerequisites within the existing gates.
+
+### 2026-11-16: pinned pause controls are global server controls
+
+The pinned [pause/continue requests][sglang-session-requests] have no request or
+session selector. Their documented modes are global abort, in-place scheduler
+pause and retract-to-waiting-queue pause. In-place mode documents old-KV reuse;
+retract mode permits cache flushing/recomputation. These are documented server
+contracts, not measured hybrid-cache equivalence.
+
+The [tokenizer manager][sglang-final-response] sets a shared pause condition.
+Non-abort modes dispatch to the scheduler; abort mode issues `abort_all=True`
+until the model-update lock is free. Continue clears that shared condition and
+dispatches the continuation request. The latter defaults to requesting
+`torch_empty_cache`; no CUDA action was invoked during this inspection.
+
+These controls are not a proven per-sequence tool-call injection boundary.
+Append-only streaming sessions remain the source-backed candidate for that
+integration; concrete scheduler behavior, multi-request interference and exact
+pending recurrent/KV state still require separate qualification.
+
+**Bounded ledger:** three parse-only requests inspected 43,973-byte control
+mixin and 111,191-byte request definitions under 128 KiB, then the 177,003-byte
+actual producer under the previously verified 256 KiB cap. Each had a
+20-second timeout and 16,000-character selected-output cap. The mixin did not
+own pause methods, so the third lookup followed the known producer rather than
+claiming interface absence. No scheduler consumer or engine was executed,
+source bodies were not retained, and no dependencies/model/data/GPU/host
+changes occurred. Documentation whitespace/references were checked; the
+unchanged 276-test code gate was not rerun.
+
+Next: keep global pause distinct from sequence-local append and qualify the
+actual scheduler/cache semantics before any serving-engine adoption.
