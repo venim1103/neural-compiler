@@ -288,6 +288,10 @@ class CaseResult:
             raise ValueError(
                 "no_tool results must not record tool calls or injected tokens"
             )
+        if self.injected_tokens != sum(call.response_tokens for call in self.calls):
+            raise ValueError(
+                "injected_tokens must equal the sum of call response_tokens"
+            )
 
 
 class _RunFailure(Exception):

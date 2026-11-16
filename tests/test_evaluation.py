@@ -525,6 +525,27 @@ def test_no_tool_records_cannot_include_execution_or_injection(field, value):
         summarize([replace(record, **{field: value})])
 
 
+@pytest.mark.parametrize("injected", [3, 5])
+def test_case_injected_tokens_must_match_recorded_responses(injected):
+    with pytest.raises(ValueError, match="injected_tokens.*response_tokens"):
+        summarize(
+            [
+                CaseResult(
+                    "a",
+                    "unit",
+                    "python_tool",
+                    "wrong_answer",
+                    "",
+                    "",
+                    1,
+                    3,
+                    injected,
+                    (CallRecord("runtime_error", 0.1, 4),),
+                )
+            ]
+        )
+
+
 def test_negative_response_count_cannot_enter_execution_metrics():
     with pytest.raises(ValueError, match="response_tokens"):
         call = CallRecord("ok", 0.1, -1)

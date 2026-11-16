@@ -1715,3 +1715,27 @@ services or host changes occurred.
 
 Next: checkpoint/synchronize the verified baseline repair and continue
 compatible offline prerequisites without weakening the remaining study gates.
+
+### 2026-11-16: injected totals reconcile with per-call response tokens
+
+The harness assigns each successful tool injection's length both to the case
+total and its corresponding call record; failures before injection retain zero
+response tokens. Nevertheless, manual tool-path rows could report a different
+total, dropping or inventing injected tokens in aggregate costs.
+
+`CaseResult` now requires `injected_tokens` to equal the sum of its calls'
+`response_tokens`, after the existing individual-counter/no-tool checks.
+Mismatches raise explicit `ValueError`; neither the metric definition nor
+actual runtime accounting changes. Existing valid multi-call and failed-call
+controls remain unchanged; no synthetic fixture needed correction.
+
+**Bounded ledger:** two producer-only failing-first cases reported totals of
+three/five against a failed runtime call's four response tokens. Both plus
+related response/report controls passed after repair. Coupled evaluation/
+serving controls passed **102 tests** in 9.14 s; root validation passed **272
+tests** in 16.65 s, with 14 existing warnings and no skips. Root lint/whitespace,
+two-file formatting and harness diagnostics passed. Tiny CPU matched controls
+ran, with no accepted data, pretrained/model/GPU study, dependency or host work.
+
+Next: checkpoint/synchronize the reconciled records and continue the remaining
+bounded offline protocol/cache/execution prerequisites.
