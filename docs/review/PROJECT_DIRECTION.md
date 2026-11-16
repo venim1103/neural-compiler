@@ -2289,3 +2289,38 @@ No API change was made. Next: test whether an interrupted/invalid model forward
 can mutate recurrent cache while leaving a live session reusable or
 checkpointable. Preserve valid pre-forward checkpoints and fail closed on a
 potentially damaged session, without automatic recurrent-state rollback.
+
+### 2026-11-16: invalidate sessions after potentially mutating model failure
+
+A live model invocation now marks the session unusable until valid cache/logits
+are committed. Exceptions or invalid returned output preserve their original
+error and block later decoding, injection and checkpoint capture. A forward can
+change recurrent tensors without advancing attention length, so the previous
+snapshot-length guard alone could accept damaged state. Valid pre-forward
+checkpoints remain independently recoverable; restored sessions initialize
+healthy status. No cache rollback, silent reset or broad exception catch was
+added. Invalid-input preflight still preserves a healthy session.
+
+**Bounded ledger:** the first four-case fixture attempt failed before exercising
+production behavior because recurrent states are batch-indexed dictionaries
+(0.24 s). After using the existing batch-zero convention, all four cases exposed
+unsafe checkpoint acceptance (0.17 s). Exception/invalid-output cases on fresh
+and restored sessions then passed (0.12 s), including unchanged attention length,
+observed recurrent mutation, rejected reuse and valid prior-checkpoint recovery
+at existing full-prefill tolerances. Coupled checkpoint/serving:
+**64 passed** (6.07 s); root: **322 passed** (23.65 s). Root Ruff, two-file format
+and whitespace passed; owning-source diagnostics empty. Fourteen existing Torch
+warnings, no skips; existing jailed native/trusted controls ran. The setup
+failure and revised failing-first attempt remain spent, alongside one focused,
+one coupled and one root attempt. Fixtures cleaned normally. No model/data/GPU,
+dependency, download, service or host-security action occurred.
+
+One bounded CI inspection confirmed the [sample-boundary checkpoint's hosted
+success][sample-boundary-ci] at `d852f63`, which also includes prompt accounting.
+This is workflow status, not production containment or kernel qualification.
+
+Next: check integer samples outside the model's logit-column domain at a
+callback stop. The exact-integer guard alone still lets such a sample enter
+history/pending state without reaching model input validation.
+
+[sample-boundary-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43860590657

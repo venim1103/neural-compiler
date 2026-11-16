@@ -120,6 +120,58 @@ def test_invalid_response_ids_preserve_pending_cache_boundary(
     assert_reference(session)
 
 
+@pytest.mark.parametrize("restored", [False, True])
+@pytest.mark.parametrize("failure", ["exception", "invalid_output"])
+def test_failed_forward_cannot_reuse_or_checkpoint_mutated_cache(
+    hybrid_model, monkeypatch, restored, failure
+):
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    checkpoint = session.checkpoint()
+    if restored:
+        session = LiveSession.from_checkpoint(hybrid_model, checkpoint)
+    layer = next(
+        layer
+        for layer in session.cache.layers
+        if isinstance(layer, LinearAttentionLayer)
+    )
+    state = layer.recurrent_states[0]
+    assert state is not None
+    before = state.clone()
+    original_forward = hybrid_model.forward
+
+    def interrupted(*args, **kwargs):
+        assert kwargs["past_key_values"] is session.cache
+        state.add_(1)
+        if failure == "invalid_output":
+            return None
+        raise RuntimeError("Fixture interrupted a recurrent-state update")
+
+    monkeypatch.setattr(hybrid_model, "forward", interrupted)
+    expected = "Fixture interrupted" if failure == "exception" else "Model must return"
+    with pytest.raises(RuntimeError, match=expected):
+        session.inject([4])
+    assert session.tokens == checkpoint.tokens
+    assert session.cache.get_seq_length() == len(session.tokens)
+    torch.testing.assert_close(state, before + 1, atol=0, rtol=0)
+    monkeypatch.setattr(
+        hybrid_model,
+        "forward",
+        lambda *args, **kwargs: pytest.fail("Damaged session called the model"),
+    )
+    for operation in (
+        session.checkpoint,
+        lambda: session.decode_until(1),
+        lambda: session.inject([5]),
+    ):
+        with pytest.raises(RuntimeError, match="unusable after a failed forward"):
+            operation()
+    monkeypatch.setattr(hybrid_model, "forward", original_forward)
+    recovered = LiveSession.from_checkpoint(hybrid_model, checkpoint)
+    recovered.inject([5, 6])
+    assert recovered.tokens == (1, 2, 3, 5, 6)
+    assert_reference(recovered)
+
+
 def test_invalid_prefix_ids_cannot_alias_a_cached_integer_prompt(hybrid_model):
     store = CheckpointStore()
     checkpoint = LiveSession(hybrid_model, [1, 2, 3]).checkpoint()

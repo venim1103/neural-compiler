@@ -115,7 +115,11 @@ def _validate_token_ids(ids: Sequence[int]) -> None:
 
 
 class LiveSession:
-    """Own a live cache; sampled stop/EOS tokens are pending until the next feed."""
+    """Own a live cache; sampled stop/EOS tokens are pending until the next feed.
+
+    Failed model forwards invalidate the session; resume a prior valid checkpoint
+    or prefill a new session rather than reusing potentially mutated state.
+    """
 
     def __init__(self, model: PreTrainedModel, prompt_ids: Sequence[int]):
         if not _is_eval_mode(model):
@@ -129,6 +133,7 @@ class LiveSession:
         self._pending: int | None = None
         self._prefix_tensor_versions: tuple[tuple[int, int, int], ...] | None = None
         self._prefix_config: str | None = None
+        self._cache_usable = True
         eos = model.generation_config.eos_token_id
         self._eos = (
             set(eos if isinstance(eos, list) else [eos]) if eos is not None else set()
@@ -147,6 +152,8 @@ class LiveSession:
         return tuple(self._tokens)
 
     def _check_prefix_model(self) -> None:
+        if not self._cache_usable:
+            raise RuntimeError("Session is unusable after a failed forward")
         _validate_prefix_model(
             self.model, self._prefix_tensor_versions, self._prefix_config
         )
@@ -159,6 +166,7 @@ class LiveSession:
         if not _is_eval_mode(self.model):
             raise ValueError("LiveSession requires a model in eval mode")
         self._check_prefix_model()
+        self._cache_usable = False
         output = self.model(
             input_ids=torch.tensor(
                 [list(ids)], dtype=torch.long, device=self.model.device
@@ -177,6 +185,7 @@ class LiveSession:
             raise RuntimeError("Model returned no logits")
         self.cache = output.past_key_values
         self.logits = output.logits[:, -1, :]
+        self._cache_usable = True
 
     def _next_token(self) -> int:
         return int(self.logits.argmax(-1).item())
@@ -225,6 +234,7 @@ class LiveSession:
             raise RuntimeError("Cannot checkpoint an absent cache")
         if not _is_eval_mode(self.model):
             raise ValueError("Checkpoints require a model in eval mode")
+        self._check_prefix_model()
         size = _snapshot_bytes(self.cache, self.logits)
         if size > max_cache_bytes:
             raise CheckpointBudgetError(
@@ -239,7 +249,6 @@ class LiveSession:
             )
         if self._prefix_tensor_versions is None or self._prefix_config is None:
             raise RuntimeError("Checkpoints require a version-tracked CPU model")
-        self._check_prefix_model()
         return SessionCheckpoint(
             self.model,
             self.tokens,
@@ -277,6 +286,7 @@ class LiveSession:
         resumed._eos = set(checkpoint._eos)
         resumed._prefix_tensor_versions = checkpoint._tensor_versions
         resumed._prefix_config = checkpoint._config
+        resumed._cache_usable = True
         return resumed
 
 
