@@ -123,6 +123,80 @@ def test_captured_logits_are_independent_of_mutable_sampler_sessions(
         torch.testing.assert_close(source.logits, source_after, atol=0, rtol=0)
 
 
+@pytest.mark.parametrize("boundary", ["eos", "length", "sandbox_error"])
+def test_serving_logit_prefix_matches_exact_forwarded_boundary(
+    tokenizer, hybrid_model, boundary
+):
+    from neural_compiler.eval.harness import Budgets
+
+    text = "Final answer: 42"
+    budgets = Budgets()
+    if boundary == "length":
+        budgets = replace(
+            budgets, turn_tokens=len(tokenizer.encode(text, add_special_tokens=False))
+        )
+    else:
+        text += "<|im_end|>"
+    if boundary == "sandbox_error":
+        text = _call_text("print(6 * 7)") + text
+
+    def sampler_factory(task, mode):
+        stream = iter(tokenizer.encode(text, add_special_tokens=False))
+        return lambda _: next(stream)
+
+    def execute(code, timeout=20):
+        if boundary != "sandbox_error":
+            pytest.fail("Must not execute")
+        return ExecutionResult("sandbox_error", "", "Fixture declined execution")
+
+    rows = run_serving_comparison(
+        [Task("logit-prefix", "unit", "Compute.", IntegerChecker(42))],
+        tokenizer,
+        hybrid_model,
+        lambda: None,
+        budgets=budgets,
+        executor=execute,
+        on_token_factory=sampler_factory,
+    )
+    outcomes = {
+        "eos": "correct",
+        "length": "budget_exhausted",
+        "sandbox_error": "sandbox_error",
+    }
+    for row in rows:
+        assert row.case.outcome == outcomes[boundary]
+        assert row.final_logits is not None
+        assert row.logit_prefix_tokens == len(row.final_tokens) - (boundary != "length")
+        prefix = row.final_tokens[: row.logit_prefix_tokens]
+        with torch.no_grad():
+            expected = hybrid_model(
+                input_ids=torch.tensor([prefix]), use_cache=True, logits_to_keep=1
+            )
+        torch.testing.assert_close(
+            row.final_logits, expected.logits[:, -1, :], atol=1e-6, rtol=1e-5
+        )
+
+
+@pytest.mark.parametrize("count", [-1, True, 4])
+def test_invalid_logit_prefix_counts_are_explicit(count):
+    legacy = ServingCaseResult(
+        "live_pause_resume",
+        CaseResult(
+            "prefix", "unit", "python_tool", "wrong_answer", "", "", 1, 0, 0, ()
+        ),
+        (1, 2, 3),
+        torch.zeros(1, 8),
+        3,
+        0,
+        0,
+        0,
+        0,
+    )
+    assert legacy.logit_prefix_tokens is None
+    with pytest.raises(ValueError, match="logit_prefix_tokens"):
+        replace(legacy, logit_prefix_tokens=count)
+
+
 def test_serving_modes_match_logits_and_reduce_prefill_tokens(tokenizer, hybrid_model):
     task = Task(
         "two-step-calc",
@@ -530,6 +604,7 @@ def test_checkpoint_budget_failure_retains_the_matched_case(
     assert len(cached.final_tokens) == cached.prefill_tokens + expected_generated
     if boundary == "initial":
         assert cached.final_logits is None
+        assert cached.logit_prefix_tokens is None
     assert all(row.case.outcome == "correct" for row in rows if row is not cached)
     summary = summarize_serving(rows)["by_mode"]["prefix_cached_resubmission"]
     assert summary["cases"] == 1 and summary["outcomes"]["budget_exhausted"] == 1

@@ -2373,3 +2373,31 @@ Next: make the captured logit-prefix boundary explicit in comparison results.
 `final_tokens` includes a pending stop/EOS sample, while captured logits can
 still belong to the prefix before it. Preserve that convention, report the
 observed prefix length separately, and leave legacy/unobserved records unknown.
+
+### 2026-11-16: identify the captured serving logit prefix
+
+`ServingCaseResult.logit_prefix_tokens` now identifies the observed prefix
+associated with captured logits. Final history still includes pending sampled
+stop/EOS IDs; no token is forwarded merely to obtain this observation. Active
+native pending state, or the adapters' released callback-stop boundary,
+determines the count. Legacy/unobserved results remain `None`; supplied counts
+must be exact integers within final history. Cost/summary definitions and the
+existing token/logit conventions are unchanged.
+
+**Bounded ledger:** three EOS/length/sandbox-return boundary cases exposed the
+missing observation (1.18 s). Those cases and three invalid-count cases passed
+(0.99 s); nine captured boundaries matched full-prefill reference logits at the
+existing tolerances. The cold initial-checkpoint budget control remains
+unobserved rather than falsely zero. Coupled checkpoint/serving:
+**75 passed** (6.16 s); root: **333 passed** (22.19 s). Root Ruff, two-file format
+and whitespace passed; owning-source diagnostics empty. Fourteen existing Torch
+warnings, no skips; existing jailed native/trusted controls ran. New boundary
+fixtures invoked no guest executor; their sandbox status was a synthetic return,
+not containment evidence. One failing-first, one focused, one coupled and one
+root attempt were spent. Fixtures cleaned normally; no model/data/GPU, dependency,
+download, service or host action occurred.
+
+Next: falsify model-output shape admission before healthy cache commitment.
+The owning forward currently checks missing logits but does not explicitly
+enforce the existing single-sequence, nonempty causal-logit shape; malformed
+batch/rank/vocabulary output can otherwise be retained as healthy state.

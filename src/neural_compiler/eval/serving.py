@@ -250,6 +250,11 @@ class FullReprefillSession:
 
 @dataclass(frozen=True)
 class ServingCaseResult:
+    """Captured logits can precede a pending final ID in the token history.
+
+    logit_prefix_tokens identifies their observed prefix; None is unmeasured.
+    """
+
     mode: ServingMode
     case: CaseResult
     final_tokens: tuple[int, ...]
@@ -259,6 +264,16 @@ class ServingCaseResult:
     cache_hits: int
     cache_misses: int
     checkpoints_evicted: int
+    logit_prefix_tokens: int | None = None
+
+    def __post_init__(self) -> None:
+        value = self.logit_prefix_tokens
+        if value is not None and (
+            type(value) is not int or not 0 <= value <= len(self.final_tokens)
+        ):
+            raise ValueError(
+                "logit_prefix_tokens must be an integer within final_tokens"
+            )
 
 
 def run_serving_comparison(
@@ -338,6 +353,12 @@ def run_serving_comparison(
             )
             case_result = harness.run(task, path)
             last_session = active[-1] if active else None
+            logit_prefix_tokens = None
+            if last_session is not None:
+                native = last_session._session
+                # Stateless adapters release only at a pending callback-stop boundary.
+                pending = native is None or native._pending is not None
+                logit_prefix_tokens = len(last_session.tokens) - pending
             results.append(
                 ServingCaseResult(
                     mode=mode,
@@ -357,6 +378,7 @@ def run_serving_comparison(
                     cache_hits=store.hits,
                     cache_misses=store.misses,
                     checkpoints_evicted=store.evictions,
+                    logit_prefix_tokens=logit_prefix_tokens,
                 )
             )
     return tuple(results)
