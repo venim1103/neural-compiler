@@ -359,7 +359,7 @@ def run_serving_comparison(
 
 
 def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]:
-    """Failure-inclusive matched metrics and aggregate/per-family paired deltas.
+    """Failure-inclusive aggregate/family metrics and matched paired deltas.
 
     Comparisons use the first present mode in canonical order as baseline:
     live pause/resume when present, otherwise prefix-cached resubmission.
@@ -385,16 +385,20 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
             raise ValueError(f"Missing serving modes for {case_id}")
         if len({row.case.family for row in case.values()}) != 1:
             raise ValueError(f"Family identity differs between modes for {case_id}")
-    by_mode: dict[str, object] = {}
-    for mode in modes_present:
-        subset = [r for r in results if r.mode == mode]
+
+    def summarize_mode(subset: Sequence[ServingCaseResult]) -> dict[str, object]:
         base = summarize([r.case for r in subset])
         base["prefill_tokens"] = sum(r.prefill_tokens for r in subset)
         base["checkpoint_bytes_peak"] = max(r.checkpoint_bytes_peak for r in subset)
         base["cache_hits"] = sum(r.cache_hits for r in subset)
         base["cache_misses"] = sum(r.cache_misses for r in subset)
         base["checkpoints_evicted"] = sum(r.checkpoints_evicted for r in subset)
-        by_mode[mode] = base
+        return base
+
+    by_mode = {
+        mode: summarize_mode([r for r in results if r.mode == mode])
+        for mode in modes_present
+    }
     paired_cases: dict[str, dict[str, CaseResult]] = {
         case_id: {mode: row.case for mode, row in case.items()}
         for case_id, case in paired.items()
@@ -407,8 +411,22 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
             for mode in modes_present[1:]
         }
 
+    families = sorted({row.case.family for row in results})
     return {
         "by_mode": by_mode,
+        "by_family": {
+            family: {
+                mode: summarize_mode(
+                    [
+                        row
+                        for row in results
+                        if row.mode == mode and row.case.family == family
+                    ]
+                )
+                for mode in modes_present
+            }
+            for family in families
+        },
         "paired_cases": len(paired_cases),
         "paired_deltas": deltas(paired_cases),
         "paired_deltas_by_family": {
@@ -419,6 +437,6 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
                     if case[baseline].family == family
                 }
             )
-            for family in sorted({row.case.family for row in results})
+            for family in families
         },
     }

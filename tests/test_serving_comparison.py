@@ -256,6 +256,8 @@ def test_serving_summary_exposes_opposing_paired_family_effects():
                 replace(
                     live,
                     mode="prefix_cached_resubmission",
+                    checkpoint_bytes_peak=64 if live_correct else 128,
+                    cache_hits=2 if live_correct else 3,
                     case=replace(
                         case,
                         outcome="wrong_answer" if live_correct else "correct",
@@ -281,6 +283,22 @@ def test_serving_summary_exposes_opposing_paired_family_effects():
     assert family_b["accuracy_delta"] == 1
     assert family_a["elapsed_delta_mean_seconds"] == 2
     assert family_b["elapsed_delta_mean_seconds"] == -2
+    costs_a = summary["by_family"]["family-a"]
+    costs_b = summary["by_family"]["family-b"]
+    assert costs_a["live_pause_resume"]["seconds_per_correct"] == 4
+    assert costs_a["prefix_cached_resubmission"]["seconds_per_correct"] is None
+    assert costs_b["live_pause_resume"]["seconds_per_correct"] is None
+    assert costs_b["prefix_cached_resubmission"]["seconds_per_correct"] == 2
+    assert costs_a["live_pause_resume"]["prefill_tokens"] == 3
+    assert summary["by_mode"]["live_pause_resume"]["prefill_tokens"] == 6
+    assert costs_a["prefix_cached_resubmission"]["checkpoint_bytes_peak"] == 64
+    assert costs_b["prefix_cached_resubmission"]["checkpoint_bytes_peak"] == 128
+    assert (
+        summary["by_mode"]["prefix_cached_resubmission"]["checkpoint_bytes_peak"] == 128
+    )
+    assert costs_a["prefix_cached_resubmission"]["cache_hits"] == 2
+    assert costs_b["prefix_cached_resubmission"]["cache_hits"] == 3
+    assert summary["by_mode"]["prefix_cached_resubmission"]["cache_hits"] == 5
     full = summary["paired_deltas"]["full_reprefill_resubmission_vs_live_pause_resume"]
     assert full["both_correct"] == full["neither_correct"] == 1
     assert full["elapsed_delta_mean_seconds"] == 2

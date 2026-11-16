@@ -2091,3 +2091,27 @@ no model/data/GPU, engine/dependency, service or host action occurred.
 Next: retain per-family primary cost and resource summaries alongside the
 new serving deltas, reusing the existing mode aggregation rather than
 introducing different family-level metric definitions.
+
+### 2026-11-16: per-family serving costs share the aggregate contract
+
+`summarize_serving` now includes `by_family[family][mode]`, using the same
+aggregation as `by_mode` for failure-inclusive seconds per correct answer,
+uncertainty, elapsed/execution/response diagnostics and resource counters.
+Families with no correct answers retain explicit undefined cost; their time
+and failures are not dropped. Prefill/cache counters are summed within each
+group, while checkpoint storage uses the existing peak semantics.
+The aggregate and paired outputs remain available unchanged.
+
+**Bounded ledger:** one existing opposing-family case was extended; it failed
+on the missing family field before the edit (0.08 s). That case plus two
+mode-subset controls passed (0.13 s). Coupled evaluation/serving:
+**117 passed** (11.50 s). Root: **296 passed** (19.07 s), root Ruff, two-file
+format and whitespace passed; owning-source diagnostics empty. Fourteen
+existing Torch warnings, no skips; jailed native/trusted containment controls
+ran. No new cohort cases, accepted labels, model/data/GPU, engine/dependency,
+service or host actions occurred; fixtures cleaned normally.
+This reporting prerequisite is not held-out-family or serving qualification.
+
+Next: align the harmonic unit fixture's wording with the accepted exact-rational
+checker. The fixture asks for a reduced representation, while the existing
+checker/tests intentionally accept mathematically equivalent fractions.
