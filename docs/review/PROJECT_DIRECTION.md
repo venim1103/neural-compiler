@@ -1860,3 +1860,36 @@ unchanged 276-test code gate was not rerun.
 
 Next: keep global pause distinct from sequence-local append and qualify the
 actual scheduler/cache semantics before any serving-engine adoption.
+
+### 2026-11-16: token IDs are validated before model or prefix-cache work
+
+The live decoder constructed long tensors from caller-provided IDs without
+validating their representation. Fractional IDs were truncated for inference
+but retained in token history. Cache keys also allowed booleans to alias
+integer IDs under Python equality, silently restoring a different typed input.
+
+One shared exact-integer validator now runs before model forwarding and both
+store key-lookup paths. Invalid IDs raise explicit `ValueError` before forwarding
+or changing hit/miss/LRU state. No new vocabulary/context limit or negative-ID
+policy was introduced. A rejected response preserves the pending stop token,
+history, logits and forwarded cache length; subsequent valid injection still
+matches full-prefill logits at the unchanged `atol=1e-6`, `rtol=1e-5`.
+
+**Bounded ledger:** three tiny CPU failing-first cases covered fractional
+prompt/response IDs and a boolean cached-prefix alias. All passed after repair.
+Coupled checkpoint/serving/protocol controls passed **72 tests** in 5.72 s;
+root validation passed **279 tests** in 14.43 s with 14 existing warnings and
+no skips. Root lint/whitespace, two-file formatting and source diagnostics
+passed. One earlier line-based symbol lookup returned no result and was not
+treated as caller evidence; no signature changed. No dependencies, pretrained
+model/data/GPU jobs, services or shared-host changes occurred.
+
+Hosted CI also succeeded for [closed-status admission `65c62bd`][closed-status-ci]
+and [exit consistency `ddc8c6b`][exit-consistency-ci], without adding engine or
+containment qualification.
+
+[closed-status-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43829630999
+[exit-consistency-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43847404756
+
+Next: checkpoint/synchronize token-ID admission and continue useful offline
+protocol/cache/evaluation prerequisites without claiming engine qualification.

@@ -65,6 +65,39 @@ def test_checkpoint_preserves_pending_token_exactly_once(
     assert_reference(resumed)
 
 
+def test_fractional_prompt_ids_cannot_be_silently_truncated(hybrid_model):
+    with pytest.raises(ValueError, match="Token IDs must be integers"):
+        LiveSession(hybrid_model, [1.5, 2, 3])
+
+
+def test_invalid_response_ids_preserve_pending_cache_boundary(
+    hybrid_model, monkeypatch
+):
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    monkeypatch.setattr(session, "_next_token", lambda: 4)
+    session.decode_until(1, lambda _: True)
+    checkpoint = session.checkpoint()
+    with pytest.raises(ValueError, match="Token IDs must be integers"):
+        session.inject([5.5])
+    assert session.tokens == checkpoint.tokens
+    assert session._pending == checkpoint.pending_token
+    torch.testing.assert_close(session.logits, checkpoint._logits, atol=0, rtol=0)
+    assert session.cache.get_seq_length() == len(session.tokens) - 1
+    session.inject([5, 6])
+    assert_reference(session)
+
+
+def test_invalid_prefix_ids_cannot_alias_a_cached_integer_prompt(hybrid_model):
+    store = CheckpointStore()
+    checkpoint = LiveSession(hybrid_model, [1, 2, 3]).checkpoint()
+    store.put(checkpoint)
+    with pytest.raises(ValueError, match="Token IDs must be integers"):
+        store.resume_prefix(hybrid_model, [True, 2, 3])
+    assert store.hits == store.misses == 0
+    assert store.entries == 1
+    assert store.total_bytes == checkpoint.cache_bytes
+
+
 def test_two_tool_boundaries_resubmit_without_mutating_original_cache(
     tokenizer, hybrid_model, monkeypatch
 ):

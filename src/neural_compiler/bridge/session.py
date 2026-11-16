@@ -109,6 +109,11 @@ def _validate_checkpoint_budget(max_cache_bytes: int) -> None:
         raise ValueError("max_cache_bytes must be a positive integer")
 
 
+def _validate_token_ids(ids: Sequence[int]) -> None:
+    if any(type(token) is not int for token in ids):
+        raise ValueError("Token IDs must be integers")
+
+
 class LiveSession:
     """Own a live cache; sampled stop/EOS tokens are pending until the next feed."""
 
@@ -150,6 +155,7 @@ class LiveSession:
     def _forward(self, ids: Sequence[int]) -> None:
         if not ids:
             raise ValueError("Cannot prefill an empty token sequence")
+        _validate_token_ids(ids)
         if not _is_eval_mode(self.model):
             raise ValueError("LiveSession requires a model in eval mode")
         self._check_prefix_model()
@@ -332,6 +338,7 @@ class CheckpointStore:
 
     def get(self, tokens: Sequence[int]) -> SessionCheckpoint | None:
         key = tuple(tokens)
+        _validate_token_ids(key)
         checkpoint = self._entries.get(key)
         if checkpoint is None:
             self.misses += 1
@@ -345,6 +352,7 @@ class CheckpointStore:
     ) -> tuple[SessionCheckpoint, tuple[int, ...]] | None:
         """Return the longest stored prefix checkpoint and uncached suffix, if any."""
         target = tuple(tokens)
+        _validate_token_ids(target)
         if not target:
             self.misses += 1
             return None
