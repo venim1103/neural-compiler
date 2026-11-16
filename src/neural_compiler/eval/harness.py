@@ -454,6 +454,7 @@ class EvaluationHarness:
                             "budget_exhausted",
                             "Tool response would exceed the context-token budget",
                         )
+                    remaining_time()
                     session.inject(response)
                     response_count = len(response)
                     injected += response_count

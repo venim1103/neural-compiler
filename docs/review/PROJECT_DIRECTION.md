@@ -2066,3 +2066,28 @@ wall time, but an expired wall budget currently has no admission check between
 response formatting/context validation and model injection.
 
 [paired-serving-summary]: ../../src/neural_compiler/eval/serving.py
+
+### 2026-11-16: reject expired result prefill before model work
+
+The return-stage probe reproduced model injection after response formatting
+had consumed the evaluation's wall allowance. The harness now reuses its
+existing remaining-time guard after context validation and before `inject`.
+An expired return reports the existing timeout outcome, retains its measured
+response work and executor record, and injects no tokens. In-limit responses
+still prefill normally. Existing explicit framing/context failures retain
+their classification. No new deadline, limit or model interruptibility claim
+was introduced; already-started model work remains cooperative.
+
+**Bounded ledger:** the expired-case prefill spy failed before the repair,
+while the unexpired control passed (0.69 s). The two new cases plus two
+framing/context controls passed after the one-line guard (0.84 s).
+Coupled evaluation/serving/checkpoint controls: **142 passed** (9.83 s).
+Required root: **296 passed** (17.31 s), root Ruff, two-file format and
+whitespace passed; owning-source diagnostics empty. Fourteen existing Torch
+warnings, no skips; actual jailed native and trusted containment controls ran.
+The two-case/one-repair plan was not expanded. Fixtures cleaned normally;
+no model/data/GPU, engine/dependency, service or host action occurred.
+
+Next: retain per-family primary cost and resource summaries alongside the
+new serving deltas, reusing the existing mode aggregation rather than
+introducing different family-level metric definitions.

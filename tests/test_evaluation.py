@@ -410,6 +410,48 @@ def test_response_timing_retains_rejected_return_attempts(
     assert result.calls[0].response_tokens == result.injected_tokens == 0
 
 
+@pytest.mark.parametrize("expired", [True, False])
+def test_response_framing_deadline_is_checked_before_prefill(
+    tokenizer, hybrid_model, monkeypatch, expired
+):
+    from neural_compiler.eval import harness
+
+    now = [0.0]
+    injections = []
+    monkeypatch.setattr(harness.time, "perf_counter", lambda: now[0])
+    original_response = QwenToolProtocol.response_ids
+    original_inject = LiveSession.inject
+
+    def response_ids(self, call, result):
+        now[0] += 2 if expired else 0.5
+        return original_response(self, call, result)
+
+    def inject(self, ids):
+        if expired:
+            pytest.fail("An expired return must not prefill the model")
+        injections.append(tuple(ids))
+        original_inject(self, ids)
+
+    monkeypatch.setattr(QwenToolProtocol, "response_ids", response_ids)
+    monkeypatch.setattr(LiveSession, "inject", inject)
+    runner = harness_for(
+        tokenizer,
+        hybrid_model,
+        monkeypatch,
+        call_text("print(42)") + "Final answer: 42<|im_end|>",
+        budgets=replace(Budgets(), wall_seconds=1),
+        executor=lambda code, timeout: ExecutionResult("ok", "42\n"),
+    )
+    result = runner.run(
+        Task("return-deadline", "unit", "Compute.", IntegerChecker(42)), "python_tool"
+    )
+    assert result.outcome == ("timeout" if expired else "correct")
+    assert len(injections) == (0 if expired else 1)
+    assert result.calls[0].response_seconds == (2 if expired else 0.5)
+    assert result.calls[0].response_tokens == result.injected_tokens
+    assert (result.injected_tokens == 0) == expired
+
+
 def test_response_timing_summary_keeps_unmeasured_calls_explicit():
     measured = CaseResult(
         "measured",
