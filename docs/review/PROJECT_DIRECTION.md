@@ -1772,3 +1772,37 @@ containment qualification.
 
 Next: checkpoint/synchronize closed-status admission and continue bounded
 offline prerequisites under the existing protected study/containment limits.
+
+### 2026-11-16: pinned response assembly distinguishes delta and cumulative IDs
+
+The pinned [tokenizer manager][sglang-final-response] has an asynchronous
+`_handle_batch_output`. Its non-beam string/token output paths extend request
+state with received IDs without text-based stop trimming. Incremental streaming
+branches publish delta IDs; other streaming branches publish cumulative IDs,
+using the live list for unfinished output and a copy at completion. Nonstreaming
+completion also returns a copy. `generate_request` yields its response objects.
+
+A future adapter therefore must select/verify the actual output mode and
+deduplicate cumulative emissions rather than appending every yielded list.
+Rendered text and raw IDs remain separate. This consumer-side source evidence
+does not qualify scheduler-side emission/overshoot ordering, target-specific
+tool-close configuration, exact pending hybrid state or actual engine behavior.
+No concrete/inherited/RPC pause-interface absence is claimed: this file imports
+pause/continue request types and a control mixin, which were not investigated
+or executed in this slice.
+
+**Bounded ledger:** HEAD reported 177,003 bytes; a complete parse fit the
+256 KiB/20-second source cap. The whole handler exceeded the 15,000-character
+definition-output cap and was not emitted. One targeted recovery failed because
+its selector accepted only synchronous functions; correcting it to accept the
+actual asynchronous definition recovered complete ID assignments, dictionaries
+and then/else ancestry under a 14,000-character statement cap. Four requests
+total, including the failed selector query, at the same pin. No imports/exec,
+checkout, engine/dependency/model/data/GPU or host changes occurred; no source
+bodies were retained. Documentation whitespace/references were checked; the
+unchanged 274-test code gate was not rerun.
+
+[sglang-final-response]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/managers/tokenizer_manager.py
+
+Next: retain mode-specific token accounting in the engine qualification plan
+and continue compatible local prerequisites without installing the engine.
