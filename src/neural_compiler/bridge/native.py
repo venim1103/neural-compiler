@@ -21,6 +21,7 @@ from .cgroups import CgroupLimits
 from .execution import (
     MAX_OUTPUT_BYTES,
     ExecutionResult,
+    _validate_execution_budget,
     run_jailed,
     run_python,
     validate_code,
@@ -35,10 +36,7 @@ ASM_HARNESS = (
 
 
 def _request_deadline(timeout: float, output_limit: int) -> float:
-    if not math.isfinite(timeout) or timeout <= 0:
-        raise ValueError("timeout must be a finite positive number")
-    if output_limit <= 0:
-        raise ValueError("output_limit must be positive")
+    _validate_execution_budget(timeout, output_limit)
     return time.monotonic() + timeout
 
 

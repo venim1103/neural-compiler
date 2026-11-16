@@ -85,6 +85,13 @@ def validate_code(code: str) -> None:
         raise ValueError(f"Program exceeds {MAX_CODE_BYTES} UTF-8 bytes")
 
 
+def _validate_execution_budget(timeout: float, output_limit: int) -> None:
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("timeout must be a finite positive number")
+    if type(output_limit) is not int or output_limit <= 0:
+        raise ValueError("output_limit must be a positive integer")
+
+
 def _supervise(
     command: list[str],
     timeout: float,
@@ -187,10 +194,7 @@ def run_jailed(
     never enables controllers or changes host delegation. Synchronous setup is
     charged to the timeout but is not itself interruptible by the supervisor.
     """
-    if not math.isfinite(timeout) or timeout <= 0:
-        raise ValueError("timeout must be a finite positive number")
-    if type(output_limit) is not int or output_limit <= 0:
-        raise ValueError("output_limit must be a positive integer")
+    _validate_execution_budget(timeout, output_limit)
     deadline = time.monotonic() + timeout
     bwrap = shutil.which("bwrap")
     if bwrap is None:
@@ -327,8 +331,13 @@ def run_python(
     allowed_imports: Set[str] | None = None,
     allow_unresolved_imports: bool = False,
 ) -> ExecutionResult:
-    """Execute Python in fresh globals with bounded output and a hard deadline."""
+    """Execute Python with bounded output and a supervised subprocess deadline.
+
+    Synchronous import/source setup consumes the allowance but is not interruptible.
+    """
     validate_code(code)
+    _validate_execution_budget(timeout, output_limit)
+    deadline = time.monotonic() + timeout
     if allowed_imports is not None:
         from .imports import evaluate_import_policy
 
@@ -352,10 +361,15 @@ def run_python(
     with tempfile.TemporaryDirectory(prefix="neural-compiler-") as directory:
         work = Path(directory)
         (work / "prog.py").write_text(code, encoding="utf-8")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return ExecutionResult(
+                "timeout", stderr="Python setup exhausted the wall-clock deadline"
+            )
         return run_jailed(
             ["/usr/bin/python3", "-I", "-u", "/work/prog.py"],
             work,
-            timeout,
+            remaining,
             output_limit=output_limit,
             seccomp=seccomp,
             cgroup=cgroup,

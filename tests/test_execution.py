@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -329,6 +330,48 @@ def test_supervise_classifies_nonzero_and_sigxcpu_failures(
     assert result.status == status
     assert message in result.stderr
     assert result.returncode == returncode
+
+
+@pytest.mark.parametrize("stage_delay,expected", [(1, [8]), (6, [])])
+def test_python_preparation_consumes_shared_deadline(
+    monkeypatch, stage_delay, expected
+):
+    from neural_compiler.bridge import execution, imports
+
+    now = 0
+    received = []
+    write_text = Path.write_text
+    evaluate = imports.evaluate_import_policy
+
+    def delayed_policy(*args, **kwargs):
+        nonlocal now
+        report = evaluate(*args, **kwargs)
+        now += stage_delay
+        return report
+
+    def delayed_write(path, *args, **kwargs):
+        nonlocal now
+        result = write_text(path, *args, **kwargs)
+        now += stage_delay
+        return result
+
+    def fake_run_jailed(command, workdir, timeout=20, **kwargs):
+        received.append(timeout)
+        return execution.ExecutionResult("ok", "6\n")
+
+    monkeypatch.setattr(execution, "time", SimpleNamespace(monotonic=lambda: now))
+    monkeypatch.setattr(imports, "evaluate_import_policy", delayed_policy)
+    monkeypatch.setattr(Path, "write_text", delayed_write)
+    monkeypatch.setattr(execution, "run_jailed", fake_run_jailed)
+    result = run_python(
+        "import math\nprint(math.factorial(3))",
+        timeout=10,
+        allowed_imports=imports.CANDIDATE_MATH_MODULES,
+    )
+    assert received == expected
+    assert result.status == ("ok" if expected else "timeout")
+    if not expected:
+        assert "setup" in result.stderr.lower()
 
 
 def test_run_python_static_import_policy_prefilter(monkeypatch) -> None:

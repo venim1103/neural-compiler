@@ -1551,3 +1551,37 @@ kernel/engine qualification result.
 
 Next: checkpoint the verified deadline repair, then continue bounded offline
 prerequisites while retaining the separate real-engine and containment gates.
+
+### 2026-11-13: Python import/source preparation consumes the same allowance
+
+The [Python wrapper][python-preparation-source] likewise passed a fresh timeout
+after static import-policy evaluation and source-file preparation. It now starts
+accounting before these stages, passes only the remaining allowance to the jail,
+and returns `timeout` without launch when setup consumes it. Python, native
+wrappers and jail admission reuse one extracted timeout/output validator;
+existing finite-positive time and positive-integer output contracts are unchanged.
+Rejected/syntactically invalid import policies remain explicit `sandbox_error`.
+The wrapper docstring now distinguishes the hard subprocess deadline from
+synchronous, non-interruptible setup and cleanup.
+
+**Bounded ledger:** two failing-first fixtures wrapped the actual compliant
+math-import policy and source write with isolated deterministic clocks. Two
+seconds of preparation originally still granted 10 seconds; 12 seconds still
+launched. After repair, the fixtures passed with 8 seconds or no child, in
+0.03 s. Coupled execution/native/import/seccomp/cgroup controls passed **88
+tests** in 2.31 s; root validation passed **265 tests** in 21.28 s, with 14
+existing warnings and no skips. Root lint/whitespace, three-file formatting
+and both source Pylance diagnostics passed. Existing real jailed tier/seccomp
+controls ran, without new kernel containment qualification.
+One unrelated protocol-source range lookup exceeded that file's length; the
+correct bounded read recovered it without editing. No new dependencies,
+model/data/GPU jobs, services or shared-host changes occurred.
+
+The native deadline checkpoint's [hosted CI][native-preparation-ci] succeeded
+at `05ff5d9` (run `43438563896`).
+
+[python-preparation-source]: ../../src/neural_compiler/bridge/execution.py
+[native-preparation-ci]: https://github.com/venim1103/neural-compiler/actions/runs/43438563896
+
+Next: checkpoint and synchronize this dependent repair, then continue bounded
+offline cache/evaluation prerequisites without reopening protected studies.
