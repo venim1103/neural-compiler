@@ -3253,3 +3253,82 @@ milestone gates against current source prerequisites and available resources;
 do not infer fresh model-study or production-containment authority from fixtures.
 
 [task-overlap-replay-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44054028534
+
+### 2026-11-17: prepare opt-in kernel cgroup PID and memory checks
+
+The [direct-sampler checkpoint passed hosted CI][cgroup-probe-prior-ci].
+A fresh source/resource sweep found a useful Queue 3 prerequisite: the cgroup
+tests exercised synthetic control files but had no real controller-limit probes.
+The [cgroup suite][cgroup-probe-tests] now includes bounded trusted jailed controls and opt-in
+real PID/memory checks through the existing `run_python`/`request_cgroup` path.
+No execution defaults, production policies or public interfaces changed.
+
+The PID source attempts at most eight forks, holds children on a pipe, gives
+each child a three-second alarm and reaps them in `finally`. Its unrestricted
+jailed control must create eight children; a separately reported host
+process-creation restriction is not a successful control. The memory source
+touches at most 96 MiB. Both have five-second request deadlines and 1,024-byte
+output caps. The opt-in PID request uses a total eight-PID/128 MiB cgroup;
+the memory request uses eight PIDs/64 MiB with the existing zero-swap/OOM-group
+settings. Fresh owned groups must be removed after each request.
+
+**Attribution matters:** [Linux v6.8 PID accounting][cgroup-probe-kernel-68]
+can increment the forking group's generic event counter when an ancestor's
+limit failed; peak watermarks can include reverted charges. The new checks
+therefore require `pids.events.local`/`memory.events.local`, and reject the
+legacy `pids_localevents` mode before PID qualification.
+[Modern default PID accounting][cgroup-probe-kernel-618] attributes the local
+limit event to the group whose limit failed. PID success requires both a
+bounded `EAGAIN` fork denial and a positive local `max` delta. Memory success
+requires explicit execution failure after its start marker and positive local
+`max`/`oom`/`oom_kill` deltas, not an ordinary `MemoryError` or timeout.
+Counters are read in the supervisor before removal; `-s` emits their deltas
+and the observed status/return code as JSON.
+
+Run the real checks only with an owner-provided writable delegation supporting
+these local event files and the existing required cgroup controls:
+
+```sh
+NEURAL_COMPILER_TEST_CGROUP_ROOT=/owner/delegated/subtree \
+  python -m pytest -q -s tests/test_cgroups.py \
+  -k opt_in_kernel_cgroup_limits
+```
+
+An unset root explicitly skips both checks. A configured invalid/read-only
+root, missing counter/controller or ambiguous legacy PID accounting fails;
+there is no namespace/filter fallback, controller enabling or remount.
+
+**Finite ledger:** initial four-case focus **2 passed, 2 skipped** (0.67 s):
+both jailed controls actually ran, including all eight forks and memory
+touching. One owned ordinary-directory negative run produced exactly
+**2 expected failures** (0.10 s), with explicit cgroup-v2 admission errors,
+no guest execution and its temporary root cleaned. Primary-source inspection
+then identified the ancestor-attribution issue above; one new guard fixture
+made two admission queries, **1 passed** (0.06 s). Earlier successes remain
+spent, with no unchanged focus rerun. Coupled cgroup/execution/native/seccomp
+gate **98 passed, 2 skipped** (2.26 s); root **534 passed, 2 skipped**
+(23.00 s), fourteen existing Torch warnings. Root Ruff, scoped format and
+whitespace passed. Initial formatting needed three call-wrapping changes;
+one formatter application repaired them. Pylance reported no errors, only
+existing unused-parameter hints. An initial kernel-symbol lookup missed
+v6.8's inline accounting; bounded corrected primary-source excerpts succeeded.
+
+**Evidence limits:** the opt-in controller checks have **not run on a writable
+kernel cgroup**. This host is Linux 6.18.58.1 WSL2, with a read-only cgroup-v2
+mount, visible `cpu memory pids` controllers and empty subtree control.
+The test-root opt-in was unset; the two skips are missing evidence, not passes.
+Pre-control `MemAvailable` was 10,066,180 KiB, a point-in-time observation,
+not a hardware guarantee. No host privileges, mounts, controllers, dependencies,
+model/data artifacts or GPU state changed; no new model study or tracing run
+occurred. Small public kernel-source lookups were retained only as references;
+no generated artifacts or probe children remain.
+
+The fixture preparation does not establish production containment, CPU/swap
+qualification, other execution-tier controller behavior, accepted study data,
+or real-engine performance. Next reassess the remaining offline evaluation
+and serving prerequisites while retaining the precise delegated-host gate.
+
+[cgroup-probe-prior-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44055130311
+[cgroup-probe-tests]: ../../tests/test_cgroups.py
+[cgroup-probe-kernel-68]: https://github.com/torvalds/linux/blob/v6.8/kernel/cgroup/pids.c
+[cgroup-probe-kernel-618]: https://github.com/torvalds/linux/blob/v6.18/kernel/cgroup/pids.c

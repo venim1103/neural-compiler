@@ -1,7 +1,8 @@
-"""Synthetic control-file tests, not kernel cgroup containment qualification."""
+"""Synthetic plumbing and opt-in kernel controls, not production containment."""
 
 from __future__ import annotations
 
+import errno
 import json
 import math
 import os
@@ -15,6 +16,146 @@ import pytest
 from neural_compiler.bridge import run_python
 from neural_compiler.bridge import cgroups, execution
 from neural_compiler.bridge.cgroups import CgroupError, CgroupLimits, request_cgroup
+
+
+_PID_LIMIT_PROBE = """
+import os, signal
+children = []
+failure = 0
+read_end, write_end = os.pipe()
+try:
+    for _ in range(8):
+        try:
+            pid = os.fork()
+        except OSError as exc:
+            failure = exc.errno
+            break
+        if pid == 0:
+            os.close(write_end)
+            signal.alarm(3)
+            try:
+                os.read(read_end, 1)
+            finally:
+                os._exit(0)
+        children.append(pid)
+    print("pids", len(children), failure)
+finally:
+    os.close(write_end)
+    os.close(read_end)
+    for pid in children:
+        os.waitpid(pid, 0)
+"""
+
+_MEMORY_LIMIT_PROBE = """
+print("memory started", flush=True)
+memory = bytearray(96 * 1024 * 1024)
+for offset in range(0, len(memory), 4096):
+    memory[offset] = 1
+print("memory complete")
+"""
+
+
+def _require_precise_pid_events(mountinfo: str) -> None:
+    for line in mountinfo.splitlines():
+        filesystem, _, options = line.split(" - ", 1)[1].split()
+        if filesystem == "cgroup2" and "pids_localevents" in options.split(","):
+            raise ValueError(
+                "PID qualification cannot attribute limits with pids_localevents"
+            )
+
+
+def test_pid_qualification_rejects_legacy_ancestor_event_accounting() -> None:
+    mountinfo = "31 1 0:28 / /sys/fs/cgroup rw - cgroup2 cgroup rw,nsdelegate"
+    _require_precise_pid_events(mountinfo)
+    with pytest.raises(ValueError, match="pids_localevents"):
+        _require_precise_pid_events(
+            mountinfo.replace("rw,nsdelegate", "rw,pids_localevents")
+        )
+
+
+@pytest.mark.parametrize("controller", ("pids", "memory"))
+def test_kernel_probe_jailed_controls(controller: str) -> None:
+    source = _PID_LIMIT_PROBE if controller == "pids" else _MEMORY_LIMIT_PROBE
+    result = run_python(source, timeout=5, output_limit=1024)
+    if result.status == "sandbox_error":
+        pytest.skip(
+            f"Jailed control unavailable; no unjailed fallback: {result.stderr}"
+        )
+    assert result.status == "ok", result
+    if controller == "pids":
+        _, created, failure = result.stdout.split()
+        if int(failure) in (errno.EAGAIN, errno.EPERM):
+            pytest.skip(
+                f"Host prevents the eight-child control: {result.stdout.strip()}"
+            )
+        assert int(created) == 8 and int(failure) == 0, result
+    else:
+        assert result.stdout.splitlines() == ["memory started", "memory complete"]
+
+
+@pytest.mark.parametrize("controller", ("pids", "memory"))
+def test_opt_in_kernel_cgroup_limits(controller: str, monkeypatch) -> None:
+    """Require an owner-provided subtree; never enable or remount controllers."""
+    root = os.environ.get("NEURAL_COMPILER_TEST_CGROUP_ROOT")
+    if root is None:
+        pytest.skip(
+            "Set NEURAL_COMPILER_TEST_CGROUP_ROOT to a writable delegated subtree"
+        )
+    if controller == "pids":
+        _require_precise_pid_events(Path("/proc/self/mountinfo").read_text())
+    limits = CgroupLimits(
+        Path(root),
+        memory_bytes=(128 if controller == "pids" else 64) * 1024 * 1024,
+        pids=8,
+    )
+    owned_groups: list[Path] = []
+    deltas: dict[str, int] = {}
+
+    def read_events(group: Path) -> dict[str, int]:
+        lines = (group / f"{controller}.events.local").read_text().splitlines()
+        return {name: int(value) for name, value in (line.split() for line in lines)}
+
+    @contextmanager
+    def observe_request(request_limits):
+        with request_cgroup(request_limits) as descriptors:
+            group = Path(os.readlink(f"/proc/self/fd/{descriptors[0]}")).parent
+            assert group.parent == Path(root).resolve()
+            owned_groups.append(group)
+            before = read_events(group)
+            try:
+                yield descriptors
+            finally:
+                deltas.update(
+                    (name, value - before[name])
+                    for name, value in read_events(group).items()
+                )
+
+    monkeypatch.setattr(execution, "request_cgroup", observe_request)
+    source = _PID_LIMIT_PROBE if controller == "pids" else _MEMORY_LIMIT_PROBE
+    result = run_python(source, timeout=5, output_limit=1024, cgroup=limits)
+    assert len(owned_groups) == 1, result
+    assert not owned_groups[0].exists(), "The owned request cgroup was not removed"
+    if controller == "pids":
+        assert result.status == "ok", result
+        _, created, failure = result.stdout.split()
+        assert int(failure) == errno.EAGAIN and 0 < int(created) < 8, result
+        assert deltas["max"] > 0, deltas
+    else:
+        assert result.status == "runtime_error", result
+        assert result.stdout.splitlines() == ["memory started"], result
+        assert all(deltas[name] > 0 for name in ("max", "oom", "oom_kill")), deltas
+    print(
+        json.dumps(
+            {
+                "controller": controller,
+                "event_deltas": deltas,
+                "returncode": result.returncode,
+                "status": result.status,
+                "stdout": result.stdout,
+            },
+            sort_keys=True,
+        )
+    )
 
 
 @pytest.mark.parametrize(
