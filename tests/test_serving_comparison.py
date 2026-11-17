@@ -511,6 +511,24 @@ def test_serving_summary_rejects_unmatched_results(fault):
         summarize_serving(rows)
 
 
+@pytest.mark.parametrize(
+    "field",
+    [
+        "prefill_tokens",
+        "checkpoint_bytes_peak",
+        "cache_hits",
+        "cache_misses",
+        "checkpoints_evicted",
+    ],
+)
+@pytest.mark.parametrize("invalid", [-1, True, 0.5])
+def test_invalid_serving_work_cannot_reach_report(field, invalid):
+    case = CaseResult("case", "unit", "python_tool", "correct", "", "42", 1, 3, 0, ())
+    row = ServingCaseResult("live_pause_resume", case, (), None, 3, 0, 0, 0, 0)
+    with pytest.raises(ValueError, match=f"{field} must be a nonnegative integer"):
+        summarize_serving([replace(row, **{field: invalid})])
+
+
 def test_serving_summary_exposes_opposing_paired_family_effects():
     rows = []
     for case_id, family, cached_time, live_correct in (

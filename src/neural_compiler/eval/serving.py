@@ -270,6 +270,16 @@ class ServingCaseResult:
     logit_prefix_tokens: int | None = None
 
     def __post_init__(self) -> None:
+        for name in (
+            "prefill_tokens",
+            "checkpoint_bytes_peak",
+            "cache_hits",
+            "cache_misses",
+            "checkpoints_evicted",
+        ):
+            value = getattr(self, name)
+            if type(value) is not int or value < 0:
+                raise ValueError(f"{name} must be a nonnegative integer")
         value = self.logit_prefix_tokens
         if value is not None and (
             type(value) is not int or not 0 <= value <= len(self.final_tokens)

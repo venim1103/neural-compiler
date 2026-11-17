@@ -2836,3 +2836,23 @@ were only unused-parameter hints in the execution trap. Three focus invocations,
 one root invocation and two formatter applications spent; no aborts. Temporary
 evidence files were fixture-managed. No models, accepted task data, dependencies,
 downloads, services or host changes were introduced.
+
+### 2026-11-17: reject invalid observed serving work
+
+The serving record admitted negative, boolean and fractional prefill/cache
+counters into reports, unlike the base case-record integer contract.
+`ServingCaseResult` now rejects those values at construction for `prefill_tokens`,
+`checkpoint_bytes_peak`, `cache_hits`, `cache_misses` and `checkpoints_evicted`.
+Zero and positive integer observations retain their existing meaning. Aggregate
+formulas, cache limits, logit-prefix semantics and serving behavior are unchanged;
+this is input validation, not new containment or engine qualification.
+
+**Finite scope and results:** fifteen synthetic record-only rejection fixtures,
+one record each (five fields by three invalid values), all reproduced acceptance
+before repair: **15 failed** (0.24 s). All **15 passed** afterward (0.04 s).
+Coupled serving/evaluation/evidence: **216 passed** (16.37 s); root:
+**424 passed** (25.62 s), fourteen existing Torch warnings, no skips. Root Ruff,
+two-file format and whitespace checks passed; owning-source diagnostics empty.
+One failing-first, repaired focus, coupled and root invocation spent; no aborts,
+formatter changes or retained artifacts. Existing trusted jailed/native controls
+ran in the root gate; the new fixtures used no model or guest execution.
