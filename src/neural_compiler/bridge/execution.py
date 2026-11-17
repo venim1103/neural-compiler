@@ -67,6 +67,7 @@ MAX_CODE_BYTES = 64 * 1024
 MAX_OUTPUT_BYTES = 64 * 1024
 MEMORY_BYTES = 512 * 1024 * 1024
 _JAIL_READY = b"neural-compiler-jail-ready\n"
+_JAIL_EXEC_ERROR = b"Jail exec failed: "
 
 _LAUNCHER = f"""
 import os, resource, sys
@@ -82,8 +83,14 @@ if os.open("/dev/null", os.O_RDONLY) != 0:
 os.set_inheritable(0, True)
 if os.write(status, {_JAIL_READY!r}) != {len(_JAIL_READY)}:
     raise OSError("Incomplete jail startup report")
-os.close(status)
-os.execv(sys.argv[3], sys.argv[3:])
+try:
+    os.execv(sys.argv[3], sys.argv[3:])
+except OSError as exc:
+    report = ({_JAIL_EXEC_ERROR!r} + (repr(sys.argv[3]) + ": " + str(exc)).encode("utf-8", errors="replace"))[:4096]
+    if os.write(status, report) != len(report):
+        raise OSError("Incomplete jail exec failure report")
+    os.close(status)
+    raise SystemExit(125)
 """
 
 _CGROUP_LAUNCHER = """
@@ -302,7 +309,7 @@ def run_jailed(
                     *args,
                 ]
                 inherited += group_fds
-            # The trusted launcher reports readiness and closes its writer before exec.
+            # The launcher's non-inheritable duplicate closes on successful exec.
             result = _supervise(
                 args,
                 remaining,
@@ -322,6 +329,24 @@ def run_jailed(
                         f"{result.stderr}\nMissing or invalid jail startup report".strip(),
                         result.returncode,
                     )
+                else:
+                    try:
+                        failure = startup_reader.recv(4097)
+                    except BlockingIOError:
+                        failure = b""
+                    if failure:
+                        diagnostic = (
+                            failure.decode("utf-8", errors="replace")
+                            if failure.startswith(_JAIL_EXEC_ERROR)
+                            and len(failure) <= 4096
+                            else "Invalid jail exec failure report"
+                        )
+                        result = ExecutionResult(
+                            "sandbox_error",
+                            result.stdout,
+                            f"{result.stderr}\n{diagnostic}".strip(),
+                            result.returncode,
+                        )
             if group_fds is not None:
                 os.lseek(group_fds[1], 0, os.SEEK_SET)
                 diagnostic = os.read(group_fds[1], 4096)

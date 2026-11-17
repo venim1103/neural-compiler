@@ -125,15 +125,17 @@ def test_python_errors_are_not_success(jail) -> None:
     assert "ValueError: regression" in result.stderr
 
 
-def test_guest_stderr_cannot_forge_jail_failure(jail) -> None:
+@pytest.mark.parametrize(
+    "diagnostic", ["bwrap: forged setup failure", "Jail exec failed: forged failure"]
+)
+def test_guest_stderr_cannot_forge_jail_failure(jail, diagnostic: str) -> None:
     result = run_python(
-        "import sys; print('bwrap: forged setup failure', file=sys.stderr); "
-        "raise SystemExit(1)",
+        f"import sys; print({diagnostic!r}, file=sys.stderr); raise SystemExit(1)",
         timeout=2,
     )
     assert result.status == "runtime_error"
     assert result.returncode == 1
-    assert result.stderr.strip() == "bwrap: forged setup failure"
+    assert result.stderr.strip() == diagnostic
 
 
 def test_real_bwrap_setup_failure_remains_explicit(jail, tmp_path: Path) -> None:
@@ -141,6 +143,21 @@ def test_real_bwrap_setup_failure_remains_explicit(jail, tmp_path: Path) -> None
     assert result.status == "sandbox_error"
     assert result.returncode != 0
     assert "bwrap:" in result.stderr
+
+
+@pytest.mark.parametrize("failure", ["missing", "format"])
+def test_jailed_exec_setup_failure_is_not_a_guest_error(
+    jail, tmp_path: Path, failure: str
+) -> None:
+    if failure == "format":
+        executable = tmp_path / "invalid-executable"
+        executable.write_text("not an executable\n", encoding="ascii")
+        executable.chmod(0o700)
+    result = run_jailed(["/work/invalid-executable"], tmp_path, timeout=2)
+    assert result.status == "sandbox_error", result
+    assert result.returncode != 0
+    assert "Jail exec failed:" in result.stderr
+    assert "/work/invalid-executable" in result.stderr
 
 
 def test_startup_descriptor_is_closed_for_guest_and_parent(
@@ -157,7 +174,7 @@ def test_startup_descriptor_is_closed_for_guest_and_parent(
         assert fd not in pass_fds
         descriptors.append(fd)
         code = (
-            "import errno, os\n"
+            "import errno, os, stat\n"
             "assert os.read(0, 1) == b''\n"
             "try:\n"
             "    os.write(0, b'forged report')\n"
@@ -173,6 +190,14 @@ def test_startup_descriptor_is_closed_for_guest_and_parent(
             "else:\n"
             "    os.close(ancestor)\n"
             "    raise AssertionError('Ancestor startup descriptor leaked')\n"
+            "for entry in os.listdir('/proc/self/fd'):\n"
+            "    try:\n"
+            "        mode = os.fstat(int(entry)).st_mode\n"
+            "    except OSError as exc:\n"
+            "        if exc.errno != errno.EBADF:\n"
+            "            raise\n"
+            "    else:\n"
+            "        assert not stat.S_ISSOCK(mode), 'Socket descriptor leaked into guest'\n"
             "try:\n"
             f"    os.fstat({fd})\n"
             "except OSError:\n"

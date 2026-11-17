@@ -2629,3 +2629,41 @@ existing jailed native/trusted controls ran. One failing-first, focused, coupled
 and root attempt spent; fixtures cleaned normally. No guest ran in the new
 fixtures, and no pretrained-model/data/GPU study, dependency, download, service
 or host change occurred. GPU synchronization/performance was not measured.
+
+### 2026-11-17: keep trusted exec failures out of guest error outcomes
+
+The jail resource launcher previously acknowledged readiness and closed its
+private reporter before `exec`; a missing executable or invalid executable
+format was therefore mislabeled `runtime_error` (and could become a C
+`compile_error`). It now retains its non-inheritable duplicate until `exec`,
+which closes it atomically on success. A caught exec `OSError` sends one bounded
+private followup diagnostic and exits nonzero; the supervisor returns
+`sandbox_error`. Guest stdout/stderr and exit codes cannot supply this signal.
+This changes failure attribution, not namespace/limit/policy requirements.
+
+**Bounded ledger:** two real trusted jailed missing/invalid-format fixtures
+reproduced the misclassification (0.18 s). Five focused checks passed afterward
+(0.35 s), including old/new stderr non-forgery strings and descriptor closure.
+Native/execution/protocol/seccomp/cgroup/red-team regression: **141 passed**
+(5.05 s); initial root: **369 passed** (18.75 s). A concrete closure question
+then strengthened the existing fixture: inspect every guest `/proc/self/fd`
+entry, not just original stdin's descriptor, to exclude the launcher's duplicated
+socket. That focus passed (0.10 s); required root with the changed assertion:
+**369 passed** (18.67 s). Root Ruff, two-file format, whitespace and owning-source
+diagnostics passed. One formatter application; fourteen existing Torch warnings,
+no skips. Actual jailed Python/C/assembly/Wasm/Unicorn and trusted seccomp controls
+ran. One failing-first, repaired focus, coupled and initial root attempt spent,
+plus the narrowly revised descriptor focus/root; no unchanged successful coupled
+rerun. Temporary fixtures cleaned normally; no studies/downloads/dependencies,
+untrusted service, privileges or host-policy changes. This is not production
+containment qualification.
+
+The suspected failed-handoff prefill undercount was disproved by owning-code
+inspection: `resume_prefix` does not capture checkpoints, later capture failures
+occur after counters are committed, and the cold constructor failure already
+retains its prompt for accounting. No speculative patch or redundant test was
+added. One bounded hosted inspection confirmed success at [greedy
+admission][greedy-admission-ci], `bd292bf` and `93623b9`; this does not assert a
+hosted result for the subsequent exec-reporting change.
+
+[greedy-admission-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44034930751
