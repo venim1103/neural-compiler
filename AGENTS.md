@@ -71,7 +71,8 @@ blocked:
    exact-boundary CPU snapshots, bounded LRU `CheckpointStore`, and offline `DecodeSession`
    comparison adapters (`live_pause_resume`, `prefix_cached_resubmission`, `full_reprefill`)
    now exist and match reference logits on tiny CPU hybrid models; complete CPU serving
-   observations can be saved without pickle and their reports replayed offline.
+   observations can be saved without pickle and their reports replayed offline,
+   with opt-in exact-reference and fixed-tolerance recorded-logit checks.
    Real-engine checkpoint integration, CUDA/FLA kernel checks and dependency changes
    remain separately scoped.
 3. P1 containment and multi-tier execution (`src/neural_compiler/bridge/`, `cli.py`):

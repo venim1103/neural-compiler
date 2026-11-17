@@ -89,10 +89,18 @@ def test_cli_check_imports_and_native_flags(
     ]
 
 
-@pytest.mark.parametrize("with_tasks", [False, True])
-@pytest.mark.parametrize("serving", [False, True])
+@pytest.mark.parametrize(
+    "with_tasks,serving,check_logits",
+    [
+        (False, False, False),
+        (True, False, False),
+        (False, True, False),
+        (True, True, False),
+        (True, True, True),
+    ],
+)
 def test_cli_replays_failed_cases_without_execution(
-    monkeypatch, tmp_path: Path, capsys, with_tasks, serving
+    monkeypatch, tmp_path: Path, capsys, with_tasks, serving, check_logits
 ):
     from neural_compiler import bridge
     from neural_compiler.bridge.session import LiveSession
@@ -137,7 +145,9 @@ def test_cli_replays_failed_cases_without_execution(
                 mode,
                 rows[1],
                 (1, 2, 3),
-                torch.tensor([[-float("inf"), float("nan"), 1.25]]),
+                torch.tensor(
+                    [[-float("inf"), 1.0 if check_logits else float("nan"), 1.25]]
+                ),
                 3 + index,
                 64 if index == 1 else 0,
                 index,
@@ -169,6 +179,15 @@ def test_cli_replays_failed_cases_without_execution(
             "answer_checks": 3,
             "task_text_checks": 0,
             "nonfinal_records": 0,
+        }
+    if check_logits:
+        arguments.append("--check-serving-logits")
+        expected["logit_validation"] = {
+            "cases": 1,
+            "full_reprefill_comparisons": 2,
+            "cache_live_exact_pairs": 1,
+            "atol": 1e-6,
+            "rtol": 1e-5,
         }
     assert main(arguments) == 0
     captured = capsys.readouterr()
@@ -252,3 +271,54 @@ def test_cli_rejects_unpaired_serving_without_report(tmp_path: Path, capsys):
     with pytest.raises(ValueError, match="Missing serving modes for b"):
         main(["--serving-report", str(evidence)])
     assert capsys.readouterr().out == ""
+
+
+def test_cli_logit_mismatch_never_prints_a_report(tmp_path: Path, capsys):
+    from neural_compiler.eval import (
+        CaseResult,
+        ServingCaseResult,
+        dump_serving_results,
+    )
+
+    case = CaseResult("case", "unit", "python_tool", "correct", "", "42", 1, 3, 0, ())
+    reference = ServingCaseResult(
+        "full_reprefill_resubmission",
+        case,
+        (1, 2, 3),
+        torch.tensor([[0.0, 1.0]]),
+        3,
+        0,
+        0,
+        0,
+        0,
+        logit_prefix_tokens=2,
+    )
+    live = replace(
+        reference,
+        mode="live_pause_resume",
+        final_logits=torch.tensor([[2e-6, 1.0]]),
+    )
+    evidence = tmp_path / "mismatched.json"
+    with evidence.open("w", encoding="utf-8") as destination:
+        dump_serving_results([reference, live], destination)
+    with pytest.raises(ValueError, match="Logits differ from full reprefill"):
+        main(["--serving-report", str(evidence), "--check-serving-logits"])
+    assert capsys.readouterr().out == ""
+
+
+def test_cli_logit_checks_require_serving_report_before_file_access(
+    tmp_path: Path, capsys
+):
+    absent = str(tmp_path / "absent")
+    for action in (
+        [],
+        ["--version"],
+        ["--eval-report", absent],
+        ["--run-python", absent],
+    ):
+        with pytest.raises(SystemExit) as error:
+            main([*action, "--check-serving-logits"])
+        assert error.value.code == 2
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "--check-serving-logits requires --serving-report" in captured.err

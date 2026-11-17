@@ -40,6 +40,11 @@ def main(argv: list[str] | None = None) -> int:
         metavar="FILE",
         help="Check exact task references with --eval-report or --serving-report",
     )
+    parser.add_argument(
+        "--check-serving-logits",
+        action="store_true",
+        help="Check recorded CPU logits against full reprefill with --serving-report",
+    )
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--version", action="store_true", help="Print package version")
     action.add_argument(
@@ -81,6 +86,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.eval_tasks is not None and not (args.eval_report or args.serving_report):
         parser.error("--eval-tasks requires --eval-report or --serving-report")
+    if args.check_serving_logits and args.serving_report is None:
+        parser.error("--check-serving-logits requires --serving-report")
     if args.version:
         print(json.dumps({"name": "neural-compiler", "version": __version__}))
         return 0
@@ -93,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
             matched_report,
             summarize_serving,
             validate_references,
+            validate_serving_logits,
         )
 
         serving_results: tuple[ServingCaseResult, ...] | None = None
@@ -108,11 +116,17 @@ def main(argv: list[str] | None = None) -> int:
             with args.eval_tasks.open(encoding="utf-8") as source:
                 tasks = load_tasks(source)
             reference_checks = validate_references(tasks, results)
-        report = (
-            matched_report(results)
-            if serving_results is None
-            else summarize_serving(serving_results)
-        )
+        if serving_results is None:
+            report = matched_report(results)
+        else:
+            logit_checks = (
+                validate_serving_logits(serving_results)
+                if args.check_serving_logits
+                else None
+            )
+            report = summarize_serving(serving_results)
+            if logit_checks is not None:
+                report["logit_validation"] = logit_checks
         if reference_checks is not None:
             report["reference_validation"] = reference_checks
         print(json.dumps(report, allow_nan=False))

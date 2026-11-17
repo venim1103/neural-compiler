@@ -3054,3 +3054,27 @@ controls ran. One focus, coupled/root invocation and formatter application spent
 no failures/aborts, new pretrained studies, guest workloads, GPU access,
 downloads, dependencies or retained artifacts. Next action: gate CLI numerical
 checks behind an explicit serving-report-only flag.
+
+### 2026-11-17: opt-in numerical checks during serving-report replay
+
+`--check-serving-logits` now requires `--serving-report` before file access,
+including when combined with version, execution or matched-report actions.
+Checks run before statistical aggregation and JSON output; success adds only
+the explicit `logit_validation` counts/tolerances. Numerical failures emit no
+partial report. Optional exact task-reference checks compose with this flag;
+neither check rewrites recorded task outcomes. Default replay remains unchanged
+and still accepts nonfinite tensor values as observations without claiming
+numerical agreement. README usage and Current Work now describe the opt-in path.
+
+**Finite scope and results:** three additional synthetic CLI cases, at most
+three rows/three CPU logits each: successful three-mode/reference-checked replay
+with model/guest execution trapped, a `2e-6` mismatch against a zero reference,
+and four argument-guard combinations using absent files. CLI focus:
+**14 passed**, two unrelated primitive checks deselected (0.08 s); root:
+**491 passed** (17.51 s). Root Ruff, two-file format and whitespace passed;
+owning-source diagnostics empty, seventeen CLI and four numerical-check callers
+signature-compatible. One focused/root invocation and formatter application
+spent, no failures/aborts; fourteen existing Torch warnings, no skips. Existing
+jailed/native controls ran; no additional workloads, model studies, dependencies,
+downloads, GPU access or retained artifacts. This checks supplied CPU
+observations only, not engine authenticity, GPU kernels or production serving.
