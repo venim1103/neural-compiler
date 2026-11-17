@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import random
 import re
@@ -280,6 +282,8 @@ class CallRecord:
 
 @dataclass(frozen=True)
 class CaseResult:
+    """Task-text identity does not certify reference/checker or runtime matching."""
+
     case_id: str
     family: str
     path: Path
@@ -291,6 +295,7 @@ class CaseResult:
     injected_tokens: int
     calls: tuple[CallRecord, ...]
     prompt_tokens: int | None = None
+    task_text_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.elapsed_seconds) or self.elapsed_seconds < 0:
@@ -307,6 +312,13 @@ class CaseResult:
             type(self.prompt_tokens) is not int or self.prompt_tokens < 0
         ):
             raise ValueError("prompt_tokens must be a nonnegative integer or None")
+        if self.task_text_sha256 is not None and (
+            not isinstance(self.task_text_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", self.task_text_sha256) is None
+        ):
+            raise ValueError(
+                "task_text_sha256 must be a lowercase SHA-256 digest or None"
+            )
         if self.path == "no_tool" and (self.calls or self.injected_tokens):
             raise ValueError(
                 "no_tool results must not record tool calls or injected tokens"
@@ -375,6 +387,13 @@ class EvaluationHarness:
         answer = ""
         outcome: Outcome = "invalid_answer"
         diagnostic = ""
+        task_text_sha256 = hashlib.sha256(
+            json.dumps(
+                (task.prompt, task.answer_format),
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("ascii")
+        ).hexdigest()
         call: ToolCall | None = None
         observed_tokens: list[int] = []
         turn_limit = 0
@@ -563,6 +582,7 @@ class EvaluationHarness:
             injected,
             tuple(calls),
             prompt_tokens=prompt_tokens,
+            task_text_sha256=task_text_sha256,
         )
 
 
@@ -677,10 +697,29 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, object]:
         "injected_tokens": injected_tokens,
         "prompt_tokens": sum(prompt_list),
         "prompt_token_samples": len(prompt_list),
+        "task_text_samples": sum(
+            result.task_text_sha256 is not None for result in results
+        ),
         "total_tokens": generated_tokens + injected_tokens,
         "tool_calls": tool_calls,
         "outcomes": outcomes,
     }
+
+
+def _task_text_complete_pairs(
+    paired: Mapping[str, Mapping[str, CaseResult]],
+) -> int:
+    complete = 0
+    for case_id, case in paired.items():
+        observed = {
+            result.task_text_sha256
+            for result in case.values()
+            if result.task_text_sha256 is not None
+        }
+        if len(observed) > 1:
+            raise ValueError(f"Task text differs between paired results for {case_id}")
+        complete += all(result.task_text_sha256 is not None for result in case.values())
+    return complete
 
 
 def run_matched(
@@ -747,8 +786,9 @@ def _paired_deltas(
 def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
     """Require complete paired coverage; retain per-family costs and failures.
 
-    Coverage alone does not establish matched hardware, prompts, accepted splits,
-    intrinsic availability, independence or statistical qualification.
+    Observed task-text mismatches are rejected; missing observations are counted
+    as incomplete. Text identity does not establish matched references, full
+    model prompts, hardware, budgets, accepted splits or statistical qualification.
     """
     if not results:
         raise ValueError("A matched report requires case results")
@@ -766,9 +806,11 @@ def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
             raise ValueError(f"Missing baseline/current-best result for {case_id}")
         if len({result.family for result in case.values()}) != 1:
             raise ValueError(f"Family identity differs between paths for {case_id}")
+    task_text_complete_pairs = _task_text_complete_pairs(paired)
     families = sorted({result.family for result in results})
     return {
         "paired_cases": len(paired),
+        "task_text_complete_pairs": task_text_complete_pairs,
         "by_path": {
             path: summarize([result for result in results if result.path == path])
             for path in paths

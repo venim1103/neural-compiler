@@ -851,6 +851,113 @@ def test_matched_report_preserves_family_failures_and_rejects_missing_pairs():
         summarize(rows)
 
 
+@pytest.mark.parametrize("changed", ["prompt", "answer_format"])
+@pytest.mark.parametrize("reporter", ["matched", "serving"])
+def test_paired_reports_reject_reused_ids_with_different_task_text(
+    tokenizer, hybrid_model, monkeypatch, changed, reporter
+):
+    from neural_compiler.eval.serving import (
+        ALL_SERVING_MODES,
+        ServingCaseResult,
+        summarize_serving,
+    )
+
+    task = Task("reused-id", "unit", "Compute six times seven.", IntegerChecker(42))
+    alternate = replace(
+        task,
+        **{changed: "Compute 7 * 6." if changed == "prompt" else "<signed integer>"},
+    )
+    rows = []
+    for path in ("no_tool", "python_tool", "current_best"):
+        runner = harness_for(
+            tokenizer, hybrid_model, monkeypatch, "Final answer: 42<|im_end|>"
+        )
+        rows.append(runner.run(alternate if path == "current_best" else task, path))
+    assert all(row.outcome == "correct" for row in rows)
+    with pytest.raises(ValueError, match="Task text"):
+        if reporter == "matched":
+            matched_report(rows)
+        else:
+            summarize_serving(
+                [
+                    ServingCaseResult(
+                        mode, replace(row, path="python_tool"), (), None, 0, 0, 0, 0, 0
+                    )
+                    for mode, row in zip(ALL_SERVING_MODES, rows)
+                ]
+            )
+
+
+@pytest.mark.parametrize("digest", ["invalid", "g" * 64, True])
+def test_invalid_task_text_fingerprint_is_explicit(digest):
+    with pytest.raises(ValueError, match="task_text_sha256"):
+        CaseResult(
+            "bad-digest",
+            "unit",
+            "no_tool",
+            "correct",
+            "",
+            "",
+            1,
+            0,
+            0,
+            (),
+            task_text_sha256=digest,
+        )
+
+
+@pytest.mark.parametrize(
+    "digests,complete",
+    [
+        ((None, None, None), 0),
+        (("a" * 64, None, None), 0),
+        (("a" * 64,) * 3, 1),
+        (("a" * 64, "b" * 64, None), None),
+    ],
+)
+def test_task_text_coverage_preserves_legacy_unknowns_and_partial_mismatches(
+    digests, complete
+):
+    from neural_compiler.eval.serving import (
+        ALL_SERVING_MODES,
+        ServingCaseResult,
+        summarize_serving,
+    )
+
+    rows = [
+        CaseResult(
+            "coverage",
+            "unit",
+            path,
+            "correct",
+            "",
+            "",
+            1,
+            0,
+            0,
+            (),
+            task_text_sha256=digest,
+        )
+        for path, digest in zip(("no_tool", "python_tool", "current_best"), digests)
+    ]
+    serving_rows = [
+        ServingCaseResult(
+            mode, replace(row, path="python_tool"), (), None, 0, 0, 0, 0, 0
+        )
+        for mode, row in zip(ALL_SERVING_MODES, rows)
+    ]
+    for report in (
+        lambda: matched_report(rows),
+        lambda: summarize_serving(serving_rows),
+    ):
+        if complete is None:
+            with pytest.raises(ValueError, match="Task text"):
+                report()
+        else:
+            assert report()["task_text_complete_pairs"] == complete
+    assert summarize([rows[0]])["task_text_samples"] == (digests[0] is not None)
+
+
 def test_matched_preflight_rejects_budget_mismatch_before_inference(tokenizer):
     def factory(ids):
         pytest.fail("Preflight must precede model execution")
@@ -896,6 +1003,11 @@ def test_matched_runner_produces_all_three_report_paths(
     report = matched_report(rows)
     assert set(report["by_path"]) == {"no_tool", "python_tool", "current_best"}
     assert all(summary["correct"] == 1 for summary in report["by_path"].values())
+    assert report["task_text_complete_pairs"] == 1
+    assert len({row.task_text_sha256 for row in rows}) == 1
+    assert all(
+        summary["task_text_samples"] == 1 for summary in report["by_path"].values()
+    )
 
 
 @pytest.mark.parametrize("elapsed", [-1, float("nan"), float("inf")])

@@ -2701,3 +2701,39 @@ advertises `cpu memory pids`, and has empty subtree control. Free disk is
 was identified; additional synthetic work would not satisfy those milestones.
 
 [exec-report-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44035539763
+
+### 2026-11-17: reject reused task labels with mismatched observed text
+
+The [harness][task-text-harness] now records optional `task_text_sha256`, derived
+from an ASCII canonical JSON pair of exact user-task prompt and answer-format
+strings. Model/tool wrappers deliberately differ by path and are not hashed.
+Both matched evaluation and [serving reports][task-text-serving] reject differing
+observed text under reused case/family labels, including partially observed
+groups. Legacy/missing observations remain `None`, with `task_text_samples` and
+`task_text_complete_pairs` exposing coverage rather than imputing a match.
+The field is appended with a default, preserving prior positional records.
+Hashes do not certify checker/reference identity, complete model prompts,
+budgets, hardware, cohort acceptance or statistical qualification. Existing
+accuracy, cost, uncertainty and outcome definitions are unchanged.
+
+**Bounded ledger:** four report-type-by-text-field fixtures reproduced false
+matched acceptance (0.69 s), using twelve tiny CPU prefills and fewer than 200
+scripted generated IDs per run. All four passed after repair (0.56 s).
+Malformed-digest, legacy/partial coverage and genuine matched-run controls
+passed together: **12 passed** (0.84 s). Coupled evaluation/serving:
+**175 passed** (13.24 s); root: **380 passed** (20.00 s). Root Ruff, three-file
+format and whitespace passed; both owning-source diagnostics empty and both
+shared-helper callers signature-compatible. Test diagnostics contained only
+unused-parameter hints, not type errors. Fourteen existing Torch warnings, no
+skips; existing jailed native/trusted controls ran. One failing-first, repaired
+focus, expanded edge focus, coupled and root attempt spent; one formatter
+application, temporary fixtures cleaned. No guest ran in the new fixtures, and
+no study/data acceptance, model weights, downloads, dependencies or host changes.
+
+A bounded hosted inspection confirmed both `ea2a0a4` (exec reporting) and
+`46f7d7c` (tokenizer pin) CI completed successfully. Next compatible prerequisite:
+retain configured evaluation budgets alongside case evidence so independently
+collected records cannot silently pair different resource allowances.
+
+[task-text-harness]: ../../src/neural_compiler/eval/harness.py
+[task-text-serving]: ../../src/neural_compiler/eval/serving.py

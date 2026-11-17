@@ -37,6 +37,7 @@ from .harness import (
     Task,
     _PATHS,
     _paired_comparison,
+    _task_text_complete_pairs,
     _validate_tool_description,
     summarize,
 )
@@ -399,6 +400,7 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
     Comparisons use the first present mode in canonical order as baseline:
     live pause/resume when present, otherwise prefix-cached resubmission.
     A single-mode summary has no paired deltas.
+    Observed task-text mismatches are rejected; legacy observations remain unknown.
     """
     if not results:
         raise ValueError("Serving summary requires at least one result")
@@ -421,6 +423,12 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
         if len({row.case.family for row in case.values()}) != 1:
             raise ValueError(f"Family identity differs between modes for {case_id}")
 
+    paired_cases: dict[str, dict[str, CaseResult]] = {
+        case_id: {mode: row.case for mode, row in case.items()}
+        for case_id, case in paired.items()
+    }
+    task_text_complete_pairs = _task_text_complete_pairs(paired_cases)
+
     def summarize_mode(subset: Sequence[ServingCaseResult]) -> dict[str, object]:
         base = summarize([r.case for r in subset])
         base["prefill_tokens"] = sum(r.prefill_tokens for r in subset)
@@ -433,10 +441,6 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
     by_mode = {
         mode: summarize_mode([r for r in results if r.mode == mode])
         for mode in modes_present
-    }
-    paired_cases: dict[str, dict[str, CaseResult]] = {
-        case_id: {mode: row.case for mode, row in case.items()}
-        for case_id, case in paired.items()
     }
     baseline = modes_present[0]
 
@@ -463,6 +467,7 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
             for family in families
         },
         "paired_cases": len(paired_cases),
+        "task_text_complete_pairs": task_text_complete_pairs,
         "paired_deltas": deltas(paired_cases),
         "paired_deltas_by_family": {
             family: deltas(
