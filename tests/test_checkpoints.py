@@ -85,6 +85,53 @@ def test_invalid_sample_never_enters_history_or_callback(
     assert_reference(session)
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+@pytest.mark.parametrize("pending", [False, True])
+def test_nonfinite_greedy_selection_never_enters_history(
+    hybrid_model, monkeypatch, value, pending
+):
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    if pending:
+        with monkeypatch.context() as patch:
+            patch.setattr(session, "_next_token", lambda: 4)
+            session.decode_until(1, lambda _: True)
+    prefix = session.tokens
+    original_forward = hybrid_model.forward
+
+    def corrupt(logits):
+        logits.fill_(-float("inf"))
+        logits[..., 4] = value
+
+    def invalid_logits(*args, **kwargs):
+        output = original_forward(*args, **kwargs)
+        corrupt(output.logits)
+        return output
+
+    corrupt(session.logits)
+    callbacks = []
+    with monkeypatch.context() as patch:
+        patch.setattr(hybrid_model, "forward", invalid_logits)
+        with pytest.raises(RuntimeError, match="finite maximum logit"):
+            session.decode_until(1, lambda token: callbacks.append(token) or True)
+    assert callbacks == [] and session.tokens == prefix
+    assert session._pending is None
+    assert session.cache.get_seq_length() == len(prefix)
+    session.inject([5, 6])
+    assert session.tokens == (*prefix, 5, 6)
+    assert_reference(session)
+
+
+def test_greedy_selection_preserves_masked_logits_and_first_tie(hybrid_model):
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    session.logits.fill_(-float("inf"))
+    session.logits[..., 4:6] = 2
+    decoded = session.decode_until(1, lambda _: True)
+    assert decoded.token_ids == (4,) and decoded.reason == "stop"
+    session.inject([6])
+    assert session.tokens == (1, 2, 3, 4, 6)
+    assert_reference(session)
+
+
 @pytest.mark.parametrize("boundary", ["stop", "eos", "length"])
 def test_checkpoint_preserves_pending_token_exactly_once(
     tokenizer, hybrid_model, monkeypatch, boundary

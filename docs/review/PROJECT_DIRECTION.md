@@ -2608,3 +2608,24 @@ reading map above exposes decisions versus implementation evidence without
 rewriting historical reviews. Latest actual user intent remains autonomous
 continuation, not the historical WIP pause; protected prerequisites require a
 new directive rather than fabricated data, qualifications or routine reruns.
+
+### 2026-11-17: reject nonfinite greedy selections before token commitment
+
+The default greedy selector now checks the maximum returned by its reduction
+before committing a sampled token. NaN, positive infinity and entirely masked
+negative-infinity rows raise an explicit runtime error rather than becoming
+ordinary generated IDs. Negative-infinity masks with a finite winner and
+first-index tie handling remain supported. Explicit sampler hooks are unchanged;
+this is not a new whole-output finite scan or a model-accuracy claim.
+
+**Bounded ledger:** six nonfinite-row/pending-boundary cases failed before
+repair; one masked finite-tie control passed (0.24 s). All seven passed afterward
+(0.16 s), including no callback/history mutation, exactly-once completion of
+previously pending work and subsequent valid injection/reference logits at
+existing tolerances. Coupled checkpoint/serving: **99 passed** (6.12 s);
+root: **366 passed** (20.63 s). Root Ruff, two-file format, whitespace and
+owning-source diagnostics passed. Fourteen existing Torch warnings, no skips;
+existing jailed native/trusted controls ran. One failing-first, focused, coupled
+and root attempt spent; fixtures cleaned normally. No guest ran in the new
+fixtures, and no pretrained-model/data/GPU study, dependency, download, service
+or host change occurred. GPU synchronization/performance was not measured.

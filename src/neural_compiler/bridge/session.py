@@ -124,6 +124,8 @@ def _validate_token_ids(ids: Sequence[int]) -> None:
 class LiveSession:
     """Own a live cache; sampled stop/EOS tokens are pending until the next feed.
 
+    Default greedy selection requires a finite maximum; masked -inf entries are
+    allowed when another entry can be selected.
     Failed model forwards invalidate the session; resume a prior valid checkpoint
     or prefill a new session rather than reusing potentially mutated state.
     """
@@ -204,7 +206,10 @@ class LiveSession:
         self._cache_usable = True
 
     def _next_token(self) -> int:
-        return int(self.logits.argmax(-1).item())
+        maximum, token = self.logits.max(dim=-1)
+        if not torch.isfinite(maximum).item():
+            raise RuntimeError("Greedy decoding requires a finite maximum logit")
+        return int(token.item())
 
     def decode_until(
         self,
