@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import torch
 
 from neural_compiler import gdn_exact_read, gdn_exact_write, snap_bipolar
@@ -39,7 +40,9 @@ def test_cli_version(capsys) -> None:
     assert "0.1.0" in captured.out
 
 
-def test_cli_check_imports_and_native_flags(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_cli_check_imports_and_native_flags(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
     from neural_compiler import bridge
 
     clean = tmp_path / "clean.py"
@@ -57,7 +60,9 @@ def test_cli_check_imports_and_native_flags(monkeypatch, tmp_path: Path, capsys)
 
     recorded: list[tuple[str, str, float, str]] = []
 
-    def fake_c(code: str, timeout: float = 20, *, compiler: str = "gcc") -> ExecutionResult:
+    def fake_c(
+        code: str, timeout: float = 20, *, compiler: str = "gcc"
+    ) -> ExecutionResult:
         recorded.append(("c", code, timeout, compiler))
         return ExecutionResult("ok", stdout="42\n", returncode=0)
 
@@ -81,3 +86,55 @@ def test_cli_check_imports_and_native_flags(monkeypatch, tmp_path: Path, capsys)
         ("c", "int main(void){return 0;}", 3.5, "tcc"),
         ("asm", "ret", 2.0, ""),
     ]
+
+
+def test_cli_replays_failed_cases_without_execution(
+    monkeypatch, tmp_path: Path, capsys
+):
+    from neural_compiler import bridge
+    from neural_compiler.bridge.session import LiveSession
+    from neural_compiler.eval import CaseResult, dump_case_results, matched_report
+
+    def forbid_execution(*args, **kwargs):
+        raise AssertionError("Evidence replay must not execute a model or program")
+
+    for name in ("run_python", "run_c", "run_asm"):
+        monkeypatch.setattr(bridge, name, forbid_execution)
+    monkeypatch.setattr(LiveSession, "__init__", forbid_execution)
+    rows = tuple(
+        CaseResult(
+            "case", "synthetic", path, "wrong_answer", "Mismatch", "0", 2, 3, 0, ()
+        )
+        for path in ("no_tool", "python_tool", "current_best")
+    )
+    evidence = tmp_path / "cases.json"
+    with evidence.open("w", encoding="utf-8") as destination:
+        dump_case_results(rows, destination)
+    assert main(["--eval-report", str(evidence)]) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == json.loads(
+        json.dumps(matched_report(rows), allow_nan=False)
+    )
+    assert captured.err == ""
+
+
+def test_cli_rejects_invalid_evidence_without_report(tmp_path: Path, capsys):
+    evidence = tmp_path / "invalid.json"
+    evidence.write_text('{"schema_version":2,"cases":[]}', encoding="utf-8")
+    with pytest.raises(ValueError, match="Unsupported evidence schema_version"):
+        main(["--eval-report", str(evidence)])
+    assert capsys.readouterr().out == ""
+
+
+def test_cli_rejects_incomplete_pairing_without_report(tmp_path: Path, capsys):
+    from neural_compiler.eval import CaseResult, dump_case_results
+
+    evidence = tmp_path / "incomplete.json"
+    record = CaseResult(
+        "case", "synthetic", "no_tool", "correct", "", "42", 1, 1, 0, ()
+    )
+    with evidence.open("w", encoding="utf-8") as destination:
+        dump_case_results([record], destination)
+    with pytest.raises(ValueError, match="Missing baseline/current-best result"):
+        main(["--eval-report", str(evidence)])
+    assert capsys.readouterr().out == ""

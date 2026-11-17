@@ -77,6 +77,35 @@ CLI program files, including `--check-imports` inputs, must be UTF-8 and at most
 On the audit host, 30 calls to the already-loaded Python API measured **23.92 ms p50 / 25.38 ms p95**,
 including fresh jail/interpreter startup. This excludes CLI/model startup and is not a production SLO.
 
+### Offline evaluation evidence
+
+Save existing result rows from the [matched evaluation harness][offline-harness]
+using the [versioned evidence API][evidence-records]:
+
+```python
+from neural_compiler.eval import dump_case_results
+
+with open("case_results.json", "w", encoding="utf-8") as destination:
+    dump_case_results(results, destination)
+```
+
+Replay the failure-inclusive matched report without loading a model or executing
+saved answers:
+
+```bash
+neural-compiler --eval-report case_results.json
+```
+
+The command prints strict JSON, requires all three paths for every case, and
+rejects invalid schemas or mismatched paired observations rather than dropping
+records. A successful exit means report generation succeeded, not that an
+accuracy threshold or dataset-acceptance gate passed. Missing legacy provenance
+remains unknown. Evidence streams are caller-owned, not authenticated or atomic
+file transactions; no dataset or model study is accepted by saving a file.
+
+[offline-harness]: ./src/neural_compiler/eval/harness.py
+[evidence-records]: ./src/neural_compiler/eval/records.py
+
 Reproduce the representation, bridge latency, and live-cache prefill benchmarks (see [`docs/review/PROJECT_DIRECTION.md`](./docs/review/PROJECT_DIRECTION.md#appendix--reproducing-the-experiments)):
 
 ```bash

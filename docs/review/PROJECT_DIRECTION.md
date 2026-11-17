@@ -2805,3 +2805,34 @@ artifacts, downloads or dependencies were added. Next concrete action: expose
 offline report replay in the existing CLI with explicit input/coverage failures.
 
 [case-records]: ../../src/neural_compiler/eval/records.py
+
+### 2026-11-17: replay matched reports through the public CLI
+
+`neural-compiler --eval-report FILE` now reads saved case evidence and prints the
+existing failure-inclusive matched report as strict JSON. It is mutually
+exclusive with execution/import/version actions and performs no model or guest
+execution. File/schema errors and incomplete or mismatched paired coverage
+remain explicit exceptions, consistent with existing CLI file handling; no
+partial report is printed. Exit zero means successful report generation, not
+accuracy acceptance. The public README documents saving existing harness rows
+and replaying them; the 64 KiB program-source limit is not applied to evidence.
+
+**Finite scope and results:** three new synthetic CLI fixtures, at most three
+records each, with executor and live-session-constructor traps. First focus:
+one failed/two passed (0.08 s), because the test imported the session protocol
+from the concrete-session module. Inspection identified `LiveSession.__init__`
+as the actual model-prefill entry. Second focus: one failed/two passed (0.06 s),
+because the test compared decoded JSON arrays against Python CI tuples.
+Normalizing the expected report to JSON wire types repaired that assertion;
+no CLI source repair was needed. A narrowly revised routine plan allowed one
+additional focused attempt after that concrete fixture correction: **3 passed**
+(0.07 s). No unchanged failed rerun or protected experiment allowance was used.
+
+Required root gate: **409 passed** (27.50 s), fourteen existing Torch warnings,
+no skips; existing jailed/native controls ran. Root Ruff, two-file formatting,
+whitespace and new README link targets passed. Owning-source diagnostics were
+empty, all twelve `main` callers were signature-compatible; test diagnostics
+were only unused-parameter hints in the execution trap. Three focus invocations,
+one root invocation and two formatter applications spent; no aborts. Temporary
+evidence files were fixture-managed. No models, accepted task data, dependencies,
+downloads, services or host changes were introduced.

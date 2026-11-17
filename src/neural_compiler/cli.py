@@ -60,9 +60,22 @@ def main(argv: list[str] | None = None) -> int:
         metavar="FILE",
         help="Evaluate static Python AST imports against the candidate math/stdlib allowlist without executing",
     )
+    action.add_argument(
+        "--eval-report",
+        type=Path,
+        metavar="FILE",
+        help="Replay a matched report from saved case evidence without model or program execution",
+    )
     args = parser.parse_args(argv)
     if args.version:
         print(json.dumps({"name": "neural-compiler", "version": __version__}))
+        return 0
+    if args.eval_report:
+        from neural_compiler.eval import load_case_results, matched_report
+
+        with args.eval_report.open(encoding="utf-8") as source:
+            results = load_case_results(source)
+        print(json.dumps(matched_report(results), allow_nan=False))
         return 0
     if args.check_imports:
         from neural_compiler.bridge import evaluate_import_policy
