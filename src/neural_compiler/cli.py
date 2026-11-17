@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> int:
         "--eval-tasks",
         type=Path,
         metavar="FILE",
-        help="Check saved final outcomes against exact task specifications (requires --eval-report)",
+        help="Check exact task references with --eval-report or --serving-report",
     )
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--version", action="store_true", help="Print package version")
@@ -72,28 +72,47 @@ def main(argv: list[str] | None = None) -> int:
         metavar="FILE",
         help="Replay a matched report from saved case evidence without model or program execution",
     )
+    action.add_argument(
+        "--serving-report",
+        type=Path,
+        metavar="FILE",
+        help="Replay saved serving-comparison observations without inference or execution",
+    )
     args = parser.parse_args(argv)
-    if args.eval_tasks is not None and args.eval_report is None:
-        parser.error("--eval-tasks requires --eval-report")
+    if args.eval_tasks is not None and not (args.eval_report or args.serving_report):
+        parser.error("--eval-tasks requires --eval-report or --serving-report")
     if args.version:
         print(json.dumps({"name": "neural-compiler", "version": __version__}))
         return 0
-    if args.eval_report:
+    if args.eval_report or args.serving_report:
         from neural_compiler.eval import (
+            ServingCaseResult,
             load_case_results,
+            load_serving_results,
             load_tasks,
             matched_report,
+            summarize_serving,
             validate_references,
         )
 
-        with args.eval_report.open(encoding="utf-8") as source:
-            results = load_case_results(source)
+        serving_results: tuple[ServingCaseResult, ...] | None = None
+        report_path = args.eval_report or args.serving_report
+        with report_path.open(encoding="utf-8") as source:
+            if args.eval_report:
+                results = load_case_results(source)
+            else:
+                serving_results = load_serving_results(source)
+                results = tuple(row.case for row in serving_results)
         reference_checks: dict[str, int] | None = None
         if args.eval_tasks is not None:
             with args.eval_tasks.open(encoding="utf-8") as source:
                 tasks = load_tasks(source)
             reference_checks = validate_references(tasks, results)
-        report = matched_report(results)
+        report = (
+            matched_report(results)
+            if serving_results is None
+            else summarize_serving(serving_results)
+        )
         if reference_checks is not None:
             report["reference_validation"] = reference_checks
         print(json.dumps(report, allow_nan=False))

@@ -2961,3 +2961,31 @@ and formatter application spent; no failures/aborts, model forwards, guest
 execution, GPU access, dependencies, downloads or retained new artifacts.
 Next concrete action: expose serving-report replay with the same optional exact
 reference checks and explicit pairing errors.
+
+### 2026-11-17: replay saved serving reports through the public CLI
+
+`--serving-report FILE` now loads complete serving observations and emits the
+existing strict-JSON serving summary without inference or program execution.
+It is mutually exclusive with the other CLI actions. Optional `--eval-tasks`
+reference validation now works with either report action; the default matched
+report shape and reference-before-aggregation ordering remain unchanged.
+An empty serving input is not mistaken for matched-case evidence. Duplicate or
+incomplete mode pairs and mismatched observations fail without partial output.
+Single-mode reports remain supported without paired mode deltas.
+
+This aggregates captured evidence; it does not execute a serving engine,
+certify numerical equivalence of logits or accept a benchmark cohort.
+README usage and the concise Current Work map distinguish those limits.
+
+**Finite scope and results:** three new synthetic CLI fixtures, at most three
+serving rows/three CPU logit values each, with live-model-constructor and executor
+traps. Serving replay with/without exact tasks and incomplete-pair rejection
+passed. Full CLI focus, including old controls: **13 passed** (0.06 s); coupled
+CLI/record/serving: **136 passed** (4.45 s); root: **469 passed** (18.96 s).
+Root Ruff, two-file format, whitespace and README local-link targets passed.
+Owning-source diagnostics were empty; fifteen `main` callers were signature-
+compatible; test diagnostics were only unused trap parameters. Fourteen existing
+Torch warnings, no skips; existing jailed/native controls ran. One focus,
+coupled/root invocation and formatter check/application spent (no formatting
+changes), no failures/aborts, model forwards, guest execution, GPU access,
+downloads, dependencies or retained fixture artifacts.

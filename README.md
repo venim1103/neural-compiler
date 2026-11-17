@@ -138,6 +138,18 @@ other byte orders or inconsistent metadata before tensor reconstruction.
 These are offline observations, not live-cache checkpoints, model weights,
 training graphs, a production serving integration or measured speedups.
 
+Replay a saved serving report with:
+
+```bash
+neural-compiler --serving-report .runs/serving_results.json
+```
+
+Add `--eval-tasks .runs/tasks.json` for the same optional reference checks.
+Incomplete mode coverage, duplicate pairs and mismatched observations fail
+explicitly. A single recorded mode is supported but has no paired mode deltas.
+Report replay aggregates observations; it does not itself verify numerical
+equivalence of logits.
+
 [offline-harness]: ./src/neural_compiler/eval/harness.py
 [evidence-records]: ./src/neural_compiler/eval/records.py
 

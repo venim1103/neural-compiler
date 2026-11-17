@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -89,18 +90,23 @@ def test_cli_check_imports_and_native_flags(
 
 
 @pytest.mark.parametrize("with_tasks", [False, True])
+@pytest.mark.parametrize("serving", [False, True])
 def test_cli_replays_failed_cases_without_execution(
-    monkeypatch, tmp_path: Path, capsys, with_tasks
+    monkeypatch, tmp_path: Path, capsys, with_tasks, serving
 ):
     from neural_compiler import bridge
     from neural_compiler.bridge.session import LiveSession
     from neural_compiler.eval import (
+        ALL_SERVING_MODES,
         CaseResult,
         IntegerChecker,
+        ServingCaseResult,
         Task,
         dump_case_results,
+        dump_serving_results,
         dump_tasks,
         matched_report,
+        summarize_serving,
     )
 
     def forbid_execution(*args, **kwargs):
@@ -125,10 +131,32 @@ def test_cli_replays_failed_cases_without_execution(
         for path in ("no_tool", "python_tool", "current_best")
     )
     evidence = tmp_path / "cases.json"
-    with evidence.open("w", encoding="utf-8") as destination:
-        dump_case_results(rows, destination)
-    arguments = ["--eval-report", str(evidence)]
-    expected = json.loads(json.dumps(matched_report(rows), allow_nan=False))
+    if serving:
+        serving_rows = tuple(
+            ServingCaseResult(
+                mode,
+                rows[1],
+                (1, 2, 3),
+                torch.tensor([[-float("inf"), float("nan"), 1.25]]),
+                3 + index,
+                64 if index == 1 else 0,
+                index,
+                1,
+                0,
+                logit_prefix_tokens=2,
+            )
+            for index, mode in enumerate(ALL_SERVING_MODES)
+        )
+        with evidence.open("w", encoding="utf-8") as destination:
+            dump_serving_results(serving_rows, destination)
+        arguments = ["--serving-report", str(evidence)]
+        report = summarize_serving(serving_rows)
+    else:
+        with evidence.open("w", encoding="utf-8") as destination:
+            dump_case_results(rows, destination)
+        arguments = ["--eval-report", str(evidence)]
+        report = matched_report(rows)
+    expected = json.loads(json.dumps(report, allow_nan=False))
     if with_tasks:
         specification = tmp_path / "tasks.json"
         task = Task("case", "synthetic", "A unit fixture.", IntegerChecker(42))
@@ -201,4 +229,26 @@ def test_cli_reference_mismatch_never_prints_a_report(tmp_path: Path, capsys):
         dump_tasks([task], destination)
     with pytest.raises(ValueError, match="Recorded outcome differs from reference"):
         main(["--eval-report", str(evidence), "--eval-tasks", str(specification)])
+    assert capsys.readouterr().out == ""
+
+
+def test_cli_rejects_unpaired_serving_without_report(tmp_path: Path, capsys):
+    from neural_compiler.eval import (
+        CaseResult,
+        ServingCaseResult,
+        dump_serving_results,
+    )
+
+    case = CaseResult("a", "unit", "python_tool", "correct", "", "42", 1, 3, 0, ())
+    first = ServingCaseResult("live_pause_resume", case, (), None, 3, 0, 0, 0, 0)
+    rows = [
+        first,
+        replace(first, mode="prefix_cached_resubmission"),
+        replace(first, case=replace(case, case_id="b")),
+    ]
+    evidence = tmp_path / "unpaired.json"
+    with evidence.open("w", encoding="utf-8") as destination:
+        dump_serving_results(rows, destination)
+    with pytest.raises(ValueError, match="Missing serving modes for b"):
+        main(["--serving-report", str(evidence)])
     assert capsys.readouterr().out == ""
