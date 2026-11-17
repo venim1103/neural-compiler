@@ -23,6 +23,32 @@ from neural_compiler.bridge.cgroups import CgroupLimits
 from neural_compiler.bridge.execution import MAX_CODE_BYTES
 
 
+@pytest.mark.parametrize(
+    "runner,program",
+    [
+        (run_python, "print(42)"),
+        (run_c, "int main(void){return 0;}"),
+        (run_asm, "mov eax, 42\nret"),
+        (run_wat, '(module (func (export "solve") (result i64) i64.const 42))'),
+        (run_hex, "b8 2a 00 00 00 c3"),
+    ],
+)
+def test_boolean_timeout_fails_before_subprocess_launch(monkeypatch, runner, program):
+    def forbid_launch(*args, **kwargs):
+        raise AssertionError("Boolean timeouts must fail before subprocess launch")
+
+    monkeypatch.setattr(
+        "neural_compiler.bridge.execution.subprocess.Popen", forbid_launch
+    )
+    with pytest.raises(ValueError, match="finite positive"):
+        runner(program, timeout=True)
+
+
+def test_bridge_policy_rejects_boolean_timeout():
+    with pytest.raises(ValueError, match="finite positive"):
+        BridgePolicy(timeout=True)
+
+
 @pytest.mark.parametrize("extra,status", [(0, "ok"), (1, "output_limit")])
 def test_python_dispatch_honors_custom_output_budget(extra: int, status: str) -> None:
     probe = run_python("print(0)")

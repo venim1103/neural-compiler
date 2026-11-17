@@ -3104,3 +3104,33 @@ No new artifacts. Public hosted CI for the preceding pushed CLI checkpoint
 Next check: the same finite-positive timeout contract at executor entry points.
 
 [checked-serving-replay-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44049031348
+
+### 2026-11-17: share strict timeout admission across execution tiers
+
+The shared execution-budget guard also treated `True` as a one-second timeout.
+Six public entry-point fixtures reached the trapped subprocess-launch seam:
+direct jail, Python, C, assembly, Wasmtime and Unicorn. The shared guard now
+rejects boolean timeouts before launch. A follow-up owning-source check found
+the same duplicated guard in `BridgePolicy`; its constructor now reuses the
+shared duration/output validator instead of retaining a divergent copy.
+Valid timeouts, deadline accounting, output caps, compilation flags and
+containment behavior are unchanged. This input-contract repair is not
+production containment qualification.
+
+**Finite scope and spent checks:** six added admission cases, with launches
+trapped; initial focus **6 failed, 4 passed** (0.17 s), repaired **10 passed**
+(0.04 s). First coupled execution/native **60 passed** (1.45 s), root
+**507 passed** (18.18 s). The discovered policy duplication justified one
+additional constructor fixture and a bounded necessary revalidation: policy
+focus **1 failed** (0.04 s), repaired combined **11 passed** (0.04 s), coupled
+**61 passed** (1.40 s), root **508 passed** (17.93 s). Earlier attempts remain
+spent, not replaced/refunded. Each focused check stayed within 30 s, coupled
+within 60 s and root within 180 s; no aborts or safety-limit changes.
+
+Root Ruff, four-file format and whitespace passed; both owning sources had empty
+diagnostics and all four shared-validator callers were signature-compatible.
+Fourteen existing Torch warnings, no skips. Required existing jailed
+Python/C/assembly and Wasm/Unicorn controls actually ran, with no new guest
+workloads beyond those controls, dependencies, downloads, GPU access, host
+security changes or retained artifacts. Next inspect cooperative model-decode
+time admission for the same contract mismatch.

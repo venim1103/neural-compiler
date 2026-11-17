@@ -90,8 +90,14 @@ def test_no_unjailed_fallback(monkeypatch, tmp_path: Path) -> None:
     assert "bwrap" in result.stderr
 
 
-@pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf")])
-def test_invalid_timeout_is_explicit(timeout: float, tmp_path: Path) -> None:
+@pytest.mark.parametrize("timeout", [0, -1, float("nan"), float("inf"), True])
+def test_invalid_timeout_is_explicit(
+    timeout: float, tmp_path: Path, monkeypatch
+) -> None:
+    def forbid_launch(*args, **kwargs):
+        raise AssertionError("Invalid timeouts must fail before subprocess launch")
+
+    monkeypatch.setattr(subprocess, "Popen", forbid_launch)
     with pytest.raises(ValueError, match="finite positive"):
         run_jailed(["/usr/bin/true"], tmp_path, timeout)
 

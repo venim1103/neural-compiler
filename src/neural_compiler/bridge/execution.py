@@ -114,7 +114,7 @@ def validate_code(code: str) -> None:
 
 
 def _validate_execution_budget(timeout: float, output_limit: int) -> None:
-    if not math.isfinite(timeout) or timeout <= 0:
+    if isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("timeout must be a finite positive number")
     if type(output_limit) is not int or output_limit <= 0:
         raise ValueError("output_limit must be a positive integer")

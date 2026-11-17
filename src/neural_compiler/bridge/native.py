@@ -7,7 +7,6 @@ containment qualification before running untrusted workloads.
 
 from __future__ import annotations
 
-import math
 import sys
 import tempfile
 import time
@@ -314,10 +313,7 @@ class BridgePolicy:
     hex_max_insns: int = 200_000_000
 
     def __post_init__(self) -> None:
-        if not math.isfinite(self.timeout) or self.timeout <= 0:
-            raise ValueError("timeout must be a finite positive number")
-        if type(self.output_limit) is not int or self.output_limit <= 0:
-            raise ValueError("output_limit must be a positive integer")
+        _validate_execution_budget(self.timeout, self.output_limit)
         if self.c_compiler not in _C_COMPILER_COMMANDS:
             raise ValueError(f"Unsupported C compiler: {self.c_compiler!r}")
         if type(self.wat_fuel) is not int or self.wat_fuel <= 0:
