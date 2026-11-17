@@ -20,6 +20,7 @@ from neural_compiler.eval import (
     SYNTHETIC_FAMILIES,
     generate_family_tasks,
     generate_matched_suite,
+    inspect_task_overlap,
 )
 from neural_compiler.eval.harness import (
     Budgets,
@@ -1053,6 +1054,67 @@ def test_matched_runner_produces_all_three_report_paths(
     assert all(
         summary["task_text_samples"] == 1 for summary in report["by_path"].values()
     )
+
+
+def test_task_overlap_keeps_identity_family_and_prompt_signals_separate():
+    def forbidden_checker(_answer: str) -> CheckResult:
+        raise AssertionError("Cohort inspection must not check or label answers")
+
+    development = [
+        Task("shared", "alpha", "First question.", forbidden_checker),
+        Task("dev", "beta", "Second question.", forbidden_checker),
+    ]
+    evaluation = [
+        Task("shared", "beta", "Third question.", forbidden_checker),
+        Task(
+            "eval",
+            "gamma",
+            "First question.",
+            forbidden_checker,
+            answer_format="<numerator>/<denominator>",
+        ),
+    ]
+    expected = {
+        "development_tasks": 2,
+        "evaluation_tasks": 2,
+        "overlapping_case_ids": ["shared"],
+        "overlapping_families": ["beta"],
+        "evaluation_prompt_overlap_ids": ["eval"],
+    }
+    assert inspect_task_overlap(development, evaluation) == expected
+    assert inspect_task_overlap(development[::-1], evaluation[::-1]) == expected
+
+
+@pytest.mark.parametrize(
+    "development_count,evaluation_count", [(1, 1), (0, 1), (1, 0), (0, 0)]
+)
+def test_task_overlap_reports_disjoint_or_empty_cohorts(
+    development_count, evaluation_count
+):
+    development = [
+        Task("dev", "development", "Development question.", IntegerChecker(42))
+    ][:development_count]
+    evaluation = [
+        Task("eval", "evaluation", "Evaluation question.", IntegerChecker(42))
+    ][:evaluation_count]
+    assert inspect_task_overlap(development, evaluation) == {
+        "development_tasks": development_count,
+        "evaluation_tasks": evaluation_count,
+        "overlapping_case_ids": [],
+        "overlapping_families": [],
+        "evaluation_prompt_overlap_ids": [],
+    }
+
+
+@pytest.mark.parametrize("duplicate_side", ["development", "evaluation"])
+def test_task_overlap_rejects_ambiguous_within_cohort_ids(duplicate_side):
+    task = Task("case", "unit", "A synthetic question.", IntegerChecker(42))
+    development = [task] * (2 if duplicate_side == "development" else 1)
+    evaluation = [task] * (2 if duplicate_side == "evaluation" else 1)
+    with pytest.raises(
+        ValueError, match=f"{duplicate_side.capitalize()} tasks.*unique"
+    ):
+        inspect_task_overlap(development, evaluation)
 
 
 @pytest.mark.parametrize("elapsed", [-1, float("nan"), float("inf")])

@@ -115,6 +115,13 @@ limits. Duplicate task IDs and unknown checker kinds fail explicitly. Task and
 result files can contain reference answers or private text; keep them in ignored
 `.runs/` storage rather than git. Loading specifications is not dataset acceptance.
 
+For offline cohort preparation, `inspect_task_overlap(development, evaluation)`
+reports exact declared ID/family overlaps and evaluation IDs reusing development
+prompt text, even if the answer format changed. It never invokes checkers or
+selects/accepts a split. Duplicate IDs within a cohort fail; empty cohorts retain
+explicit zero counts rather than a pass decision. These exact-text/label checks
+do not detect semantic aliases or establish absence of pretraining exposure.
+
 Optionally recheck recorded final-answer outcomes against those specifications:
 
 ```bash

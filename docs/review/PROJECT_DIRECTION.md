@@ -3166,3 +3166,32 @@ Next: inspect task-specification cohort overlaps as an offline held-out-family
 prerequisite, without accepting a split or collecting task/model data.
 
 [strict-timeout-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44050852632
+
+### 2026-11-17: inspect declared development/evaluation task overlaps offline
+
+`inspect_task_overlap(development, evaluation)` now inventories supplied task
+specifications without executing checkers or creating labels. It independently
+reports sorted exact case-ID/family intersections and evaluation IDs whose
+prompt text repeats development text, even when answer format, ID or family
+changed. This prepares the existing held-out-by-family requirement without
+choosing/accepting a split or adopting a new benchmark policy. Comparisons are
+exact declared strings, not semantic aliases or pretraining-exposure evidence.
+
+Within-cohort IDs must be unique, matching the existing specification contract;
+cross-cohort repetition is reported, not silently rejected or removed. Empty
+cohorts retain explicit task counts and produce no pass/qualification decision.
+Default report shapes and persisted schemas are unchanged. Public exports,
+README and Current Work describe the observation-only utility.
+
+**Finite scope and results:** seven synthetic metadata fixtures/eight API
+queries, at most four tasks/query and 256-byte fixture prompts, no tensor/model/
+guest execution. Focus **7 passed** (0.12 s); coupled evaluation/record
+**206 passed** (7.60 s); root **521 passed** (19.53 s). One focus, coupled/root
+invocation and formatter application spent; no failures/aborts, fourteen
+existing Torch warnings, no skips. Root Ruff, three-file format, whitespace,
+both owning-source diagnostics and four signature-compatible call sites passed.
+An initial workspace-symbol query preceded indexing; direct function-location/
+signature checks and refreshed diagnostics confirmed the new API. No new task
+acceptance, datasets, studies, dependencies, downloads, GPU access or artifacts.
+Next: expose this same informational inventory during optional reference-checked
+CLI replay, leaving ordinary output and acceptance boundaries unchanged.

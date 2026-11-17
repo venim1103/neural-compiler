@@ -758,6 +758,34 @@ def _paired_observation_coverage(
     }
 
 
+def inspect_task_overlap(
+    development: Sequence[Task], evaluation: Sequence[Task]
+) -> dict[str, object]:
+    """Report exact declared overlaps, not split acceptance or semantic leakage.
+
+    Checkers are never invoked. Prompt comparisons ignore answer-format changes
+    but otherwise preserve exact text; empty cohorts remain explicitly counted.
+    """
+    development_ids = {task.case_id for task in development}
+    evaluation_ids = {task.case_id for task in evaluation}
+    if len(development_ids) != len(development):
+        raise ValueError("Development tasks must have unique case IDs")
+    if len(evaluation_ids) != len(evaluation):
+        raise ValueError("Evaluation tasks must have unique case IDs")
+    development_prompts = {task.prompt for task in development}
+    return {
+        "development_tasks": len(development),
+        "evaluation_tasks": len(evaluation),
+        "overlapping_case_ids": sorted(development_ids & evaluation_ids),
+        "overlapping_families": sorted(
+            {task.family for task in development} & {task.family for task in evaluation}
+        ),
+        "evaluation_prompt_overlap_ids": sorted(
+            task.case_id for task in evaluation if task.prompt in development_prompts
+        ),
+    }
+
+
 def run_matched(
     tasks: Sequence[Task],
     runners: Mapping[Path, EvaluationHarness],
