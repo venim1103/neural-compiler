@@ -34,6 +34,12 @@ def main(argv: list[str] | None = None) -> int:
         default="gcc",
         help="C compiler inside the jail for --run-c (default: gcc)",
     )
+    parser.add_argument(
+        "--eval-tasks",
+        type=Path,
+        metavar="FILE",
+        help="Check saved final outcomes against exact task specifications (requires --eval-report)",
+    )
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--version", action="store_true", help="Print package version")
     action.add_argument(
@@ -67,15 +73,30 @@ def main(argv: list[str] | None = None) -> int:
         help="Replay a matched report from saved case evidence without model or program execution",
     )
     args = parser.parse_args(argv)
+    if args.eval_tasks is not None and args.eval_report is None:
+        parser.error("--eval-tasks requires --eval-report")
     if args.version:
         print(json.dumps({"name": "neural-compiler", "version": __version__}))
         return 0
     if args.eval_report:
-        from neural_compiler.eval import load_case_results, matched_report
+        from neural_compiler.eval import (
+            load_case_results,
+            load_tasks,
+            matched_report,
+            validate_references,
+        )
 
         with args.eval_report.open(encoding="utf-8") as source:
             results = load_case_results(source)
-        print(json.dumps(matched_report(results), allow_nan=False))
+        reference_checks: dict[str, int] | None = None
+        if args.eval_tasks is not None:
+            with args.eval_tasks.open(encoding="utf-8") as source:
+                tasks = load_tasks(source)
+            reference_checks = validate_references(tasks, results)
+        report = matched_report(results)
+        if reference_checks is not None:
+            report["reference_validation"] = reference_checks
+        print(json.dumps(report, allow_nan=False))
         return 0
     if args.check_imports:
         from neural_compiler.bridge import evaluate_import_policy

@@ -115,6 +115,19 @@ limits. Duplicate task IDs and unknown checker kinds fail explicitly. Task and
 result files can contain reference answers or private text; keep them in ignored
 `.runs/` storage rather than git. Loading specifications is not dataset acceptance.
 
+Optionally recheck recorded final-answer outcomes against those specifications:
+
+```bash
+neural-compiler --eval-report .runs/case_results.json --eval-tasks .runs/tasks.json
+```
+
+This rejects mismatched task IDs, families, observed task text or final-answer
+classifications. It never rewrites timeout, protocol, budget or isolation failures
+as correct answers. The added `reference_validation` counts distinguish checked
+answers/text from nonfinal failures and unknown text observations. This verifies
+agreement with the supplied references, not their authenticity, dataset quality,
+full model prompts, matched hardware or production qualification.
+
 [offline-harness]: ./src/neural_compiler/eval/harness.py
 [evidence-records]: ./src/neural_compiler/eval/records.py
 

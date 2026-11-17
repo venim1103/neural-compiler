@@ -80,6 +80,14 @@ class CheckResult:
             raise ValueError("Checker correctness and validity must be booleans")
 
 
+def _answer_outcome(checked: CheckResult) -> Outcome:
+    return (
+        "invalid_answer"
+        if not checked.valid
+        else ("correct" if checked.correct else "wrong_answer")
+    )
+
+
 class Checker(Protocol):
     def __call__(self, answer: str) -> CheckResult: ...
 
@@ -205,6 +213,16 @@ class Task:
             raise ValueError("Task identity, family and prompt must not be empty")
         if not self.answer_format.strip():
             raise ValueError("Task answer_format must not be empty")
+
+
+def _task_text_digest(task: Task) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            (task.prompt, task.answer_format),
+            ensure_ascii=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+    ).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -390,13 +408,7 @@ class EvaluationHarness:
         answer = ""
         outcome: Outcome = "invalid_answer"
         diagnostic = ""
-        task_text_sha256 = hashlib.sha256(
-            json.dumps(
-                (task.prompt, task.answer_format),
-                ensure_ascii=True,
-                separators=(",", ":"),
-            ).encode("ascii")
-        ).hexdigest()
+        task_text_sha256 = _task_text_digest(task)
         call: ToolCall | None = None
         observed_tokens: list[int] = []
         turn_limit = 0
@@ -505,11 +517,7 @@ class EvaluationHarness:
                         decoded.token_ids, skip_special_tokens=True
                     )
                     checked = task.checker(answer)
-                    outcome = (
-                        "invalid_answer"
-                        if not checked.valid
-                        else ("correct" if checked.correct else "wrong_answer")
-                    )
+                    outcome = _answer_outcome(checked)
                     diagnostic = checked.diagnostic
                     break
                 if len(calls) >= self.budgets.calls:
@@ -754,6 +762,56 @@ def run_matched(
     if any(runners[path].budgets != budget for path in paths):
         raise ValueError("Matched paths must use identical resource budgets")
     return tuple(runners[path].run(task, path) for task in tasks for path in paths)
+
+
+def validate_references(
+    tasks: Sequence[Task], results: Sequence[CaseResult]
+) -> dict[str, int]:
+    """Check saved final outcomes against built-in references, without rewriting.
+
+    Pairing is validated by report consumers. Nonfinal failures retain their
+    outcomes; absent task-text observations remain unmeasured, not imputed.
+    """
+    if not tasks or not results:
+        raise ValueError("Reference validation requires tasks and case results")
+    by_id = {task.case_id: task for task in tasks}
+    if len(by_id) != len(tasks):
+        raise ValueError("Reference tasks must have unique case IDs")
+    if {result.case_id for result in results} != by_id.keys():
+        raise ValueError("Task/result IDs differ during reference validation")
+    if any(
+        type(task.checker)
+        not in (IntegerChecker, RationalChecker, IntegerSequenceChecker)
+        for task in tasks
+    ):
+        raise ValueError("Reference validation requires built-in exact checkers")
+    digests = {case_id: _task_text_digest(task) for case_id, task in by_id.items()}
+    answer_checks = text_checks = 0
+    for result in results:
+        task = by_id[result.case_id]
+        if result.family != task.family:
+            raise ValueError(f"Family differs from specification for {result.case_id}")
+        if result.task_text_sha256 is not None:
+            if result.task_text_sha256 != digests[result.case_id]:
+                raise ValueError(
+                    f"Task text differs from specification for {result.case_id}"
+                )
+            text_checks += 1
+        if result.outcome in ("correct", "wrong_answer", "invalid_answer"):
+            expected = _answer_outcome(task.checker(result.answer))
+            if result.outcome != expected:
+                raise ValueError(
+                    f"Recorded outcome differs from reference for "
+                    f"{result.case_id}/{result.path}: {result.outcome} != {expected}"
+                )
+            answer_checks += 1
+    return {
+        "tasks": len(tasks),
+        "records": len(results),
+        "answer_checks": answer_checks,
+        "task_text_checks": text_checks,
+        "nonfinal_records": len(results) - answer_checks,
+    }
 
 
 def _paired_comparison(

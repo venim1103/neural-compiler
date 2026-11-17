@@ -23,7 +23,9 @@ from neural_compiler.eval import (
     load_case_results,
     load_tasks,
     matched_report,
+    validate_references,
 )
+from neural_compiler.eval.harness import _task_text_digest
 
 
 def case_rows() -> tuple[CaseResult, ...]:
@@ -248,3 +250,155 @@ def test_duplicate_tasks_are_rejected_before_writing():
     with pytest.raises(ValueError, match="unique case IDs"):
         dump_tasks([task, task], stream)
     assert stream.getvalue() == ""
+
+
+@pytest.mark.parametrize(
+    "checker,answer,wrong",
+    [
+        (IntegerChecker(42), "42", "0"),
+        (RationalChecker(Fraction(3, 14)), "3/14", "1/2"),
+        (IntegerSequenceChecker((-2, 0, 9)), "-2, 0, 9", "1, 2, 3"),
+    ],
+)
+def test_reference_validation_checks_all_final_categories(checker, answer, wrong):
+    task = Task("case", "synthetic", "A unit fixture: \u00e9.", checker)
+    row = CaseResult(
+        "case",
+        "synthetic",
+        "no_tool",
+        "correct",
+        "",
+        "Final answer: " + answer,
+        1,
+        3,
+        0,
+        (),
+        task_text_sha256=_task_text_digest(task),
+    )
+    rows = [
+        row,
+        replace(
+            row,
+            path="python_tool",
+            outcome="wrong_answer",
+            answer="Final answer: " + wrong,
+            task_text_sha256=None,
+        ),
+        replace(
+            row,
+            path="current_best",
+            outcome="invalid_answer",
+            answer="No final line",
+            task_text_sha256=None,
+        ),
+    ]
+    assert validate_references([task], rows) == {
+        "tasks": 1,
+        "records": 3,
+        "answer_checks": 3,
+        "task_text_checks": 1,
+        "nonfinal_records": 0,
+    }
+
+
+@pytest.mark.parametrize(
+    "fault,error",
+    [
+        ("correct_label", "Recorded outcome differs from reference"),
+        ("wrong_label", "Recorded outcome differs from reference"),
+        ("invalid_label", "Recorded outcome differs from reference"),
+        ("family", "Family differs from specification"),
+        ("text", "Task text differs from specification"),
+        ("identity", "Task/result IDs differ"),
+        ("duplicates", "unique case IDs"),
+    ],
+)
+def test_reference_validation_rejects_inconsistent_evidence(fault, error):
+    task = Task("case", "synthetic", "A unit fixture.", IntegerChecker(42))
+    tasks = [task]
+    row = CaseResult(
+        "case", "synthetic", "no_tool", "correct", "", "Final answer: 42", 1, 3, 0, ()
+    )
+    if fault == "correct_label":
+        row = replace(row, answer="Final answer: 0")
+    elif fault == "wrong_label":
+        row = replace(row, outcome="wrong_answer")
+    elif fault == "invalid_label":
+        row = replace(row, outcome="invalid_answer")
+    elif fault == "family":
+        row = replace(row, family="other")
+    elif fault == "text":
+        row = replace(row, task_text_sha256="b" * 64)
+    elif fault == "identity":
+        row = replace(row, case_id="other")
+    else:
+        tasks.append(task)
+    with pytest.raises(ValueError, match=error):
+        validate_references(tasks, [row])
+
+
+def test_reference_validation_retains_nonfinal_failures():
+    outcomes = ("protocol_error", "budget_exhausted", "timeout", "sandbox_error")
+    tasks = [
+        Task(str(index), "synthetic", "A unit fixture.", IntegerChecker(42))
+        for index in range(len(outcomes))
+    ]
+    rows = [
+        CaseResult(
+            task.case_id,
+            task.family,
+            "no_tool",
+            outcome,
+            "",
+            "Final answer: 0",
+            1,
+            3,
+            0,
+            (),
+        )
+        for task, outcome in zip(tasks, outcomes, strict=True)
+    ]
+    assert validate_references(tasks, rows) == {
+        "tasks": 4,
+        "records": 4,
+        "answer_checks": 0,
+        "task_text_checks": 0,
+        "nonfinal_records": 4,
+    }
+
+
+def test_reference_validation_never_calls_an_opaque_checker():
+    task = Task(
+        "case",
+        "synthetic",
+        "A unit fixture.",
+        lambda answer: pytest.fail("Opaque checker executed"),
+    )
+    row = CaseResult(
+        "case", "synthetic", "no_tool", "correct", "", "Final answer: 42", 1, 3, 0, ()
+    )
+    with pytest.raises(ValueError, match="built-in exact checkers"):
+        validate_references([task], [row])
+
+
+def test_reference_validation_uses_each_cases_own_reference():
+    tasks = [
+        Task(str(value), "synthetic", f"Compute {value}.", IntegerChecker(value))
+        for value in (41, 42)
+    ]
+    rows = [
+        CaseResult(
+            task.case_id,
+            task.family,
+            "no_tool",
+            "correct",
+            "",
+            "Final answer: " + task.case_id,
+            1,
+            3,
+            0,
+            (),
+        )
+        for task in reversed(tasks)
+    ]
+    assert validate_references(tasks, rows)["answer_checks"] == 2

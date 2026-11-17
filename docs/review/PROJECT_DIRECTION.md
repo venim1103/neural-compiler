@@ -2888,3 +2888,43 @@ test diagnostics contained only an unused checker-trap parameter hint. One focus
 coupled and root invocation and one formatter application spent, no failures or
 aborts. Temporary streams/files remained fixture-owned; no accepted data, model
 runs, downloads, dependencies, services or host changes.
+
+### 2026-11-17: recheck saved outcomes against exact references
+
+`validate_references(tasks, results)` now checks unique/exact task-ID coverage,
+family identity, observed task-text digests and agreement of final-answer
+classifications with built-in exact checkers. It rejects opaque checker types
+without calling them. The harness and validator share the unchanged canonical
+task-text hash and validity-first outcome rules. Reference checks never rewrite
+records, apply an accuracy threshold or require identical references across
+different tasks. Pairing remains the report consumer's responsibility.
+
+`--eval-tasks FILE` optionally enables these checks with `--eval-report FILE`;
+using it without a report is an explicit argument error before file access.
+Default replay output stays unchanged. Opted-in reports add
+`reference_validation` counts for tasks, records, checked answers/text and
+unchecked nonfinal records. Protocol, budget, timeout and sandbox failures remain
+failures, even if their text resembles a final answer. Absent text observations
+stay unknown. Checks establish agreement with supplied references, not source
+authenticity, label quality, complete model prompts, matched hardware or accepted
+study data.
+
+**Finite scope and results:** sixteen new synthetic fixtures, at most four
+records/tasks each; no model/guest calls. All final categories across three
+checker types, differing per-case references, inconsistent labels/identities/
+text, opaque-checker non-execution, nonfinal failures and CLI gating passed.
+Full record/CLI focus, including old controls: **53 passed** (0.13 s); coupled
+record/evaluation/CLI: **185 passed** (8.27 s); root: **452 passed** (21.85 s).
+Root Ruff, five-file format, whitespace and README local-link targets passed.
+Three owning-source diagnostics were empty; six validator and fourteen CLI
+callers were signature-compatible. Test diagnostics were only unused trap
+parameters. Fourteen existing Torch warnings, no skips; existing jailed/native
+controls ran. One focus, coupled/root invocation and formatter application
+spent, no code failures or aborts. Fixture streams/files were temporary.
+
+A configured GitHub MCP lookup queried a different host and returned 404.
+One supported public-REST alternative confirmed [task-specification CI][task-spec-ci]
+(`3b3da30`), `a062c59` and `67c3e17` all completed successfully. No credentials,
+security settings, remotes or host privileges were changed.
+
+[task-spec-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44043640416

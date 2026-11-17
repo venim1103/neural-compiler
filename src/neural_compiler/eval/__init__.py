@@ -18,6 +18,7 @@ from .harness import (
     matched_report,
     run_matched,
     summarize,
+    validate_references,
 )
 from .records import dump_case_results, dump_tasks, load_case_results, load_tasks
 from .serving import (
@@ -59,4 +60,5 @@ __all__ = [
     "run_serving_comparison",
     "summarize",
     "summarize_serving",
+    "validate_references",
 ]

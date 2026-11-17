@@ -63,8 +63,9 @@ blocked:
 
 1. Offline held-out-family evaluation prerequisites (`src/neural_compiler/eval/`):
    matched `no_tool`/`python_tool`/`current_best` harness, exact integer/rational/sequence
-   checkers, deterministic synthetic family generators, Wilson/bootstrap uncertainty and
-   paired-delta reporting now exist. Held-out dataset acceptance, trajectory collection and
+   checkers, deterministic synthetic family generators, Wilson/bootstrap uncertainty,
+   paired-delta reporting, versioned task/result I/O and optional reference-checked
+   CLI report replay now exist. Held-out dataset acceptance, trajectory collection and
    pretrained-model studies remain separate gated steps.
 2. P0 serving comparison (`src/neural_compiler/bridge/session.py`, `eval/serving.py`):
    exact-boundary CPU snapshots, bounded LRU `CheckpointStore`, and offline `DecodeSession`

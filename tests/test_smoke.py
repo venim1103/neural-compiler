@@ -88,12 +88,20 @@ def test_cli_check_imports_and_native_flags(
     ]
 
 
+@pytest.mark.parametrize("with_tasks", [False, True])
 def test_cli_replays_failed_cases_without_execution(
-    monkeypatch, tmp_path: Path, capsys
+    monkeypatch, tmp_path: Path, capsys, with_tasks
 ):
     from neural_compiler import bridge
     from neural_compiler.bridge.session import LiveSession
-    from neural_compiler.eval import CaseResult, dump_case_results, matched_report
+    from neural_compiler.eval import (
+        CaseResult,
+        IntegerChecker,
+        Task,
+        dump_case_results,
+        dump_tasks,
+        matched_report,
+    )
 
     def forbid_execution(*args, **kwargs):
         raise AssertionError("Evidence replay must not execute a model or program")
@@ -103,18 +111,40 @@ def test_cli_replays_failed_cases_without_execution(
     monkeypatch.setattr(LiveSession, "__init__", forbid_execution)
     rows = tuple(
         CaseResult(
-            "case", "synthetic", path, "wrong_answer", "Mismatch", "0", 2, 3, 0, ()
+            "case",
+            "synthetic",
+            path,
+            "wrong_answer",
+            "Mismatch",
+            "Final answer: 0",
+            2,
+            3,
+            0,
+            (),
         )
         for path in ("no_tool", "python_tool", "current_best")
     )
     evidence = tmp_path / "cases.json"
     with evidence.open("w", encoding="utf-8") as destination:
         dump_case_results(rows, destination)
-    assert main(["--eval-report", str(evidence)]) == 0
+    arguments = ["--eval-report", str(evidence)]
+    expected = json.loads(json.dumps(matched_report(rows), allow_nan=False))
+    if with_tasks:
+        specification = tmp_path / "tasks.json"
+        task = Task("case", "synthetic", "A unit fixture.", IntegerChecker(42))
+        with specification.open("w", encoding="utf-8") as destination:
+            dump_tasks([task], destination)
+        arguments.extend(["--eval-tasks", str(specification)])
+        expected["reference_validation"] = {
+            "tasks": 1,
+            "records": 3,
+            "answer_checks": 3,
+            "task_text_checks": 0,
+            "nonfinal_records": 0,
+        }
+    assert main(arguments) == 0
     captured = capsys.readouterr()
-    assert json.loads(captured.out) == json.loads(
-        json.dumps(matched_report(rows), allow_nan=False)
-    )
+    assert json.loads(captured.out) == expected
     assert captured.err == ""
 
 
@@ -137,4 +167,38 @@ def test_cli_rejects_incomplete_pairing_without_report(tmp_path: Path, capsys):
         dump_case_results([record], destination)
     with pytest.raises(ValueError, match="Missing baseline/current-best result"):
         main(["--eval-report", str(evidence)])
+    assert capsys.readouterr().out == ""
+
+
+def test_cli_eval_tasks_requires_report_before_file_access(tmp_path: Path, capsys):
+    with pytest.raises(SystemExit) as error:
+        main(["--eval-tasks", str(tmp_path / "absent.json")])
+    assert error.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.out == "" and "--eval-tasks requires --eval-report" in captured.err
+
+
+def test_cli_reference_mismatch_never_prints_a_report(tmp_path: Path, capsys):
+    from neural_compiler.eval import (
+        CaseResult,
+        IntegerChecker,
+        Task,
+        dump_case_results,
+        dump_tasks,
+    )
+
+    evidence, specification = tmp_path / "cases.json", tmp_path / "tasks.json"
+    rows = [
+        CaseResult(
+            "case", "synthetic", path, "correct", "", "Final answer: 0", 1, 3, 0, ()
+        )
+        for path in ("no_tool", "python_tool", "current_best")
+    ]
+    with evidence.open("w", encoding="utf-8") as destination:
+        dump_case_results(rows, destination)
+    task = Task("case", "synthetic", "A unit fixture.", IntegerChecker(42))
+    with specification.open("w", encoding="utf-8") as destination:
+        dump_tasks([task], destination)
+    with pytest.raises(ValueError, match="Recorded outcome differs from reference"):
+        main(["--eval-report", str(evidence), "--eval-tasks", str(specification)])
     assert capsys.readouterr().out == ""
