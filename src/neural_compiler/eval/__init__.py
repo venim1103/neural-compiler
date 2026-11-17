@@ -19,7 +19,7 @@ from .harness import (
     run_matched,
     summarize,
 )
-from .records import dump_case_results, load_case_results
+from .records import dump_case_results, dump_tasks, load_case_results, load_tasks
 from .serving import (
     ALL_SERVING_MODES,
     FullReprefillSession,
@@ -51,7 +51,9 @@ __all__ = [
     "generate_family_tasks",
     "generate_matched_suite",
     "dump_case_results",
+    "dump_tasks",
     "load_case_results",
+    "load_tasks",
     "matched_report",
     "run_matched",
     "run_serving_comparison",

@@ -1,14 +1,28 @@
-"""Versioned JSON case evidence; loading never executes tasks or model code."""
+"""Versioned JSON task specifications and case evidence, without code execution."""
 
 from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Sequence
 from dataclasses import asdict
+from fractions import Fraction
 from typing import NoReturn, TextIO
 
-from .harness import ALL_OUTCOMES, Budgets, CallRecord, CaseResult, _PATHS
+from .harness import (
+    ALL_OUTCOMES,
+    Budgets,
+    CallRecord,
+    CaseResult,
+    Checker,
+    IntegerChecker,
+    IntegerSequenceChecker,
+    RationalChecker,
+    Task,
+    _PATHS,
+    _parse_decimal_int,
+)
 
 
 def _unique_object(items: list[tuple[str, object]]) -> dict[str, object]:
@@ -167,14 +181,108 @@ def _case(value: object) -> CaseResult:
     )
 
 
-def dump_case_results(results: Sequence[CaseResult], destination: TextIO) -> None:
-    """Write schema-v1 evidence to a caller-owned text stream, not an accepted dataset."""
-    cases = [asdict(result) for result in results]
-    for case in cases:
-        _case(case)
+def _decimal_reference(value: int) -> str:
+    magnitude = abs(value)
+    if not magnitude:
+        return "0"
+    chunks: list[int] = []
+    while magnitude:
+        magnitude, chunk = divmod(magnitude, 10**9)
+        chunks.append(chunk)
+    return (
+        ("-" if value < 0 else "")
+        + str(chunks[-1])
+        + "".join(f"{chunk:09d}" for chunk in reversed(chunks[:-1]))
+    )
+
+
+def _reference_integer(value: object) -> int:
+    raw = _string(value, "reference")
+    if re.fullmatch(r"0|-?[1-9][0-9]*", raw) is None:
+        raise ValueError("Reference must be a canonical decimal string")
+    return _parse_decimal_int(raw)
+
+
+def _task(value: object) -> Task:
+    data = _object(
+        value,
+        "task",
+        {"case_id", "family", "prompt", "answer_format", "checker"},
+    )
+    reference = _object(data["checker"], "checker", {"kind", "expected"})
+    kind = _string(reference["kind"], "checker kind")
+    expected = reference["expected"]
+    checker: Checker
+    if kind == "integer":
+        checker = IntegerChecker(_reference_integer(expected))
+    elif kind == "rational":
+        fraction = _object(expected, "rational reference", {"numerator", "denominator"})
+        denominator = _reference_integer(fraction["denominator"])
+        if denominator <= 0:
+            raise ValueError("Rational reference denominator must be positive")
+        checker = RationalChecker(
+            Fraction(_reference_integer(fraction["numerator"]), denominator)
+        )
+    elif kind == "integer_sequence":
+        if not isinstance(expected, (list, tuple)):
+            raise ValueError("Sequence reference must be a JSON array")
+        checker = IntegerSequenceChecker(
+            tuple(_reference_integer(item) for item in expected)
+        )
+    else:
+        raise ValueError(f"Unknown task checker kind: {kind!r}")
+    return Task(
+        case_id=_string(data["case_id"], "case_id"),
+        family=_string(data["family"], "family"),
+        prompt=_string(data["prompt"], "prompt"),
+        answer_format=_string(data["answer_format"], "answer_format"),
+        checker=checker,
+    )
+
+
+def _task_data(task: Task) -> dict[str, object]:
+    checker = task.checker
+    reference: dict[str, object]
+    if type(checker) is IntegerChecker:
+        reference = {
+            "kind": "integer",
+            "expected": _decimal_reference(checker.expected),
+        }
+    elif type(checker) is RationalChecker:
+        reference = {
+            "kind": "rational",
+            "expected": {
+                "numerator": _decimal_reference(checker.expected.numerator),
+                "denominator": _decimal_reference(checker.expected.denominator),
+            },
+        }
+    elif type(checker) is IntegerSequenceChecker:
+        reference = {
+            "kind": "integer_sequence",
+            "expected": [_decimal_reference(item) for item in checker.expected],
+        }
+    else:
+        raise ValueError(f"Unsupported task checker: {type(checker).__name__}")
+    return {
+        "case_id": task.case_id,
+        "family": task.family,
+        "prompt": task.prompt,
+        "answer_format": task.answer_format,
+        "checker": reference,
+    }
+
+
+def _tasks(values: Sequence[object]) -> tuple[Task, ...]:
+    tasks = tuple(_task(value) for value in values)
+    if len({task.case_id for task in tasks}) != len(tasks):
+        raise ValueError("Task specifications must have unique case IDs")
+    return tasks
+
+
+def _write_document(key: str, values: Sequence[object], destination: TextIO) -> None:
     document = (
         json.dumps(
-            {"schema_version": 1, "cases": cases},
+            {"schema_version": 1, key: values},
             ensure_ascii=True,
             allow_nan=False,
             sort_keys=True,
@@ -185,17 +293,41 @@ def dump_case_results(results: Sequence[CaseResult], destination: TextIO) -> Non
         raise OSError("Incomplete evaluation evidence write")
 
 
-def load_case_results(source: TextIO) -> tuple[CaseResult, ...]:
-    """Read strict schema-v1 evidence and reconstruct validated nested records."""
+def _read_document(key: str, source: TextIO) -> list[object]:
     value: object = json.load(
         source, object_pairs_hook=_unique_object, parse_constant=_reject_constant
     )
-    data = _object(value, "evidence", {"schema_version", "cases"})
+    data = _object(value, "evidence", {"schema_version", key})
     if type(data["schema_version"]) is not int or data["schema_version"] != 1:
         raise ValueError(
             f"Unsupported evidence schema_version: {data['schema_version']!r}"
         )
-    cases = data["cases"]
-    if not isinstance(cases, list):
-        raise ValueError("cases must be a JSON array")
-    return tuple(_case(case) for case in cases)
+    values = data[key]
+    if not isinstance(values, list):
+        raise ValueError(f"{key} must be a JSON array")
+    return values
+
+
+def dump_case_results(results: Sequence[CaseResult], destination: TextIO) -> None:
+    """Write schema-v1 evidence to a caller-owned text stream, not an accepted dataset."""
+    cases = [asdict(result) for result in results]
+    for case in cases:
+        _case(case)
+    _write_document("cases", cases, destination)
+
+
+def load_case_results(source: TextIO) -> tuple[CaseResult, ...]:
+    """Read strict schema-v1 evidence and reconstruct validated nested records."""
+    return tuple(_case(case) for case in _read_document("cases", source))
+
+
+def dump_tasks(tasks: Sequence[Task], destination: TextIO) -> None:
+    """Write exact built-in task specifications, never serialized callables."""
+    records = [_task_data(task) for task in tasks]
+    _tasks(records)
+    _write_document("tasks", records, destination)
+
+
+def load_tasks(source: TextIO) -> tuple[Task, ...]:
+    """Read exact task specifications without accepting data or running checkers."""
+    return _tasks(_read_document("tasks", source))

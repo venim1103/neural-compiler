@@ -83,9 +83,12 @@ Save existing result rows from the [matched evaluation harness][offline-harness]
 using the [versioned evidence API][evidence-records]:
 
 ```python
+from pathlib import Path
+
 from neural_compiler.eval import dump_case_results
 
-with open("case_results.json", "w", encoding="utf-8") as destination:
+Path(".runs").mkdir(exist_ok=True)
+with open(".runs/case_results.json", "w", encoding="utf-8") as destination:
     dump_case_results(results, destination)
 ```
 
@@ -93,7 +96,7 @@ Replay the failure-inclusive matched report without loading a model or executing
 saved answers:
 
 ```bash
-neural-compiler --eval-report case_results.json
+neural-compiler --eval-report .runs/case_results.json
 ```
 
 The command prints strict JSON, requires all three paths for every case, and
@@ -102,6 +105,15 @@ records. A successful exit means report generation succeeded, not that an
 accuracy threshold or dataset-acceptance gate passed. Missing legacy provenance
 remains unknown. Evidence streams are caller-owned, not authenticated or atomic
 file transactions; no dataset or model study is accepted by saving a file.
+
+For reusable exact task specifications, the same stream API provides
+`dump_tasks(tasks, destination)` and `load_tasks(source)`. The separate schema-v1
+task document supports only the built-in integer, rational and integer-sequence
+checkers, never serialized Python callables. References use canonical decimal
+strings and preserve arbitrary precision without changing interpreter digit
+limits. Duplicate task IDs and unknown checker kinds fail explicitly. Task and
+result files can contain reference answers or private text; keep them in ignored
+`.runs/` storage rather than git. Loading specifications is not dataset acceptance.
 
 [offline-harness]: ./src/neural_compiler/eval/harness.py
 [evidence-records]: ./src/neural_compiler/eval/records.py

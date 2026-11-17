@@ -2856,3 +2856,35 @@ two-file format and whitespace checks passed; owning-source diagnostics empty.
 One failing-first, repaired focus, coupled and root invocation spent; no aborts,
 formatter changes or retained artifacts. Existing trusted jailed/native controls
 ran in the root gate; the new fixtures used no model or guest execution.
+
+### 2026-11-17: persist exact task specifications without executable checkers
+
+The evidence module now also exports `dump_tasks(tasks, stream)` and
+`load_tasks(stream)`. Its separate schema-v1 `tasks` document retains task
+identity, family, exact prompt, answer-format instruction and a closed checker
+specification (`integer`, `rational` or `integer_sequence`). Only exact built-in
+checker types can be saved; opaque callables/subclasses are rejected, not
+pickled, imported or evaluated. Loading constructs known checker objects without
+calling them. Duplicate IDs fail before writing and on reading.
+
+Reference integers are canonical signed decimal strings; rational references
+have numerator/positive-denominator strings, sequence references are arrays of
+integer strings. Chunked conversion reuses the checker's existing exact parser
+and never changes interpreter-global digit limits. Shared strict envelope/stream
+helpers preserve the existing schema-v1 `cases` document and short-write errors.
+The README documents these APIs and ignored `.runs/` storage for private task,
+reference and result files. This is specification I/O, not accepted labels,
+cohort/split adoption, trajectory collection or authenticated reference evidence.
+
+**Finite scope and results:** twelve new synthetic fixtures, at most two tasks
+each and 5,001 reference digits. Integer, rational and sequence round-trips,
+opaque-checker non-execution, duplicate IDs and invalid specifications passed.
+Full record focus, including unchanged case-schema controls: **30 passed**
+(0.09 s); coupled record/evaluation: **162 passed** (10.88 s); root:
+**436 passed** (21.98 s), fourteen existing Torch warnings, no skips. Root Ruff,
+three-file format, whitespace and README local-link targets passed. Both owning
+sources had empty diagnostics; five new API callers were signature-compatible;
+test diagnostics contained only an unused checker-trap parameter hint. One focus,
+coupled and root invocation and one formatter application spent, no failures or
+aborts. Temporary streams/files remained fixture-owned; no accepted data, model
+runs, downloads, dependencies, services or host changes.
