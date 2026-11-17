@@ -435,6 +435,39 @@ def test_unversioned_model_remains_usable_without_checkpoints(hybrid_model):
     assert_reference(session)
 
 
+@pytest.mark.parametrize("changed", ["configuration", "eos"])
+@pytest.mark.parametrize("operation", ["decode", "inject"])
+def test_unversioned_live_configuration_changes_preserve_pending_boundary(
+    hybrid_model, monkeypatch, changed, operation
+):
+    with torch.inference_mode():
+        model = type(hybrid_model)(copy.deepcopy(hybrid_model.config))
+    model.eval()
+    session = LiveSession(model, [1, 2, 3])
+    assert session._prefix_tensor_versions is None
+    monkeypatch.setattr(session, "_next_token", lambda: 4)
+    session.decode_until(1, lambda _: True)
+    tokens = session.tokens
+    logits = session.logits.clone()
+    if changed == "configuration":
+        model.config.rope_parameters["rope_theta"] = 20000
+    else:
+        model.generation_config.eos_token_id = [4, 5]
+    monkeypatch.setattr(
+        model,
+        "forward",
+        lambda *args, **kwargs: pytest.fail("Changed configuration called the model"),
+    )
+    with pytest.raises(ValueError, match="configuration"):
+        if operation == "decode":
+            session.decode_until(1, lambda _: True)
+        else:
+            session.inject([5, 6])
+    assert session.tokens == tokens and session._pending == 4
+    assert session._cache_usable and session.cache.get_seq_length() == 3
+    torch.testing.assert_close(session.logits, logits, atol=0, rtol=0)
+
+
 def test_checkpoint_rejects_changed_configuration_and_wrong_model(hybrid_model):
     session = LiveSession(hybrid_model, [1, 2, 3])
     checkpoint = session.checkpoint()

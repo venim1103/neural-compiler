@@ -3332,3 +3332,51 @@ and serving prerequisites while retaining the precise delegated-host gate.
 [cgroup-probe-tests]: ../../tests/test_cgroups.py
 [cgroup-probe-kernel-68]: https://github.com/torvalds/linux/blob/v6.8/kernel/cgroup/pids.c
 [cgroup-probe-kernel-618]: https://github.com/torvalds/linux/blob/v6.18/kernel/cgroup/pids.c
+
+### 2026-11-17: guard live configuration without tensor version counters
+
+The [cgroup-probe preparation passed hosted CI][versionless-prefix-prior-ci].
+The next source sweep found a separate P0 cache correctness gap: live models
+whose tensors lack version counters intentionally remain usable without CPU
+checkpoints, but their prefix configuration was not recorded. The shared
+prefix guard also gated configuration comparison on tensor-version tracking.
+Changed RoPE/EOS settings could therefore reach a model forward against a
+stale live hybrid prefix or silently rebuild a released full-reprefill turn.
+
+The [live session][versionless-prefix-session] now records serialized model/EOS
+configuration after every initial prefill, independently of optional weight
+version tracking. The shared guard compares each available observation
+independently. This also protects released full-reprefill adapters, which
+already retain and validate the captured configuration. There are no public
+signature, execution-budget, numerical-tolerance or checkpoint-eligibility
+changes. Unversioned live continuation remains supported; version-tracked CPU
+weights are still required for checkpoints. This does **not** make mutations
+of unversioned tensor contents detectable.
+
+**Finite scope and results:** four new tiny CPU inference-weight cases
+(RoPE/EOS changes crossed with decode/inject) retain a forced pending token;
+two released full-reprefill cases cross EOS changes with decode/inject. Per
+focused invocation, the new cases use six three-ID prefills and six forced
+samples, with subsequent model forwards trapped. The existing usable
+unversioned/no-checkpoint control remains included. Initial focus
+**6 failed, 1 passed** (1.15 s), all failures reaching the trapped forward/
+rebuild seam; repaired focus **7 passed** (0.21 s). Pending/history IDs,
+cached length, usability, exact logits and released-adapter prefill counters
+remain unchanged after rejection. Coupled checkpoint/serving regressions
+**151 passed** (10.83 s), including the multi-call/full-reference controls;
+root **540 passed, 2 skipped** (24.63 s), fourteen existing Torch warnings.
+One failing focus, one repaired focus, one coupled/root invocation spent,
+no aborts or relaxed limits. Root Ruff, three-file format, whitespace and
+owning-source diagnostics passed; Pylance identified the five shared-guard
+call sites before editing.
+
+The two root skips remain the explicitly unconfigured writable-cgroup
+qualification checks, not newly passing kernel evidence. These CPU fixtures
+do not establish CUDA/FLA behavior, pretrained accuracy, serving latency/fit,
+or production checkpoint support. No new dependencies, model/data downloads,
+accepted task cohorts, GPU jobs, host changes or retained artifacts.
+Next continue the remaining evaluation/serving prerequisite sweep rather than
+treating this source checkpoint as project completion.
+
+[versionless-prefix-prior-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44059553073
+[versionless-prefix-session]: ../../src/neural_compiler/bridge/session.py

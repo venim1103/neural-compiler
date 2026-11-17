@@ -93,8 +93,8 @@ def _validate_prefix_model(
     versions: tuple[tuple[int, int, int], ...] | None,
     config: str | None,
 ) -> None:
-    if versions is not None and (
-        _tensor_versions(model) != versions or _model_configuration(model) != config
+    if (versions is not None and _tensor_versions(model) != versions) or (
+        config is not None and _model_configuration(model) != config
     ):
         raise ValueError("Model weights or configuration changed after initial prefill")
 
@@ -134,6 +134,7 @@ class LiveSession:
     or prefill a new session rather than reusing potentially mutated state.
     Invalid token budgets and non-callable stop callbacks are rejected before
     pending tokens are forwarded.
+    Configuration changes are rejected even without tensor version counters.
     """
 
     def __init__(self, model: PreTrainedModel, prompt_ids: Sequence[int]):
@@ -154,13 +155,13 @@ class LiveSession:
             set(eos if isinstance(eos, list) else [eos]) if eos is not None else set()
         )
         self._forward(self._tokens)
+        self._prefix_config = _model_configuration(model)
         # Other live-model paths remain usable, but cannot supply CPU checkpoints.
         tensors = [*model.parameters(), *model.buffers()]
         if model.device.type == "cpu" and all(
             not tensor.is_inference() for tensor in tensors
         ):
             self._prefix_tensor_versions = _tensor_versions(model)
-            self._prefix_config = _model_configuration(model)
 
     @property
     def tokens(self) -> tuple[int, ...]:

@@ -1008,6 +1008,36 @@ def test_full_reprefill_retains_pending_token_after_callback_abort(hybrid_model)
     torch.testing.assert_close(reprefill.logits, live.logits, atol=1e-6, rtol=1e-5)
 
 
+@pytest.mark.parametrize("operation", ["decode", "inject"])
+def test_unversioned_reprefill_configuration_changes_preserve_released_boundary(
+    hybrid_model, monkeypatch, operation
+):
+    with torch.inference_mode():
+        model = type(hybrid_model)(deepcopy(hybrid_model.config))
+    model.eval()
+    adapter = FullReprefillSession(model, [1, 2, 3], lambda _: 4)
+    assert adapter._prefix_tensor_versions is None
+    adapter.decode_until(1, lambda _: True)
+    tokens = adapter.tokens
+    logits = adapter.logits.clone()
+    prefills = adapter.prefill_tokens
+    assert adapter._session is None
+    model.generation_config.eos_token_id = 4
+    monkeypatch.setattr(
+        model,
+        "forward",
+        lambda *args, **kwargs: pytest.fail("Changed configuration rebuilt the prefix"),
+    )
+    with pytest.raises(ValueError, match="configuration"):
+        if operation == "decode":
+            adapter.decode_until(1, lambda _: True)
+        else:
+            adapter.inject([5, 6])
+    assert adapter.tokens == tokens and adapter._session is None
+    assert adapter.prefill_tokens == prefills
+    torch.testing.assert_close(adapter.logits, logits, atol=0, rtol=0)
+
+
 @pytest.mark.parametrize("changed", ["weights", "configuration"])
 def test_full_reprefill_rejects_model_drift_across_turns(hybrid_model, changed):
     adapter = FullReprefillSession(hybrid_model, [1, 2, 3], lambda _session: 4)
