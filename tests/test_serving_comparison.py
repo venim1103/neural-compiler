@@ -21,6 +21,7 @@ from neural_compiler.eval import (
     Task,
     run_serving_comparison,
     summarize_serving,
+    validate_serving_logits,
 )
 from neural_compiler.eval.harness import CaseResult
 from neural_compiler.bridge.session import CheckpointStore, LiveSession
@@ -325,6 +326,10 @@ def test_serving_modes_match_logits_and_reduce_prefill_tokens(tokenizer, hybrid_
     torch.testing.assert_close(
         reprefill.final_logits, live.final_logits, atol=1e-6, rtol=1e-5
     )
+    checked = validate_serving_logits(results)
+    assert checked["full_reprefill_comparisons"] == 2
+    assert checked["cache_live_exact_pairs"] == 1
+    assert sum(row.case.generated_tokens for row in results) <= 2048
 
     # Prefix-cached resubmission matches live incremental prefill token count and
     # avoids re-prefilling the growing conversation history across tool turns.
@@ -599,6 +604,87 @@ def test_serving_prompt_matching_preserves_unknowns_and_per_case_lengths():
     cached = report["by_mode"]["prefix_cached_resubmission"]
     assert live["prompt_tokens"] == 33 and live["prompt_token_samples"] == 2
     assert cached["prompt_tokens"] == 12 and cached["prompt_token_samples"] == 1
+
+
+def _logit_observations():
+    case = CaseResult("case", "unit", "python_tool", "correct", "", "42", 1, 3, 0, ())
+    return [
+        ServingCaseResult(
+            mode,
+            case,
+            (1, 2, 3),
+            torch.tensor([[0.0, 1.0, -float("inf")]]),
+            3,
+            0,
+            0,
+            0,
+            0,
+            logit_prefix_tokens=2,
+        )
+        for mode in ALL_SERVING_MODES
+    ]
+
+
+@pytest.mark.parametrize("delta", [0.0, 0.5e-6])
+def test_logit_validation_uses_existing_full_reprefill_tolerance(delta):
+    rows = _logit_observations()
+    rows[0].final_logits[0, 0] = delta
+    checked = validate_serving_logits([rows[2], rows[0]])
+    assert checked["cases"] == 1 and checked["full_reprefill_comparisons"] == 1
+    assert checked["cache_live_exact_pairs"] == 0
+
+
+@pytest.mark.parametrize(
+    "fault,error",
+    [
+        ("missing_reference", "full-reprefill reference"),
+        ("missing_logits", "CPU logits required"),
+        ("unknown_prefix", "prefix"),
+        ("history", "Token history differs"),
+        ("prefix", "prefix"),
+        ("shape", "shape/dtype"),
+        ("dtype", "shape/dtype"),
+        ("nan", "finite maximum"),
+        ("positive_infinity", "finite maximum"),
+        ("all_masked", "finite maximum"),
+        ("beyond_tolerance", "Logits differ from full reprefill"),
+        ("cached_drift", "Live/prefix logits differ"),
+        ("empty", "CPU logits required"),
+        ("non_cpu", "CPU logits required"),
+    ],
+)
+def test_logit_validation_rejects_unqualified_observations(fault, error):
+    rows = _logit_observations()
+    if fault == "missing_reference":
+        rows.pop()
+    elif fault == "missing_logits":
+        rows[0] = replace(rows[0], final_logits=None)
+    elif fault == "unknown_prefix":
+        rows[0] = replace(rows[0], logit_prefix_tokens=None)
+    elif fault == "history":
+        rows[0] = replace(rows[0], final_tokens=(1, 2, 4))
+    elif fault == "prefix":
+        rows[0] = replace(rows[0], logit_prefix_tokens=3)
+    elif fault == "shape":
+        rows[0] = replace(rows[0], final_logits=torch.ones((1, 4)))
+    elif fault == "dtype":
+        rows[0] = replace(rows[0], final_logits=rows[0].final_logits.double())
+    elif fault == "nan":
+        rows[0].final_logits[0, 0] = float("nan")
+    elif fault == "positive_infinity":
+        rows[0].final_logits[0, 0] = float("inf")
+    elif fault == "all_masked":
+        rows[0] = replace(rows[0], final_logits=torch.full((1, 3), -float("inf")))
+    elif fault == "beyond_tolerance":
+        rows[0].final_logits[0, 0] = 2e-6
+    elif fault == "cached_drift":
+        rows[1].final_logits[0, 0] = 0.5e-6
+    elif fault == "empty":
+        rows[0] = replace(rows[0], final_logits=torch.empty((1, 0)))
+    else:
+        rows[0] = replace(rows[0], final_logits=torch.empty((1, 3), device="meta"))
+    with pytest.raises(ValueError, match=error):
+        validate_serving_logits(rows)
 
 
 def test_serving_summary_exposes_opposing_paired_family_effects():

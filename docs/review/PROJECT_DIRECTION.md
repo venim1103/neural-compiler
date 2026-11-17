@@ -3020,3 +3020,37 @@ dependencies or host changes. A bounded public-REST check confirmed
 [`861bb78` serving replay CI][serving-replay-ci] and `a0fc479` both succeeded.
 
 [serving-replay-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44046390586
+
+### 2026-11-17: explicitly check recorded same-boundary CPU logits
+
+`validate_serving_logits(results)` now checks supplied observations independently
+of statistical aggregation. Shared pairing/provenance admission preserves the
+default summary shape and diagnostic order without rerunning bootstraps.
+A full-reprefill reference and another mode are required for every case, with
+identical complete token histories, measured equal nonempty logit prefixes, and
+matching detached nonempty single-sequence CPU floating dtype/shape.
+
+The checks reproduce the existing two-call hybrid fixture contract, not a new
+or relaxed numerical policy: live/prefix values agree exactly when both modes
+exist; comparisons against full reprefill use `atol=1e-6`, `rtol=1e-5`.
+Tolerance parameters are not exposed. Matching negative-infinity masks remain
+valid; NaN/positive-infinity/all-masked maxima fail. Results explicitly count
+cases, full-reference comparisons and exact live/prefix pairs and retain the
+applied tolerances. No task outcomes are rewritten. Agreement of supplied CPU
+values does not authenticate execution, certify task quality, or qualify GPU
+kernels, production caches or serving integration.
+
+**Finite scope and results:** sixteen new record-only fixtures, at most three
+rows/four logits each, including measured inside/outside absolute-tolerance
+boundaries and live/prefix drift that full-reference tolerance alone permits.
+The existing two-call/three-mode tiny CPU control gained postcapture checks and
+an explicit 2,048-scripted-ID cap; task, model and existing limits are unchanged.
+Focused check: **17 passed** (1.09 s); coupled serving/record:
+**142 passed** (4.74 s); root: **488 passed** (19.92 s). Root Ruff, three-file
+format, whitespace and README local-link target passed. Both owning sources
+had empty diagnostics; three checker and fifteen summary callers were signature-
+compatible. Fourteen existing Torch warnings, no skips; existing jailed/native
+controls ran. One focus, coupled/root invocation and formatter application spent;
+no failures/aborts, new pretrained studies, guest workloads, GPU access,
+downloads, dependencies or retained artifacts. Next action: gate CLI numerical
+checks behind an explicit serving-report-only flag.

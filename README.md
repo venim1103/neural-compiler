@@ -150,8 +150,19 @@ explicitly. A single recorded mode is supported but has no paired mode deltas.
 Report replay aggregates observations; it does not itself verify numerical
 equivalence of logits.
 
+For an explicit [recorded-logit check][serving-observations],
+`validate_serving_logits(results)` requires full-reprefill reference observations
+plus another mode, identical token histories and measured logit boundaries.
+It checks exact live/prefix agreement when both are present and full-reprefill
+agreement at the existing CPU fixture tolerances (`atol=1e-6`, `rtol=1e-5`).
+Matching negative-infinity masks are allowed; NaNs, positive-infinity maxima and
+all-masked logits fail. Returned counts identify which comparisons ran. This is
+agreement of supplied CPU values, not task accuracy, authenticated execution,
+GPU/kernel qualification or a production cache guarantee.
+
 [offline-harness]: ./src/neural_compiler/eval/harness.py
 [evidence-records]: ./src/neural_compiler/eval/records.py
+[serving-observations]: ./src/neural_compiler/eval/serving.py
 
 Reproduce the representation, bridge latency, and live-cache prefill benchmarks (see [`docs/review/PROJECT_DIRECTION.md`](./docs/review/PROJECT_DIRECTION.md#appendix--reproducing-the-experiments)):
 

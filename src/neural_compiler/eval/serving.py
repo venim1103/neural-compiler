@@ -26,6 +26,7 @@ from neural_compiler.bridge.session import (
     _validate_decode_budget,
     _validate_prefix_model,
     _validate_store_limits,
+    _validate_token_ids,
 )
 
 from .harness import (
@@ -404,15 +405,15 @@ def run_serving_comparison(
     return tuple(results)
 
 
-def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]:
-    """Failure-inclusive aggregate/family metrics and matched paired deltas.
+@dataclass(frozen=True)
+class _ServingPairs:
+    rows: dict[str, dict[ServingMode, ServingCaseResult]]
+    cases: dict[str, dict[str, CaseResult]]
+    modes: tuple[ServingMode, ...]
+    coverage: dict[str, int]
 
-    Comparisons use the first present mode in canonical order as baseline:
-    live pause/resume when present, otherwise prefix-cached resubmission.
-    A single-mode summary has no paired deltas.
-    Observed task-text/budget/prompt-count mismatches are rejected within a case;
-    missing observations remain unknown.
-    """
+
+def _pair_serving_results(results: Sequence[ServingCaseResult]) -> _ServingPairs:
     if not results:
         raise ValueError("Serving summary requires at least one result")
     paired: dict[str, dict[ServingMode, ServingCaseResult]] = {}
@@ -448,6 +449,108 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
             raise ValueError(
                 f"Prompt token counts differ between serving modes for {case_id}"
             )
+    return _ServingPairs(paired, paired_cases, tuple(modes_present), coverage)
+
+
+def _observed_logits(row: ServingCaseResult) -> torch.Tensor:
+    logits = row.final_logits
+    if (
+        not isinstance(logits, torch.Tensor)
+        or logits.device.type != "cpu"
+        or logits.layout != torch.strided
+        or logits.requires_grad
+        or logits.dtype
+        not in (torch.float16, torch.bfloat16, torch.float32, torch.float64)
+        or logits.ndim != 2
+        or logits.shape[0] != 1
+        or not logits.numel()
+    ):
+        raise ValueError(
+            f"Detached nonempty single-sequence CPU logits required for "
+            f"{row.case.case_id}/{row.mode}"
+        )
+    if not torch.isfinite(logits.amax(dim=-1)).all().item():
+        raise ValueError(
+            f"Logits require a finite maximum for {row.case.case_id}/{row.mode}"
+        )
+    return logits
+
+
+def validate_serving_logits(
+    results: Sequence[ServingCaseResult],
+) -> dict[str, object]:
+    """Check recorded same-boundary CPU logits, not live-engine qualification.
+
+    Live/prefix agreement is exact. Full-reprefill comparisons use the existing
+    tiny CPU hybrid fixture tolerance; no task outcomes are rewritten.
+    """
+    comparison = _pair_serving_results(results)
+    reference_mode: ServingMode = "full_reprefill_resubmission"
+    if reference_mode not in comparison.modes or len(comparison.modes) < 2:
+        raise ValueError(
+            "Logit checks require a full-reprefill reference and another mode"
+        )
+    atol, rtol = 1e-6, 1e-5
+    full_comparisons = exact_pairs = 0
+    for case_id, rows in comparison.rows.items():
+        reference = rows[reference_mode]
+        if reference.logit_prefix_tokens is None or reference.logit_prefix_tokens <= 0:
+            raise ValueError(f"Measured nonempty logit prefix required for {case_id}")
+        _validate_token_ids(reference.final_tokens)
+        reference_logits = _observed_logits(reference)
+        observed = {reference_mode: reference_logits}
+        for mode, row in rows.items():
+            if mode == reference_mode:
+                continue
+            _validate_token_ids(row.final_tokens)
+            if row.final_tokens != reference.final_tokens:
+                raise ValueError(
+                    f"Token history differs from full reprefill for {case_id}/{mode}"
+                )
+            if row.logit_prefix_tokens != reference.logit_prefix_tokens:
+                raise ValueError(
+                    f"Logit prefix differs or is unmeasured for {case_id}/{mode}"
+                )
+            logits = _observed_logits(row)
+            if (
+                logits.shape != reference_logits.shape
+                or logits.dtype != reference_logits.dtype
+            ):
+                raise ValueError(f"Logit shape/dtype differs for {case_id}/{mode}")
+            if not torch.allclose(logits, reference_logits, atol=atol, rtol=rtol):
+                raise ValueError(
+                    f"Logits differ from full reprefill for {case_id}/{mode}"
+                )
+            observed[mode] = logits
+            full_comparisons += 1
+        if "live_pause_resume" in observed and "prefix_cached_resubmission" in observed:
+            if not torch.equal(
+                observed["live_pause_resume"], observed["prefix_cached_resubmission"]
+            ):
+                raise ValueError(f"Live/prefix logits differ for {case_id}")
+            exact_pairs += 1
+    return {
+        "cases": len(comparison.rows),
+        "full_reprefill_comparisons": full_comparisons,
+        "cache_live_exact_pairs": exact_pairs,
+        "atol": atol,
+        "rtol": rtol,
+    }
+
+
+def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]:
+    """Failure-inclusive aggregate/family metrics and matched paired deltas.
+
+    Comparisons use the first present mode in canonical order as baseline:
+    live pause/resume when present, otherwise prefix-cached resubmission.
+    A single-mode summary has no paired deltas.
+    Observed task-text/budget/prompt-count mismatches are rejected within a case;
+    missing observations remain unknown.
+    """
+    comparison = _pair_serving_results(results)
+    paired_cases = comparison.cases
+    modes_present = comparison.modes
+    coverage = comparison.coverage
 
     def summarize_mode(subset: Sequence[ServingCaseResult]) -> dict[str, object]:
         base = summarize([r.case for r in subset])

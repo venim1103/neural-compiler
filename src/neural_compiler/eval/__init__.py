@@ -37,6 +37,7 @@ from .serving import (
     ServingMode,
     run_serving_comparison,
     summarize_serving,
+    validate_serving_logits,
 )
 
 __all__ = [
@@ -70,4 +71,5 @@ __all__ = [
     "summarize",
     "summarize_serving",
     "validate_references",
+    "validate_serving_logits",
 ]
