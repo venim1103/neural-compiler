@@ -3764,3 +3764,47 @@ retained probe artifacts; no owned jobs remain running.
 [post-cpu-serving]: ../../src/neural_compiler/eval/serving.py
 [post-cpu-native]: ../../src/neural_compiler/bridge/native.py
 [post-cpu-seccomp]: ../../src/neural_compiler/bridge/seccomp.py
+
+### 2026-11-17: reject incomplete live-forward cache boundaries
+
+An additional owning-code pass found a concrete P0 prerequisite after the
+previous bounded sweep: [live forwards][forward-boundary-source] checked the
+returned cache type and logit shape, but not its sequence length. A model could
+return valid-shaped logits with an empty/stale real `DynamicCache`; initial
+prefill or injection then reported a healthy boundary with missing token state.
+The optional checkpoint-length guard detected this too late for live-only use.
+
+The producer now records the pre-forward cache length plus input-ID count and
+requires the returned cache to match before committing cache/logits or marking
+the session usable. A mismatch explicitly raises `RuntimeError`; an in-place
+partially modified cache remains poisoned, and recovery uses an independent
+previous checkpoint. No recurrent state is sliced, rolled back or replayed.
+The installed `Cache.get_seq_length()` API selects the full-attention layer for
+mixed hybrid caches; the target Qwen text forward already uses that same API
+for position IDs. No public signatures, token budgets, snapshot eligibility/
+byte limits, numerical tolerances or valid model behavior changed.
+
+**Finite scope and results:** [three new regression cases][forward-boundary-tests]
+cover initial empty-cache output and stale-cache output after original/restored
+prefills, reusing the existing partial-recurrent-update/closed-reuse/recovery
+fixture. Each new case uses at most three real tiny CPU model forwards, at most
+five IDs per forward, plus its synthetic malformed-output seam. Initial focus
+**3 failed** (0.16 s), all because the invalid boundary was accepted; repaired
+focus **3 passed** (0.20 s). Coupled checkpoint/serving regressions **157 passed**
+(13.01 s), including exact pending-token and multi-call/full-prefill reference
+controls; root **561 passed, 3 skipped** (33.37 s), fourteen existing Torch
+warnings. One failing focus, one repaired focus and one coupled/root invocation
+spent; no aborts, refunded attempts or relaxed assertions. Root Ruff, two-file
+formatting/whitespace and diagnostics passed (existing unused-parameter hints
+only); the formatter left both files unchanged.
+
+The three skips remain the unconfigured real PID/memory/CPU controller probes,
+not containment passes. Trusted jailed Python/C/assembly and Wasm/Unicorn
+controls actually ran in the root gate. No new dependencies, model/data
+downloads, pretrained/GPU jobs, host changes or retained artifacts. These tiny
+CPU controls do not establish real-engine, CUDA/FLA or production evidence.
+Next inspect final-turn answer decoding against the existing exact-format
+contract; do not treat this repaired slice as project completion.
+
+[forward-boundary-source]: ../../src/neural_compiler/bridge/session.py
+[forward-boundary-tests]: ../../tests/test_checkpoints.py

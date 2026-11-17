@@ -139,6 +139,7 @@ class LiveSession:
     Invalid token budgets and non-callable stop callbacks are rejected before
     pending tokens are forwarded.
     Configuration changes are rejected even without tensor version counters.
+    Returned caches must cover every forwarded token before a boundary is healthy.
     """
 
     def __init__(self, model: PreTrainedModel, prompt_ids: Sequence[int]):
@@ -186,6 +187,9 @@ class LiveSession:
         if not _is_eval_mode(self.model):
             raise ValueError("LiveSession requires a model in eval mode")
         self._check_prefix_model()
+        expected_cache_length = (
+            0 if self.cache is None else self.cache.get_seq_length()
+        ) + len(ids)
         self._cache_usable = False
         output = self.model(
             input_ids=torch.tensor(
@@ -211,6 +215,10 @@ class LiveSession:
         ):
             raise RuntimeError(
                 "Model must return nonempty single-sequence causal logits"
+            )
+        if output.past_key_values.get_seq_length() != expected_cache_length:
+            raise RuntimeError(
+                "Model cache length does not match the forwarded-token boundary"
             )
         self.cache = output.past_key_values
         self.logits = output.logits[:, -1, :]

@@ -6,7 +6,13 @@ import copy
 
 import pytest
 import torch
-from transformers.cache_utils import DynamicLayer, LinearAttentionLayer, StaticCache
+from transformers.cache_utils import (
+    DynamicCache,
+    DynamicLayer,
+    LinearAttentionLayer,
+    StaticCache,
+)
+from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from neural_compiler.bridge.protocol import QwenToolProtocol, ToolCall
 from neural_compiler.bridge.session import (
@@ -186,8 +192,21 @@ def test_invalid_response_ids_preserve_pending_cache_boundary(
     assert_reference(session)
 
 
+def test_initial_cache_must_cover_the_prompt(hybrid_model, monkeypatch):
+    original_forward = hybrid_model.forward
+
+    def incomplete_cache(*args, **kwargs):
+        output = original_forward(*args, **kwargs)
+        output.past_key_values = DynamicCache(config=hybrid_model.config)
+        return output
+
+    monkeypatch.setattr(hybrid_model, "forward", incomplete_cache)
+    with pytest.raises(RuntimeError, match="cache length"):
+        LiveSession(hybrid_model, [1, 2, 3])
+
+
 @pytest.mark.parametrize("restored", [False, True])
-@pytest.mark.parametrize("failure", ["exception", "invalid_output"])
+@pytest.mark.parametrize("failure", ["exception", "invalid_output", "cache_length"])
 def test_failed_forward_cannot_reuse_or_checkpoint_mutated_cache(
     hybrid_model, monkeypatch, restored, failure
 ):
@@ -210,10 +229,18 @@ def test_failed_forward_cannot_reuse_or_checkpoint_mutated_cache(
         state.add_(1)
         if failure == "invalid_output":
             return None
+        if failure == "cache_length":
+            return CausalLMOutputWithPast(
+                logits=session.logits.unsqueeze(1), past_key_values=session.cache
+            )
         raise RuntimeError("Fixture interrupted a recurrent-state update")
 
     monkeypatch.setattr(hybrid_model, "forward", interrupted)
-    expected = "Fixture interrupted" if failure == "exception" else "Model must return"
+    expected = {
+        "exception": "Fixture interrupted",
+        "invalid_output": "Model must return",
+        "cache_length": "cache length",
+    }[failure]
     with pytest.raises(RuntimeError, match=expected):
         session.inject([4])
     assert session.tokens == checkpoint.tokens
