@@ -3380,3 +3380,39 @@ treating this source checkpoint as project completion.
 
 [versionless-prefix-prior-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44059553073
 [versionless-prefix-session]: ../../src/neural_compiler/bridge/session.py
+
+### 2026-11-17: remaining milestone gates after the new source prerequisites
+
+Controller-probe preparation `60a13a2` and versionless-prefix repair `f0978b3`
+were pushed normally; actual remote SHAs matched the local checkpoints.
+The [latest source checkpoint passed hosted CI][post-guard-source-ci].
+Its required local gate remains **540 passed, 2 explicitly unconfigured
+cgroup skips**, root Ruff, scoped formatting and whitespace.
+
+A fresh owning-code/test/resource sweep checked each remaining queue, rather
+than treating those green checkpoints as project completion:
+
+| Queue | Current local evidence | Actual remaining gate |
+|---|---|---|
+| Held-out evaluation | The [matched runner][post-guard-matched] preflights all three labelled paths and equal budgets; exact checkers, synthetic generators, uncertainty, task/result I/O, reference replay and declared overlap inspection are exported and root-tested. Harness execution and saved-reference validation consistently give format validity precedence. | Actual held-out cohort/family/split acceptance and a fresh finite pretrained/trajectory study scope. Synthetic unit fixtures are not accepted evaluation data, and existing experiment ledgers do not renew runs. No additional concrete offline source repair was identified in this sweep. |
+| Serving comparison | The [comparison driver][post-guard-serving] uses the shared caller-owned model with live/exact-prefix/full-reprefill adapters. The latest coupled CPU gate passed 151 cases, including pending-token, versionless-configuration and multi-call reference-logit controls. | SGLang and vLLM are still absent from the selected environment. Real-engine adoption needs a reviewed compatible dependency/runtime scope, then actual hybrid-state/kernel/resource measurements. Existing Transformers-forward fixtures do not qualify a serving engine; no new decoder abstraction was needed to repeat them. |
+| Containment/native tiers | Trusted jailed Python/C/assembly and Wasm/Unicorn controls ran in the root gate. The [new PID/memory probes][cgroup-probe-tests] have passing bounded jailed controls and closed invalid-root admission, but their real controller cases remain unexecuted. | Every visible cgroup-v2 mount was checked: the only mount is `/sys/fs/cgroup`, read-only and nonwritable, with no supplied test delegation. Real controller qualification needs an already writable owner-delegated subtree; do not remount, enable controllers or expose untrusted workloads. |
+
+Fresh capability evidence: `/opt/venv/bin/python` is Python 3.12.3;
+workspace free disk is 362.1 GiB. The cgroup mount reports `rw,nsdelegate`
+superblock options but has a read-only VFS mount, as independently confirmed
+by `statvfs` and write-access checks. Visible controllers are `cpu memory pids`;
+subtree control is empty and `NEURAL_COMPILER_TEST_CGROUP_ROOT` is unset.
+No GPU/model initialization, dependency installation or host change was used
+to obtain these observations.
+
+Policy/approach selection remains delegated, not a missing routine-consent
+gate. The remaining actions above need actual inputs, scoped runtime adoption
+or unavailable kernel delegation/qualification. The bounded sweep found no
+additional concrete useful authorized source prerequisite; it does not prove
+the absence of all bugs, finish the research project or record a user pause.
+No unchanged successful tests were rerun for this documentation-only handoff.
+
+[post-guard-source-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44061421911
+[post-guard-matched]: ../../src/neural_compiler/eval/harness.py
+[post-guard-serving]: ../../src/neural_compiler/eval/serving.py
