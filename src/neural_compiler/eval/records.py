@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import math
 import re
+import sys
 from collections.abc import Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from fractions import Fraction
 from typing import NoReturn, TextIO
+
+import torch
 
 from .harness import (
     ALL_OUTCOMES,
@@ -23,6 +26,14 @@ from .harness import (
     _PATHS,
     _parse_decimal_int,
 )
+from .serving import ALL_SERVING_MODES, ServingCaseResult
+
+_LOGIT_DTYPES: dict[str, tuple[torch.dtype, int]] = {
+    "float16": (torch.float16, 2),
+    "bfloat16": (torch.bfloat16, 2),
+    "float32": (torch.float32, 4),
+    "float64": (torch.float64, 8),
+}
 
 
 def _unique_object(items: list[tuple[str, object]]) -> dict[str, object]:
@@ -279,6 +290,120 @@ def _tasks(values: Sequence[object]) -> tuple[Task, ...]:
     return tasks
 
 
+def _logits_data(value: torch.Tensor | None) -> dict[str, object] | None:
+    if value is None:
+        return None
+    if (
+        value.device.type != "cpu"
+        or value.layout != torch.strided
+        or value.requires_grad
+    ):
+        raise ValueError("Saved logits must be detached dense CPU tensors")
+    dtype = next(
+        (name for name, (dtype, _) in _LOGIT_DTYPES.items() if dtype == value.dtype),
+        None,
+    )
+    if dtype is None:
+        raise ValueError(f"Unsupported logit dtype: {value.dtype}")
+    raw = bytes(
+        value.detach().resolve_neg().contiguous().reshape(-1).view(torch.uint8).tolist()
+    )
+    return {
+        "dtype": dtype,
+        "shape": list(value.shape),
+        "byte_order": sys.byteorder,
+        "bytes_hex": raw.hex(),
+    }
+
+
+def _logits(value: object) -> torch.Tensor | None:
+    if value is None:
+        return None
+    data = _object(value, "logits", {"dtype", "shape", "byte_order", "bytes_hex"})
+    dtype_name = _string(data["dtype"], "logit dtype")
+    dtype_info = _LOGIT_DTYPES.get(dtype_name)
+    if dtype_info is None:
+        raise ValueError(f"Unsupported logit dtype: {dtype_name}")
+    if data["byte_order"] != sys.byteorder:
+        raise ValueError("Unsupported logit byte order")
+    dimensions = data["shape"]
+    if not isinstance(dimensions, list):
+        raise ValueError("Logit shape must be a JSON array")
+    shape = tuple(_integer(size, "logit dimension") for size in dimensions)
+    if any(size < 0 for size in shape):
+        raise ValueError("Logit dimensions must be nonnegative")
+    encoded = _string(data["bytes_hex"], "logit bytes_hex")
+    if re.fullmatch(r"[0-9a-f]*", encoded) is None:
+        raise ValueError("Logit bytes_hex must be lowercase hexadecimal")
+    dtype, itemsize = dtype_info
+    if len(encoded) != 2 * math.prod(shape) * itemsize:
+        raise ValueError("Logit byte length differs from shape/dtype")
+    raw = bytearray.fromhex(encoded)
+    if not raw:
+        return torch.empty(shape, dtype=dtype, device="cpu")
+    return torch.frombuffer(raw, dtype=dtype).reshape(shape).clone()
+
+
+def _serving_case(value: object) -> ServingCaseResult:
+    data = _object(
+        value,
+        "serving case",
+        {
+            "mode",
+            "case",
+            "final_tokens",
+            "final_logits",
+            "prefill_tokens",
+            "checkpoint_bytes_peak",
+            "cache_hits",
+            "cache_misses",
+            "checkpoints_evicted",
+        },
+        ("logit_prefix_tokens",),
+    )
+    mode = next((mode for mode in ALL_SERVING_MODES if mode == data["mode"]), None)
+    if mode is None:
+        raise ValueError(f"Unknown serving mode: {data['mode']!r}")
+    tokens = data["final_tokens"]
+    if not isinstance(tokens, (list, tuple)):
+        raise ValueError("final_tokens must be a JSON array")
+    prefix = data.get("logit_prefix_tokens")
+    row = ServingCaseResult(
+        mode=mode,
+        case=_case(data["case"]),
+        final_tokens=tuple(_integer(token, "final_token") for token in tokens),
+        final_logits=None,
+        prefill_tokens=_integer(data["prefill_tokens"], "prefill_tokens"),
+        checkpoint_bytes_peak=_integer(
+            data["checkpoint_bytes_peak"], "checkpoint_bytes_peak"
+        ),
+        cache_hits=_integer(data["cache_hits"], "cache_hits"),
+        cache_misses=_integer(data["cache_misses"], "cache_misses"),
+        checkpoints_evicted=_integer(
+            data["checkpoints_evicted"], "checkpoints_evicted"
+        ),
+        logit_prefix_tokens=None
+        if prefix is None
+        else _integer(prefix, "logit_prefix_tokens"),
+    )
+    return replace(row, final_logits=_logits(data["final_logits"]))
+
+
+def _serving_data(row: ServingCaseResult) -> dict[str, object]:
+    return {
+        "mode": row.mode,
+        "case": asdict(row.case),
+        "final_tokens": list(row.final_tokens),
+        "final_logits": _logits_data(row.final_logits),
+        "prefill_tokens": row.prefill_tokens,
+        "checkpoint_bytes_peak": row.checkpoint_bytes_peak,
+        "cache_hits": row.cache_hits,
+        "cache_misses": row.cache_misses,
+        "checkpoints_evicted": row.checkpoints_evicted,
+        "logit_prefix_tokens": row.logit_prefix_tokens,
+    }
+
+
 def _write_document(key: str, values: Sequence[object], destination: TextIO) -> None:
     document = (
         json.dumps(
@@ -331,3 +456,20 @@ def dump_tasks(tasks: Sequence[Task], destination: TextIO) -> None:
 def load_tasks(source: TextIO) -> tuple[Task, ...]:
     """Read exact task specifications without accepting data or running checkers."""
     return _tasks(_read_document("tasks", source))
+
+
+def dump_serving_results(
+    results: Sequence[ServingCaseResult], destination: TextIO
+) -> None:
+    """Write serving observations and detached CPU logits, not live checkpoints."""
+    records = [_serving_data(row) for row in results]
+    for record in records:
+        _serving_case(record)
+    _write_document("serving_cases", records, destination)
+
+
+def load_serving_results(source: TextIO) -> tuple[ServingCaseResult, ...]:
+    """Read serving observations; logit bytes must use this host's byte order."""
+    return tuple(
+        _serving_case(record) for record in _read_document("serving_cases", source)
+    )

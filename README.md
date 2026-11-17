@@ -128,6 +128,16 @@ answers/text from nonfinal failures and unknown text observations. This verifies
 agreement with the supplied references, not their authenticity, dataset quality,
 full model prompts, matched hardware or production qualification.
 
+Serving-comparison rows have corresponding `dump_serving_results(results, stream)`
+and `load_serving_results(stream)` APIs. These preserve nested case evidence,
+token/logit-prefix boundaries, cache counters and detached dense CPU logits.
+Float16, bfloat16, float32 and float64 logit values use raw hexadecimal bytes with
+explicit dtype, shape and native byte order, retaining masks, NaNs and signed
+zero as observations without nonstandard JSON numbers or pickle. Readers reject
+other byte orders or inconsistent metadata before tensor reconstruction.
+These are offline observations, not live-cache checkpoints, model weights,
+training graphs, a production serving integration or measured speedups.
+
 [offline-harness]: ./src/neural_compiler/eval/harness.py
 [evidence-records]: ./src/neural_compiler/eval/records.py
 

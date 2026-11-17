@@ -20,7 +20,14 @@ from .harness import (
     summarize,
     validate_references,
 )
-from .records import dump_case_results, dump_tasks, load_case_results, load_tasks
+from .records import (
+    dump_case_results,
+    dump_serving_results,
+    dump_tasks,
+    load_case_results,
+    load_serving_results,
+    load_tasks,
+)
 from .serving import (
     ALL_SERVING_MODES,
     FullReprefillSession,
@@ -52,8 +59,10 @@ __all__ = [
     "generate_family_tasks",
     "generate_matched_suite",
     "dump_case_results",
+    "dump_serving_results",
     "dump_tasks",
     "load_case_results",
+    "load_serving_results",
     "load_tasks",
     "matched_report",
     "run_matched",

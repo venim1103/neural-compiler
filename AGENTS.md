@@ -70,7 +70,8 @@ blocked:
 2. P0 serving comparison (`src/neural_compiler/bridge/session.py`, `eval/serving.py`):
    exact-boundary CPU snapshots, bounded LRU `CheckpointStore`, and offline `DecodeSession`
    comparison adapters (`live_pause_resume`, `prefix_cached_resubmission`, `full_reprefill`)
-   now exist and match reference logits on tiny CPU hybrid models. Real-engine checkpoint
+   now exist and match reference logits on tiny CPU hybrid models; complete CPU serving
+   observations can be saved without pickle. Real-engine checkpoint
    integration, CUDA/FLA kernel checks and dependency changes remain separately scoped.
 3. P1 containment and multi-tier execution (`src/neural_compiler/bridge/`, `cli.py`):
    jailed Python (`run_python` with optional static import pre-filter), in-jail C99/tcc and

@@ -2928,3 +2928,36 @@ One supported public-REST alternative confirmed [task-specification CI][task-spe
 security settings, remotes or host privileges were changed.
 
 [task-spec-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44043640416
+
+### 2026-11-17: persist complete CPU serving observations without pickle
+
+`dump_serving_results(results, stream)` / `load_serving_results(stream)` use a
+separate strict schema-v1 `serving_cases` envelope. All serving fields and nested
+case evidence are retained: mode, integer token history, optional logit-prefix
+boundary, work/cache counters and optional logits. Metadata/counter validation
+precedes tensor reconstruction. Unknown fields/modes and inconsistent payloads
+fail explicitly; no missing logits or prefix observations are imputed.
+
+Detached dense CPU float16/bfloat16/float32/float64 logits carry exact dtype,
+shape, native byte order and raw lowercase hexadecimal bytes. This preserves
+mask infinities, NaNs and signed zero without nonstandard JSON floats, pickle,
+NumPy or model loading. Readers reject another byte order and inconsistent
+lengths before reconstructing independent CPU tensors. Non-CPU, gradient-bearing
+or unsupported-layout/dtype inputs fail rather than being moved or silently
+dropped. These are value observations, not live-cache checkpoints, weights,
+training graphs, cross-endian conversion or numerical/serving qualification.
+
+**Finite scope and results:** fourteen new synthetic fixtures, at most three
+serving rows/four logit elements each (one six-case base helper per fixture).
+Four-dtype bitwise and report round-trips, seven malformed-input pre-reconstruction
+traps, distinct missing/empty logits and non-CPU pre-write rejection passed.
+Full record focus: **57 passed** (0.14 s); coupled record/serving:
+**123 passed** (4.42 s); root: **466 passed** (17.43 s). Root Ruff, three-file
+format, whitespace and README local-link targets passed. Both owning sources
+had empty diagnostics; seven new API callers were signature-compatible. Test
+diagnostics were only unused trap parameters. Fourteen existing Torch warnings,
+no skips; existing jailed/native controls ran. One focus, coupled/root invocation
+and formatter application spent; no failures/aborts, model forwards, guest
+execution, GPU access, dependencies, downloads or retained new artifacts.
+Next concrete action: expose serving-report replay with the same optional exact
+reference checks and explicit pairing errors.

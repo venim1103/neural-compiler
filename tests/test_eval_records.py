@@ -9,20 +9,26 @@ from dataclasses import asdict, replace
 from fractions import Fraction
 
 import pytest
+import torch
 
 from neural_compiler.eval import (
+    ALL_SERVING_MODES,
     Budgets,
     CallRecord,
     CaseResult,
     IntegerChecker,
     IntegerSequenceChecker,
     RationalChecker,
+    ServingCaseResult,
     Task,
     dump_case_results,
+    dump_serving_results,
     dump_tasks,
     load_case_results,
+    load_serving_results,
     load_tasks,
     matched_report,
+    summarize_serving,
     validate_references,
 )
 from neural_compiler.eval.harness import _task_text_digest
@@ -402,3 +408,139 @@ def test_reference_validation_uses_each_cases_own_reference():
         for task in reversed(tasks)
     ]
     assert validate_references(tasks, rows)["answer_checks"] == 2
+
+
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
+)
+def test_serving_observations_round_trip_bits_and_report(dtype):
+    logits = torch.tensor([[-float("inf"), float("nan"), -0.0, 1.25]], dtype=dtype)
+    case = case_rows()[2]
+    rows = tuple(
+        ServingCaseResult(
+            mode,
+            case,
+            (1, 2, 3),
+            logits,
+            3 + index,
+            64 if index == 1 else 0,
+            index,
+            1,
+            0,
+            logit_prefix_tokens=2,
+        )
+        for index, mode in enumerate(ALL_SERVING_MODES)
+    )
+    stream = io.StringIO()
+    dump_serving_results(rows, stream)
+    stream.seek(0)
+    restored = load_serving_results(stream)
+    for before, after in zip(rows, restored, strict=True):
+        assert replace(before, final_logits=None) == replace(after, final_logits=None)
+        before_logits, after_logits = before.final_logits, after.final_logits
+        assert before_logits is not None and after_logits is not None
+        assert after_logits.dtype == dtype
+        assert after_logits.device.type == "cpu"
+        assert torch.equal(
+            before_logits.view(torch.uint8),
+            after_logits.view(torch.uint8),
+        )
+    assert summarize_serving(restored) == summarize_serving(rows)
+
+
+@pytest.mark.parametrize(
+    "fault,error",
+    [
+        ("mode", "Unknown serving mode"),
+        ("token", "final_token"),
+        ("byte_order", "byte order"),
+        ("shape", "byte length"),
+        ("dtype", "Unsupported logit dtype"),
+        ("hex", "hexadecimal"),
+        ("counter", "prefill_tokens"),
+    ],
+)
+def test_invalid_serving_observations_fail_before_tensor_reconstruction(
+    monkeypatch, fault, error
+):
+    row = ServingCaseResult(
+        "live_pause_resume",
+        case_rows()[2],
+        (1, 2, 3),
+        torch.zeros((1, 4)),
+        3,
+        0,
+        0,
+        0,
+        0,
+    )
+    stream = io.StringIO()
+    dump_serving_results([row], stream)
+    data = json.loads(stream.getvalue())
+    record = data["serving_cases"][0]
+    if fault == "mode":
+        record["mode"] = "unknown"
+    elif fault == "token":
+        record["final_tokens"][0] = True
+    elif fault == "byte_order":
+        record["final_logits"]["byte_order"] = (
+            "big" if sys.byteorder == "little" else "little"
+        )
+    elif fault == "shape":
+        record["final_logits"]["shape"] = [1, 5]
+    elif fault == "dtype":
+        record["final_logits"]["dtype"] = "unreviewed"
+    elif fault == "hex":
+        record["final_logits"]["bytes_hex"] = "z" * 32
+    else:
+        record["prefill_tokens"] = -1
+    monkeypatch.setattr(
+        torch,
+        "frombuffer",
+        lambda *args, **kwargs: pytest.fail("Invalid metadata reconstructed a tensor"),
+    )
+    with pytest.raises(ValueError, match=error):
+        load_serving_results(io.StringIO(json.dumps(data)))
+
+
+@pytest.mark.parametrize("logits", [None, torch.empty((1, 0))])
+def test_unmeasured_or_empty_serving_logits_stay_distinct(logits):
+    row = ServingCaseResult(
+        "live_pause_resume",
+        case_rows()[2],
+        (),
+        logits,
+        0,
+        0,
+        0,
+        0,
+        0,
+    )
+    stream = io.StringIO()
+    dump_serving_results([row], stream)
+    stream.seek(0)
+    restored = load_serving_results(stream)[0]
+    if logits is None:
+        assert restored == row
+    else:
+        assert restored.final_logits is not None
+        assert restored.final_logits.shape == logits.shape
+        assert restored.logit_prefix_tokens is None
+
+
+def test_non_cpu_logits_are_rejected_without_writing():
+    row = ServingCaseResult(
+        "live_pause_resume",
+        case_rows()[2],
+        (1, 2, 3),
+        torch.empty((1, 4), device="meta"),
+        3,
+        0,
+        0,
+        0,
+        0,
+    )
+    stream = io.StringIO()
+    with pytest.raises(ValueError, match="detached dense CPU"):
+        dump_serving_results([row], stream)
+    assert stream.getvalue() == ""
