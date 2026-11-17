@@ -353,6 +353,7 @@ def test_prompt_limit_prevents_model_prefill(tokenizer, monkeypatch):
     assert result.outcome == "budget_exhausted" and result.generated_tokens == 0
     assert len(rendered) == 1
     assert result.prompt_tokens == len(rendered[0]) > runner.budgets.prompt_tokens
+    assert result.budgets == runner.budgets
 
 
 @pytest.mark.parametrize("prompt", ["bad", [True], [1.5], []])
@@ -851,9 +852,9 @@ def test_matched_report_preserves_family_failures_and_rejects_missing_pairs():
         summarize(rows)
 
 
-@pytest.mark.parametrize("changed", ["prompt", "answer_format"])
+@pytest.mark.parametrize("changed", ["prompt", "answer_format", "budgets"])
 @pytest.mark.parametrize("reporter", ["matched", "serving"])
-def test_paired_reports_reject_reused_ids_with_different_task_text(
+def test_paired_reports_reject_reused_ids_with_different_observed_inputs(
     tokenizer, hybrid_model, monkeypatch, changed, reporter
 ):
     from neural_compiler.eval.serving import (
@@ -863,18 +864,30 @@ def test_paired_reports_reject_reused_ids_with_different_task_text(
     )
 
     task = Task("reused-id", "unit", "Compute six times seven.", IntegerChecker(42))
-    alternate = replace(
-        task,
-        **{changed: "Compute 7 * 6." if changed == "prompt" else "<signed integer>"},
+    alternate = (
+        task
+        if changed == "budgets"
+        else replace(
+            task,
+            **{
+                changed: "Compute 7 * 6." if changed == "prompt" else "<signed integer>"
+            },
+        )
     )
     rows = []
     for path in ("no_tool", "python_tool", "current_best"):
         runner = harness_for(
-            tokenizer, hybrid_model, monkeypatch, "Final answer: 42<|im_end|>"
+            tokenizer,
+            hybrid_model,
+            monkeypatch,
+            "Final answer: 42<|im_end|>",
+            budgets=replace(Budgets(), calls=1)
+            if changed == "budgets" and path == "current_best"
+            else Budgets(),
         )
         rows.append(runner.run(alternate if path == "current_best" else task, path))
     assert all(row.outcome == "correct" for row in rows)
-    with pytest.raises(ValueError, match="Task text"):
+    with pytest.raises(ValueError, match="Task text|Resource budgets"):
         if reporter == "matched":
             matched_report(rows)
         else:
@@ -906,17 +919,39 @@ def test_invalid_task_text_fingerprint_is_explicit(digest):
         )
 
 
+@pytest.mark.parametrize("budgets", [{}, False])
+def test_invalid_configured_budget_observation_is_explicit(budgets):
+    with pytest.raises(ValueError, match="budgets must be a Budgets"):
+        CaseResult(
+            "bad-budgets",
+            "unit",
+            "no_tool",
+            "correct",
+            "",
+            "",
+            1,
+            0,
+            0,
+            (),
+            budgets=budgets,
+        )
+
+
 @pytest.mark.parametrize(
-    "digests,complete",
+    "observation,values,complete",
     [
-        ((None, None, None), 0),
-        (("a" * 64, None, None), 0),
-        (("a" * 64,) * 3, 1),
-        (("a" * 64, "b" * 64, None), None),
+        ("task_text_sha256", (None, None, None), 0),
+        ("task_text_sha256", ("a" * 64, None, None), 0),
+        ("task_text_sha256", ("a" * 64,) * 3, 1),
+        ("task_text_sha256", ("a" * 64, "b" * 64, None), None),
+        ("budgets", (None, None, None), 0),
+        ("budgets", (Budgets(), None, None), 0),
+        ("budgets", (Budgets(),) * 3, 1),
+        ("budgets", (Budgets(), replace(Budgets(), calls=1), None), None),
     ],
 )
-def test_task_text_coverage_preserves_legacy_unknowns_and_partial_mismatches(
-    digests, complete
+def test_paired_coverage_preserves_legacy_unknowns_and_partial_mismatches(
+    observation, values, complete
 ):
     from neural_compiler.eval.serving import (
         ALL_SERVING_MODES,
@@ -936,9 +971,9 @@ def test_task_text_coverage_preserves_legacy_unknowns_and_partial_mismatches(
             0,
             0,
             (),
-            task_text_sha256=digest,
+            **{observation: value},
         )
-        for path, digest in zip(("no_tool", "python_tool", "current_best"), digests)
+        for path, value in zip(("no_tool", "python_tool", "current_best"), values)
     ]
     serving_rows = [
         ServingCaseResult(
@@ -951,11 +986,19 @@ def test_task_text_coverage_preserves_legacy_unknowns_and_partial_mismatches(
         lambda: summarize_serving(serving_rows),
     ):
         if complete is None:
-            with pytest.raises(ValueError, match="Task text"):
+            with pytest.raises(ValueError, match="Task text|Resource budgets"):
                 report()
         else:
-            assert report()["task_text_complete_pairs"] == complete
-    assert summarize([rows[0]])["task_text_samples"] == (digests[0] is not None)
+            field = (
+                "task_text_complete_pairs"
+                if observation == "task_text_sha256"
+                else "budget_complete_pairs"
+            )
+            assert report()[field] == complete
+    sample_field = (
+        "task_text_samples" if observation == "task_text_sha256" else "budget_samples"
+    )
+    assert summarize([rows[0]])[sample_field] == (values[0] is not None)
 
 
 def test_matched_preflight_rejects_budget_mismatch_before_inference(tokenizer):
@@ -1004,7 +1047,9 @@ def test_matched_runner_produces_all_three_report_paths(
     assert set(report["by_path"]) == {"no_tool", "python_tool", "current_best"}
     assert all(summary["correct"] == 1 for summary in report["by_path"].values())
     assert report["task_text_complete_pairs"] == 1
+    assert report["budget_complete_pairs"] == 1
     assert len({row.task_text_sha256 for row in rows}) == 1
+    assert all(row.budgets == runner.budgets for row in rows)
     assert all(
         summary["task_text_samples"] == 1 for summary in report["by_path"].values()
     )

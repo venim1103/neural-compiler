@@ -2737,3 +2737,35 @@ collected records cannot silently pair different resource allowances.
 
 [task-text-harness]: ../../src/neural_compiler/eval/harness.py
 [task-text-serving]: ../../src/neural_compiler/eval/serving.py
+
+### 2026-11-17: preserve configured budgets in independently paired evidence
+
+`CaseResult.budgets` now retains the immutable configured `Budgets` observation,
+including prompt-admission failures. Both report consumers use shared paired
+provenance validation to reject differing observed allowances within a case,
+even when another observation is absent. `budget_samples` and
+`budget_complete_pairs` expose coverage; legacy `None` is not replaced with
+current defaults. Records retain positional compatibility. Per-case matching
+does not impose a new cross-case budget policy, change metric definitions, or
+certify actual enforcement, complete execution policies, references or hardware.
+The existing pre-inference `run_matched` budget check remains unchanged.
+
+**Bounded ledger:** two independently collected report fixtures accepted
+different serial-call allowances before repair (0.56 s; six tiny CPU prefills).
+Both rejected the mismatch afterward (0.36 s). Expanded provenance,
+legacy/partial, invalid-observation and prefill-admission controls:
+**18 passed** (0.96 s). Coupled evaluation/serving: **183 passed** (16.07 s);
+root: **388 passed** (22.38 s). Root Ruff, three-file format and whitespace
+passed; both owning-source diagnostics empty and both shared-helper callers
+signature-compatible. Fourteen existing Torch warnings, no skips; existing
+jailed native/trusted controls ran. One failing-first, repaired focus, expanded
+edge focus, coupled and root attempt spent; one formatter application,
+temporary fixtures cleaned. New fixtures used no guest executor. No model/data
+studies or acceptance, dependencies, downloads, services or host changes occurred.
+
+These are additional offline reporting prerequisites, not acceptance of a
+held-out cohort or real-engine measurements. Next milestone actions still need
+accepted evaluation inputs/exact run scope, separately scoped serving-engine
+dependencies/runtime qualification, or writable cgroup predelegation and accepted
+production policies. Further provenance fields alone would not satisfy those
+gates.

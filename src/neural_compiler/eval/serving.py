@@ -37,7 +37,7 @@ from .harness import (
     Task,
     _PATHS,
     _paired_comparison,
-    _task_text_complete_pairs,
+    _paired_observation_coverage,
     _validate_tool_description,
     summarize,
 )
@@ -400,7 +400,7 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
     Comparisons use the first present mode in canonical order as baseline:
     live pause/resume when present, otherwise prefix-cached resubmission.
     A single-mode summary has no paired deltas.
-    Observed task-text mismatches are rejected; legacy observations remain unknown.
+    Observed task-text/budget mismatches are rejected; missing provenance is unknown.
     """
     if not results:
         raise ValueError("Serving summary requires at least one result")
@@ -427,7 +427,7 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
         case_id: {mode: row.case for mode, row in case.items()}
         for case_id, case in paired.items()
     }
-    task_text_complete_pairs = _task_text_complete_pairs(paired_cases)
+    coverage = _paired_observation_coverage(paired_cases)
 
     def summarize_mode(subset: Sequence[ServingCaseResult]) -> dict[str, object]:
         base = summarize([r.case for r in subset])
@@ -467,7 +467,7 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
             for family in families
         },
         "paired_cases": len(paired_cases),
-        "task_text_complete_pairs": task_text_complete_pairs,
+        **coverage,
         "paired_deltas": deltas(paired_cases),
         "paired_deltas_by_family": {
             family: deltas(

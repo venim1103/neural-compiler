@@ -282,7 +282,7 @@ class CallRecord:
 
 @dataclass(frozen=True)
 class CaseResult:
-    """Task-text identity does not certify reference/checker or runtime matching."""
+    """Observed task text and configured budgets do not certify runtime matching."""
 
     case_id: str
     family: str
@@ -296,6 +296,7 @@ class CaseResult:
     calls: tuple[CallRecord, ...]
     prompt_tokens: int | None = None
     task_text_sha256: str | None = None
+    budgets: Budgets | None = None
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.elapsed_seconds) or self.elapsed_seconds < 0:
@@ -319,6 +320,8 @@ class CaseResult:
             raise ValueError(
                 "task_text_sha256 must be a lowercase SHA-256 digest or None"
             )
+        if self.budgets is not None and not isinstance(self.budgets, Budgets):
+            raise ValueError("budgets must be a Budgets instance or None")
         if self.path == "no_tool" and (self.calls or self.injected_tokens):
             raise ValueError(
                 "no_tool results must not record tool calls or injected tokens"
@@ -583,6 +586,7 @@ class EvaluationHarness:
             tuple(calls),
             prompt_tokens=prompt_tokens,
             task_text_sha256=task_text_sha256,
+            budgets=self.budgets,
         )
 
 
@@ -700,16 +704,17 @@ def summarize(results: Sequence[CaseResult]) -> dict[str, object]:
         "task_text_samples": sum(
             result.task_text_sha256 is not None for result in results
         ),
+        "budget_samples": sum(result.budgets is not None for result in results),
         "total_tokens": generated_tokens + injected_tokens,
         "tool_calls": tool_calls,
         "outcomes": outcomes,
     }
 
 
-def _task_text_complete_pairs(
+def _paired_observation_coverage(
     paired: Mapping[str, Mapping[str, CaseResult]],
-) -> int:
-    complete = 0
+) -> dict[str, int]:
+    complete_text = complete_budgets = 0
     for case_id, case in paired.items():
         observed = {
             result.task_text_sha256
@@ -718,8 +723,21 @@ def _task_text_complete_pairs(
         }
         if len(observed) > 1:
             raise ValueError(f"Task text differs between paired results for {case_id}")
-        complete += all(result.task_text_sha256 is not None for result in case.values())
-    return complete
+        observed_budgets = {
+            result.budgets for result in case.values() if result.budgets is not None
+        }
+        if len(observed_budgets) > 1:
+            raise ValueError(
+                f"Resource budgets differ between paired results for {case_id}"
+            )
+        complete_text += all(
+            result.task_text_sha256 is not None for result in case.values()
+        )
+        complete_budgets += all(result.budgets is not None for result in case.values())
+    return {
+        "task_text_complete_pairs": complete_text,
+        "budget_complete_pairs": complete_budgets,
+    }
 
 
 def run_matched(
@@ -786,9 +804,9 @@ def _paired_deltas(
 def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
     """Require complete paired coverage; retain per-family costs and failures.
 
-    Observed task-text mismatches are rejected; missing observations are counted
-    as incomplete. Text identity does not establish matched references, full
-    model prompts, hardware, budgets, accepted splits or statistical qualification.
+    Observed task-text/budget mismatches are rejected; missing observations are
+    counted as incomplete. Configured allowances do not certify enforcement,
+    matched references, full model prompts, hardware or statistical qualification.
     """
     if not results:
         raise ValueError("A matched report requires case results")
@@ -806,11 +824,11 @@ def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
             raise ValueError(f"Missing baseline/current-best result for {case_id}")
         if len({result.family for result in case.values()}) != 1:
             raise ValueError(f"Family identity differs between paths for {case_id}")
-    task_text_complete_pairs = _task_text_complete_pairs(paired)
+    coverage = _paired_observation_coverage(paired)
     families = sorted({result.family for result in results})
     return {
         "paired_cases": len(paired),
-        "task_text_complete_pairs": task_text_complete_pairs,
+        **coverage,
         "by_path": {
             path: summarize([result for result in results if result.path == path])
             for path in paths
