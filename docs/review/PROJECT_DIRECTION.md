@@ -3731,3 +3731,36 @@ Continue the remaining offline evaluation/serving prerequisite sweep.
 [cpu-probe-interface]: https://github.com/torvalds/linux/blob/v6.18/Documentation/admin-guide/cgroup-v2.rst
 [cpu-probe-exporter]: https://github.com/torvalds/linux/blob/v6.18/kernel/sched/core.c#L10082
 [cpu-probe-accounting]: https://github.com/torvalds/linux/blob/v6.18/kernel/sched/fair.c#L6258
+
+### 2026-11-17: remaining gates after the native and CPU prerequisites
+
+The CPU-probe source checkpoint `734f826` was pushed with its actual remote
+SHA verified; [hosted CI passed][post-cpu-source-ci]. Its local source gate is
+**558 passed, 3 explicit delegated-controller skips**, root Ruff, scoped
+formatting/whitespace and diagnostics. No unchanged code gate was rerun for
+this evidence-only update.
+
+A fresh owning-code/test/resource sweep retained the following concrete gates:
+
+| Queue | Available local prerequisite | Remaining milestone input/evidence |
+|---|---|---|
+| Held-out evaluation | The [matched runner][post-cpu-matched] preflights caller-owned tasks and identical budgets; exact checkers, synthetic generators, strict task/result I/O, reference replay, uncertainty and overlap inspection are exported and root-tested. The private Wilson helper has one fixed-z summary caller; a configurable-confidence edge hypothesis did not apply. | Accepted held-out cohort/family/split inputs and an exact finite pretrained/trajectory study scope. Synthetic fixtures and historical spent experiments are not that acceptance or renewed run authority. No further concrete offline source repair was identified in this bounded sweep. |
+| Serving comparison | The [three adapters and driver][post-cpu-serving] validate modes before dispatch and preserve the existing CPU checkpoint/pending-token comparisons. Their source and pairing/observation checks were revisited; no speculative replacement abstraction was added. | Actual terminal-environment distribution metadata confirms SGLang/vLLM are absent. Real-engine adoption needs a reviewed compatible dependency/runtime scope and actual hybrid-state/kernel/resource measurements; repeated Transformers-forward fixtures cannot substitute for them. |
+| Containment/native tiers | The [native runtime bridge][post-cpu-native] and trusted jailed controls ran in the root gate. PID/memory/CPU controller probes are prepared; the [Python-only syscall candidate][post-cpu-seccomp] remains explicitly nonproduction with actual filtered arithmetic and process/socket-denial controls. | An already writable owner-delegated subtree and actual controller evidence, plus production workload/policy qualification. The three real-controller cases remain unexecuted. Native constant-42 inventories do not justify syscall widening or production policy adoption. |
+
+Fresh capability reads: `/opt/venv/bin/python`, Python 3.12.3; 361 GiB free disk
+(point-in-time, not model-fit evidence). The sole visible cgroup-v2 mount is
+`/sys/fs/cgroup`: VFS read-only and nonwritable, visible `cpu memory pids`,
+empty subtree control and no `NEURAL_COMPILER_TEST_CGROUP_ROOT`. No permitted
+remount/controller/privilege workaround exists. No additional concrete
+reversible prerequisite was identified after preparing the CPU probe; advancing
+these milestones now needs the inputs above, not routine planning/test consent.
+This is not a claim of exhaustive bug absence or project completion.
+No new dependencies, model/data downloads, studies, GPU jobs, host changes or
+retained probe artifacts; no owned jobs remain running.
+
+[post-cpu-source-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44085847500
+[post-cpu-matched]: ../../src/neural_compiler/eval/harness.py
+[post-cpu-serving]: ../../src/neural_compiler/eval/serving.py
+[post-cpu-native]: ../../src/neural_compiler/bridge/native.py
+[post-cpu-seccomp]: ../../src/neural_compiler/bridge/seccomp.py
