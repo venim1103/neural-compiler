@@ -23,7 +23,7 @@ from neural_compiler.bridge.session import (
     DecodeResult,
     LiveSession,
     _validate_checkpoint_budget,
-    _validate_decode_budget,
+    _validate_decode_request,
     _validate_prefix_model,
     _validate_store_limits,
     _validate_token_ids,
@@ -144,7 +144,7 @@ class PrefixCachedSession:
         max_new_tokens: int,
         on_token: Callable[[int], bool] | None = None,
     ) -> DecodeResult:
-        _validate_decode_budget(max_new_tokens)
+        _validate_decode_request(max_new_tokens, on_token)
         if self._session is None:
             _validate_prefix_model(
                 self.model, self._prefix_tensor_versions, self._prefix_config
@@ -222,7 +222,7 @@ class FullReprefillSession:
         max_new_tokens: int,
         on_token: Callable[[int], bool] | None = None,
     ) -> DecodeResult:
-        _validate_decode_budget(max_new_tokens)
+        _validate_decode_request(max_new_tokens, on_token)
         if self._session is None:
             _validate_prefix_model(
                 self.model, self._prefix_tensor_versions, self._prefix_config

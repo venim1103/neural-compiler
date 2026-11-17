@@ -99,9 +99,13 @@ def _validate_prefix_model(
         raise ValueError("Model weights or configuration changed after initial prefill")
 
 
-def _validate_decode_budget(max_new_tokens: int) -> None:
+def _validate_decode_request(
+    max_new_tokens: int, on_token: Callable[[int], bool] | None
+) -> None:
     if type(max_new_tokens) is not int or max_new_tokens <= 0:
         raise ValueError("max_new_tokens must be a positive integer")
+    if on_token is not None and not callable(on_token):
+        raise ValueError("on_token must be callable or None")
 
 
 def _validate_checkpoint_budget(max_cache_bytes: int) -> None:
@@ -128,6 +132,8 @@ class LiveSession:
     allowed when another entry can be selected.
     Failed model forwards invalidate the session; resume a prior valid checkpoint
     or prefill a new session rather than reusing potentially mutated state.
+    Invalid token budgets and non-callable stop callbacks are rejected before
+    pending tokens are forwarded.
     """
 
     def __init__(self, model: PreTrainedModel, prompt_ids: Sequence[int]):
@@ -216,7 +222,7 @@ class LiveSession:
         max_new_tokens: int,
         on_token: Callable[[int], bool] | None = None,
     ) -> DecodeResult:
-        _validate_decode_budget(max_new_tokens)
+        _validate_decode_request(max_new_tokens, on_token)
         if not _is_eval_mode(self.model):
             raise ValueError("LiveSession requires a model in eval mode")
         self._check_prefix_model()

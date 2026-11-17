@@ -3134,3 +3134,35 @@ Python/C/assembly and Wasm/Unicorn controls actually ran, with no new guest
 workloads beyond those controls, dependencies, downloads, GPU access, host
 security changes or retained artifacts. Next inspect cooperative model-decode
 time admission for the same contract mismatch.
+
+### 2026-11-17: reject non-callable stop callbacks before hybrid state work
+
+Decode sessions expose token budgets/callbacks, not an independent time input;
+cooperative wall time remains enforced by the harness's validated `Budgets`
+and callback checks. That trace exposed a separate admission defect:
+non-callable stop callbacks reached pending-token forwarding in live sessions,
+checkpoint restoration in prefix mode and model re-prefill in full mode.
+The shared preflight is now `_validate_decode_request`, checking token budget
+then optional callback callability before any of those stateful operations.
+All three consumers use it; public decode signatures and valid callbacks/`None`
+retain their behavior. Live-session documentation states the admission guarantee.
+
+**Finite scope and results:** six added tiny CPU cases reuse existing live
+pending-boundary and released prefix/full fixtures. Each focus had ten cases,
+at most four history IDs each, ten scripted IDs and thirty initial prefill IDs;
+post-admission forward/restore seams were trapped, not extra model execution.
+Initial focus **6 failed, 4 passed** (0.39 s); repaired **10 passed** (0.22 s).
+Coupled checkpoint/serving **139 passed** (5.71 s), including the existing
+multi-call/full-prefill numerical controls; root **514 passed** (19.75 s).
+One failing focus, one repaired focus, one coupled/root invocation spent, no
+aborts; original context/token/tensor/tolerance limits unchanged. Root Ruff,
+four-file format and whitespace passed; both owning-source diagnostics empty,
+all three shared-preflight callers signature-compatible. Fourteen existing
+Torch warnings, no skips. No studies, dependencies, downloads, GPU access or
+retained artifacts. Hosted CI for pushed timeout repair `e62abfb`
+[completed successfully][strict-timeout-ci].
+
+Next: inspect task-specification cohort overlaps as an offline held-out-family
+prerequisite, without accepting a split or collecting task/model data.
+
+[strict-timeout-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44050852632

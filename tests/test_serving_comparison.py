@@ -110,8 +110,16 @@ def test_noncallable_sampler_factory_is_rejected_before_iteration(
 
 
 @pytest.mark.parametrize("mode", ["prefix", "full"])
-def test_invalid_decode_budget_does_not_reconstruct_session(
-    hybrid_model, monkeypatch, mode
+@pytest.mark.parametrize(
+    "budget,callback,error",
+    [
+        (0, None, "positive integer"),
+        (1, False, "on_token must be callable"),
+        (1, 42, "on_token must be callable"),
+    ],
+)
+def test_invalid_decode_request_does_not_reconstruct_session(
+    hybrid_model, monkeypatch, mode, budget, callback, error
 ):
     if mode == "prefix":
         store = CheckpointStore(max_total_bytes=1024 * 1024)
@@ -130,16 +138,16 @@ def test_invalid_decode_budget_does_not_reconstruct_session(
         monkeypatch.setattr(
             store,
             "resume_prefix",
-            lambda *a, **kw: pytest.fail("Invalid budget restored a checkpoint"),
+            lambda *a, **kw: pytest.fail("Invalid request restored a checkpoint"),
         )
     else:
         monkeypatch.setattr(
             LiveSession,
             "_forward",
-            lambda *a, **kw: pytest.fail("Invalid budget re-prefilled the model"),
+            lambda *a, **kw: pytest.fail("Invalid request re-prefilled the model"),
         )
-    with pytest.raises(ValueError, match="positive integer"):
-        session.decode_until(0)
+    with pytest.raises(ValueError, match=error):
+        session.decode_until(budget, callback)
     assert session._session is None
     assert session.tokens == tokens
     assert session.prefill_tokens == prefill_tokens

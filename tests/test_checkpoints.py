@@ -26,9 +26,17 @@ def assert_reference(session: LiveSession):
     )
 
 
-@pytest.mark.parametrize("budget", [1.5, True])
-def test_invalid_decode_budget_preserves_pending_boundary(
-    hybrid_model, monkeypatch, budget
+@pytest.mark.parametrize(
+    "budget,callback,error",
+    [
+        (1.5, None, "positive integer"),
+        (True, None, "positive integer"),
+        (1, False, "on_token must be callable"),
+        (1, 42, "on_token must be callable"),
+    ],
+)
+def test_invalid_decode_request_preserves_pending_boundary(
+    hybrid_model, monkeypatch, budget, callback, error
 ):
     session = LiveSession(hybrid_model, [1, 2, 3])
     monkeypatch.setattr(session, "_next_token", lambda: 4)
@@ -36,10 +44,10 @@ def test_invalid_decode_budget_preserves_pending_boundary(
     tokens = session.tokens
     logits = session.logits.clone()
     monkeypatch.setattr(
-        session, "_forward", lambda _: pytest.fail("Invalid budget forwarded tokens")
+        session, "_forward", lambda _: pytest.fail("Invalid request forwarded tokens")
     )
-    with pytest.raises(ValueError, match="positive integer"):
-        session.decode_until(budget)
+    with pytest.raises(ValueError, match=error):
+        session.decode_until(budget, callback)
     assert session.tokens == tokens
     assert session._pending == 4
     torch.testing.assert_close(session.logits, logits, atol=0, rtol=0)
