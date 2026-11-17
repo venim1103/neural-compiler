@@ -142,6 +142,7 @@ class LiveSession:
     pending tokens are forwarded.
     Configuration changes are rejected even without tensor version counters.
     Returned caches must cover every forwarded token before a boundary is healthy.
+    Configured EOS IDs are validated before model prefill.
     """
 
     def __init__(self, model: PreTrainedModel, prompt_ids: Sequence[int]):
@@ -158,9 +159,12 @@ class LiveSession:
         self._prefix_config: str | None = None
         self._cache_usable = True
         eos = model.generation_config.eos_token_id
-        self._eos = (
-            set(eos if isinstance(eos, list) else [eos]) if eos is not None else set()
-        )
+        if eos is None:
+            eos = []
+        elif not isinstance(eos, list):
+            eos = [eos]
+        _validate_token_ids(eos)
+        self._eos = set(eos)
         self._forward(self._tokens)
         self._prefix_config = _model_configuration(model)
         # Other live-model paths remain usable, but cannot supply CPU checkpoints.

@@ -175,6 +175,39 @@ def test_fractional_prompt_ids_cannot_be_silently_truncated(hybrid_model):
         LiveSession(hybrid_model, [1.5, 2, 3])
 
 
+@pytest.mark.parametrize(
+    "eos",
+    [1.0, True, [1, True], (1, 2)],
+    ids=["float", "boolean", "mixed-boolean-list", "tuple"],
+)
+def test_eos_ids_are_validated_before_model_prefill(hybrid_model, monkeypatch, eos):
+    hybrid_model.generation_config.eos_token_id = eos
+    monkeypatch.setattr(
+        hybrid_model,
+        "forward",
+        lambda *args, **kwargs: pytest.fail("Invalid EOS configuration prefilled"),
+    )
+    with pytest.raises(ValueError, match="Token IDs must be integers"):
+        LiveSession(hybrid_model, [1, 2, 3])
+
+
+@pytest.mark.parametrize(
+    "eos,reason", [(None, "length"), ([], "length"), ([4, 5, 4], "eos")]
+)
+def test_valid_eos_configuration_preserves_pending_boundary(
+    hybrid_model, monkeypatch, eos, reason
+):
+    hybrid_model.generation_config.eos_token_id = eos
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    monkeypatch.setattr(session, "_next_token", lambda: 4)
+    result = session.decode_until(1)
+    assert result.token_ids == (4,) and result.reason == reason
+    assert session.tokens == (1, 2, 3, 4)
+    assert session._pending == (4 if reason == "eos" else None)
+    assert session.cache is not None
+    assert session.cache.get_seq_length() == (3 if reason == "eos" else 4)
+
+
 def test_invalid_response_ids_preserve_pending_cache_boundary(
     hybrid_model, monkeypatch
 ):

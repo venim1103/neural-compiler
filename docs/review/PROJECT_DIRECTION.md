@@ -3857,3 +3857,45 @@ are strict integers, while the configured EOS set still uses Python equality.
 [answer-content-cache-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44089672751
 [answer-content-source]: ../../src/neural_compiler/eval/harness.py
 [answer-content-tests]: ../../tests/test_evaluation.py
+
+### 2026-11-17: validate configured EOS IDs before prefill
+
+The [answer-content checkpoint passed hosted CI][eos-admission-prior-ci].
+The dependent [live-session initializer][eos-admission-source] previously
+converted EOS configuration directly into a set. Float/bool IDs could alias
+sampled integer IDs; `[1, True]` even discarded the invalid member during set
+construction. An unsupported tuple became one unmatched set member rather
+than an explicit configuration error. All four malformed cases reached the
+trapped model-prefill seam in the new failing-first check.
+
+The initializer now normalizes the existing int/list/None representation and
+reuses the existing strict token-ID validator **before** deduplication and
+prefill. Valid scalar IDs, disabled EOS (`None`/empty list), duplicate/multiple
+integer EOS IDs and their pending-token behavior are preserved. No new
+nonnegativity/vocabulary restriction, signature, schema, execution policy or
+budget was adopted. The installed Transformers `GenerationConfig` EOS-field
+documentation independently specifies the optional int/list[int] form.
+
+**Finite scope and results:** [seven new cases][eos-admission-tests] comprise
+four malformed scalar/container inputs with all model forwards trapped and
+three valid disabled/multi-EOS controls. Each valid control uses at most two
+tiny CPU forwards, at most three IDs per forward and one forced sample.
+Initial focus **4 failed, 3 passed** (0.33 s); repaired focus **7 passed**
+(0.13 s). Coupled checkpoint/serving/evaluation regressions **318 passed**
+(26.94 s); root **573 passed, 3 skipped** (26.38 s), fourteen existing Torch
+warnings. One failing focus, one repaired focus and one coupled/root invocation
+spent; no aborts, refunded attempts or relaxed assertions. Root Ruff, two-file
+formatting/whitespace and diagnostics passed (unused-parameter hints only);
+the formatter left both files unchanged. Existing ordinary/special EOS,
+exact-answer replay and multi-call/full-prefill reference controls remain green.
+
+The three skips still represent absent writable controller qualification.
+Trusted jailed Python/C/assembly and Wasm/Unicorn controls actually ran. No
+dependencies, model/data downloads, pretrained/GPU jobs, host changes or
+retained artifacts. Next take a bounded read-only primary-source review of a
+real engine's raw-token and stop-boundary APIs before any dependency adoption;
+missing installed packages alone do not exhaust that compatible prerequisite.
+
+[eos-admission-prior-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44091648417
+[eos-admission-source]: ../../src/neural_compiler/bridge/session.py
+[eos-admission-tests]: ../../tests/test_checkpoints.py
