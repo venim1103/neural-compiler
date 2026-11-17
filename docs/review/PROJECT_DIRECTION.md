@@ -3628,3 +3628,54 @@ repair, not production containment or the outstanding project milestones.
 
 [policy-counter-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44081345922
 [policy-counter-source]: ../../src/neural_compiler/bridge/native.py
+
+### 2026-11-17: trusted native-tier runtime syscall summaries
+
+The [shared-policy checkpoint passed hosted CI][tier-runtime-ci].
+Four default no-filter runtime-tail summaries now complement the Python
+observations. Requests were serialized in one reused controller under a
+one-worker resource budget. The temporary wrapper prepended
+`strace -f -c -qq --` only to read-only [runtime execution][tier-runtime-source];
+C/assembly compilation remained untraced inside its normal writable jail.
+WAT/Unicorn engines remained in jailed workers with their usual runtime-prefix
+mount and interpreter flags. Every request retained a five-second deadline
+and 16,384-byte combined output cap; no configured filter/controller was disabled.
+
+| Trusted constant-42 runtime | Printed syscall names | Counted calls | Errors |
+|---|---:|---:|---:|
+| Strict C99 / gcc | 18 | 34 | 6 |
+| Linked x86-64 assembly | 18 | 34 | 6 |
+| WAT worker, fuel 1,000 | 33 | 1,303 | 141 |
+| Hex worker, instruction budget 100 | 31 | 1,580 | 177 |
+
+All four successful traces returned **ok/0**, exact `42\n`, one read-only
+runtime trace per tier and complete row/footer count agreement. The C/assembly
+names outside the **Python-only** candidate were `access` (one failed call);
+hex additionally observed two successful sockets and two failed connects.
+WAT additionally observed `statfs` (one failed call) and `uname` (one successful
+call), as well as that access/socket/connect set. These are contextual
+observations, not required permissions or candidate additions. WAT totals
+include its worker's validation/JIT; C/assembly compilation is excluded, so
+this is not a matched compile-time or latency comparison.
+
+The initial assembly fixture omitted its dialect/export framing and correctly
+returned **compile_error/1** before runtime (`operand size mismatch for mov`).
+After inspecting the verbatim-source contract, one narrowly revised attempt
+used the [existing actual-jail golden][tier-runtime-tests] with
+`.intel_syntax noprefix`, `.global solve` and `solve:`. It passed without
+changing compiler flags or controls. The successful C summary was not rerun;
+the then-unattempted WAT/hex requests ran once each. Total: **five** native
+requests (C one, assembly two, WAT one, hex one), three compiler requests and
+four runtime traces; one recorded fixture failure, no aborted jobs, refunded
+attempts, raw trace files or retained temporary source/binaries.
+
+These are tiny trusted local observations on the previously recorded strace/
+kernel environment, not exhaustive syscall contracts, production containment,
+large-program fit or task-quality evidence. No policies, dependencies,
+model/data, accepted cohorts or host security changed. The unchanged
+**557-pass/two-cgroup-skip** code gate was not rerun for this evidence-only
+update; scoped references and whitespace are validated before checkpointing.
+
+[tier-runtime-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44082394849
+[tier-runtime-source]: ../../src/neural_compiler/bridge/native.py
+[tier-runtime-tests]: ../../tests/test_native_bridge.py
