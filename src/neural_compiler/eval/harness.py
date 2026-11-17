@@ -251,7 +251,7 @@ class Budgets:
                 raise ValueError(f"{name} must be a positive integer")
         for name in ("wall_seconds", "execution_seconds"):
             value = getattr(self, name)
-            if not math.isfinite(value) or value <= 0:
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{name} must be finite and positive")
 
 
@@ -288,12 +288,18 @@ class CallRecord:
 
     def __post_init__(self) -> None:
         _validate_execution_status(self.status)
-        if not math.isfinite(self.execution_seconds) or self.execution_seconds < 0:
+        if (
+            isinstance(self.execution_seconds, bool)
+            or not math.isfinite(self.execution_seconds)
+            or self.execution_seconds < 0
+        ):
             raise ValueError("Call execution time must be finite and nonnegative")
         if type(self.response_tokens) is not int or self.response_tokens < 0:
             raise ValueError("response_tokens must be a nonnegative integer")
         if self.response_seconds is not None and (
-            not math.isfinite(self.response_seconds) or self.response_seconds < 0
+            isinstance(self.response_seconds, bool)
+            or not math.isfinite(self.response_seconds)
+            or self.response_seconds < 0
         ):
             raise ValueError("Call response time must be finite and nonnegative")
 
@@ -317,7 +323,11 @@ class CaseResult:
     budgets: Budgets | None = None
 
     def __post_init__(self) -> None:
-        if not math.isfinite(self.elapsed_seconds) or self.elapsed_seconds < 0:
+        if (
+            isinstance(self.elapsed_seconds, bool)
+            or not math.isfinite(self.elapsed_seconds)
+            or self.elapsed_seconds < 0
+        ):
             raise ValueError("Case elapsed time must be finite and nonnegative")
         if self.path not in _PATHS:
             raise ValueError(f"Unknown evaluation path: {self.path}")

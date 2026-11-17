@@ -1061,6 +1061,25 @@ def test_invalid_time_cannot_produce_a_success_shaped_cost(elapsed):
         CaseResult("a", "unit", "no_tool", "correct", "", "42", elapsed, 3, 0, ())
 
 
+@pytest.mark.parametrize("value", [False, True])
+@pytest.mark.parametrize(
+    "record,field",
+    [
+        (Budgets(), "wall_seconds"),
+        (Budgets(), "execution_seconds"),
+        (CallRecord("ok", 0, 0), "execution_seconds"),
+        (CallRecord("ok", 0, 0), "response_seconds"),
+        (
+            CaseResult("a", "unit", "no_tool", "correct", "", "42", 0, 3, 0, ()),
+            "elapsed_seconds",
+        ),
+    ],
+)
+def test_boolean_times_cannot_enter_evaluation_costs(record, field, value):
+    with pytest.raises(ValueError, match="finite and"):
+        replace(record, **{field: value})
+
+
 def test_bootstrap_does_not_discard_zero_success_resamples():
     good = CaseResult("good", "unit", "no_tool", "correct", "", "", 1, 3, 0, ())
     bad = replace(good, case_id="bad", outcome="wrong_answer", elapsed_seconds=10)

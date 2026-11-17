@@ -3078,3 +3078,29 @@ spent, no failures/aborts; fourteen existing Torch warnings, no skips. Existing
 jailed/native controls ran; no additional workloads, model studies, dependencies,
 downloads, GPU access or retained artifacts. This checks supplied CPU
 observations only, not engine authenticity, GPU kernels or production serving.
+
+### 2026-11-17: reject boolean evaluation times before scoring
+
+The in-memory time guards used `math.isfinite`, which accepts booleans. Unlike
+the strict evidence codec, they admitted `False` as zero elapsed/execution/return
+time and `True` as a positive time allowance. This allowed invalid observations
+into cost metrics and made constructor admission inconsistent with persistence.
+The owning `Budgets`, `CallRecord` and `CaseResult` guards now explicitly reject
+booleans across all five time fields. Existing numeric durations, valid measured
+zeros and unmeasured `None` return timing retain their behavior. No metric,
+deadline, tolerance, record schema or observed outcome was redefined.
+
+**Finite scope and results:** ten constructor-replacement cases, no model/guest
+execution. Initial focus: **8 failed, 2 passed** (0.22 s); the two false positive-
+budget cases were already rejected by the existing positivity guard. After the
+boolean repair: **10 passed** (0.05 s). Coupled evaluation/record:
+**199 passed** (7.45 s); root: **501 passed** (19.41 s). Root Ruff, two-file
+format, whitespace and owning-source diagnostics passed. One failing focus,
+one necessary repaired focus, one coupled/root invocation spent, no aborts;
+fourteen existing Torch warnings, no skips. Existing jailed/native controls ran,
+with no additional workloads, studies, dependencies, downloads or GPU access.
+No new artifacts. Public hosted CI for the preceding pushed CLI checkpoint
+`0a12d50` also [completed successfully][checked-serving-replay-ci].
+Next check: the same finite-positive timeout contract at executor entry points.
+
+[checked-serving-replay-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44049031348
