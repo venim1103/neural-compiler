@@ -3899,3 +3899,75 @@ missing installed packages alone do not exhaust that compatible prerequisite.
 [eos-admission-prior-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44091648417
 [eos-admission-source]: ../../src/neural_compiler/bridge/session.py
 [eos-admission-tests]: ../../tests/test_checkpoints.py
+
+### 2026-11-17: pinned pause controls are not an exact tool boundary
+
+The [EOS-admission checkpoint passed hosted CI][eos-admission-ci] at `fe07b1b`.
+The next source-review prerequisite reused inspected SGLang commit
+`297e54fd105e974cdf401e5b4d20253a22c16f90`, rather than selecting another
+release or repeating the already documented raw-token output trace. The
+explicitly uninspected gap was pause/continue control ownership and semantics.
+
+[The request definitions][sglang-session-requests] default pause to **abort**.
+`in_place` and `retract` are distinct: [the scheduler][sglang-pause-scheduler]
+sets a global paused flag in both cases, but `in_place` leaves `running_batch`,
+`last_batch`, `chunked_req` and `result_queue` untouched. Retraction can drain
+pending results and requeue/rebuild requests; it is not the unchanged live-cache
+path. Continue optionally empties the CUDA allocator cache, enabled by default.
+None of these methods was executed.
+
+The actual pause/continue methods are on [TokenizerManager][sglang-final-response].
+Its pause condition gates new generation requests. Non-abort pause/continue
+await `_async_dispatch_to_scheduler`; that method awaits `async_sock_send`,
+whose complete helper only sends a ZMQ message. This inspected control path
+does not return a sampled-token/cache-boundary acknowledgement. In-place pause
+also deliberately retains pending overlap results. An application must not
+equate completion of that send with the exact emitted tool-close boundary or
+label it as our qualified `live_pause_resume` path. Per-request tool-result
+insertion, exact hybrid state and multi-call logits still need an actual
+integration hook and acceptance evidence. Other inherited/RPC interfaces are
+not claimed absent.
+
+The complete concrete [Engine signatures and request constructors][sglang-engine-source]
+expose log-probability, hidden-state and custom-logit-processor options, but no
+raw-logits return argument. Log probabilities and hidden states are not the
+full raw-logit observations required by our existing comparison contract.
+Custom-processor/RPC paths exist but were not enabled or qualified; this is
+not a claim that no integration hook can be implemented.
+
+**Finite source ledger:** eight successful HTTPS responses, **1,000,220 bytes**
+total, within eight-response/1 MiB total/512 KiB per-response caps and
+15-second I/O timeouts. Import ownership led through the control mixin back to
+the actual manager; two subsequent reads recovered the dispatch/socket helpers,
+not the settled output-handler trace. The final complete Engine parse recovered
+signatures/constructors omitted from the earlier truncated-page evidence.
+No failed/aborted requests or increased caps.
+[The pinned root LICENSE][sglang-source-license] directly identifies
+Apache-2.0; this is not transitive/model licence qualification or adoption of
+an execution pin. No source bodies retained, engine imports/execution, installs,
+checkouts, model/data/GPU jobs, services or host changes. Scoped references and
+whitespace checked; the unchanged **573 passed, 3 skipped** code gate was not
+repeated for this documentation-only result.
+
+**Queue recheck:** [matched evaluation][pause-gate-eval] already preflights
+common budgets/task identities, alongside deterministic synthetic generators
+and saved-reference replay. Accepted held-out cohorts/splits and a fresh exact
+study scope remain absent; unit fixtures are not accepted evaluation data.
+[Serving comparisons][pause-gate-serving] retain their CPU-only evidence.
+Terminal metadata still finds no SGLang/vLLM; the inspected release's
+incompatible Torch/Transformers requirements need separately scoped isolated
+adoption, followed by actual boundary/logit/kernel/resource qualification.
+[PID/memory/CPU controller fixtures][pause-gate-cgroups] are ready, but the
+sole visible cgroup2 mount remains read-only/nonwritable and
+`NEURAL_COMPILER_TEST_CGROUP_ROOT` is unset. Writable owner delegation and
+accepted production workload/policy qualification remain necessary; neither
+host changes nor a wider syscall policy is a workaround. No additional concrete
+authorized implementation prerequisite was identified in this owning-code and
+resource sweep; these are remaining project gates, not project completion.
+
+[eos-admission-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44093324066
+[sglang-pause-scheduler]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/managers/scheduler.py
+[sglang-source-license]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/LICENSE
+[pause-gate-eval]: ../../src/neural_compiler/eval/harness.py
+[pause-gate-serving]: ../../src/neural_compiler/eval/serving.py
+[pause-gate-cgroups]: ../../tests/test_cgroups.py
