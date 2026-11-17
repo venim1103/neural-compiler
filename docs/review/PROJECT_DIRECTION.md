@@ -3223,3 +3223,33 @@ existing Torch warnings, no skips. No new model/guest workloads beyond existing
 root controls, accepted data, studies, dependencies, downloads, GPU access or
 artifacts. README documents both actions and the informational boundary.
 Next inspect direct serving-adapter sampler admission before model prefill.
+
+### 2026-11-17: preflight direct adapter sampler overrides
+
+The comparison runner already rejected invalid sampler-factory products, but
+direct live/prefix/full adapter constructors bound non-callable overrides only
+after model prefill or prefix-store access. Six failing-first fixtures reached
+the trapped model-forward seam. All constructors now share an optional-sampler
+callability guard before those operations; prefix checkpoint-budget validation
+retains its existing precedence. Existing `None`/callable behavior, factory
+diagnostics, public signatures, decode budgets and numerical tolerances remain
+unchanged. Module documentation states the direct-admission guarantee.
+
+**Finite scope and results:** six `False`/integer sampler cases across the three
+constructors, existing tiny CPU model construction, three prompt IDs each, no
+new forwards or sampled IDs. The empty prefix store stayed within its 1 MiB cap
+with entry/byte/hit/miss/eviction observations unchanged after rejection.
+Initial focus **6 failed** (0.56 s); repaired **6 passed** (0.19 s); coupled
+checkpoint/serving **145 passed** (10.87 s), including unchanged multi-call
+reference-logit controls; root **531 passed** (30.29 s). One failing focus,
+one repaired focus, one coupled/root invocation spent, no aborts. Root Ruff,
+two-file format, whitespace, owning-source diagnostics and three shared-guard
+callers passed. Fourteen existing Torch warnings, no skips. No new studies,
+dependencies, downloads, GPU/host-security changes or artifacts.
+
+Hosted CI for pushed cohort replay `c3a2b82`
+[completed successfully][task-overlap-replay-ci]. Next reassess the three
+milestone gates against current source prerequisites and available resources;
+do not infer fresh model-study or production-containment authority from fixtures.
+
+[task-overlap-replay-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44054028534

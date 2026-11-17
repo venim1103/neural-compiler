@@ -4,6 +4,8 @@ These adapters wrap `LiveSession` and `CheckpointStore` behind the standard
 `DecodeSession` interface so `EvaluationHarness` can compare serving strategies
 under identical tasks, prompts, checkers, and token/time budgets without altering
 execution contracts or claiming unmeasured hardware speedups.
+Direct adapters reject non-callable sampler overrides before model prefill or
+checkpoint-store access.
 """
 
 from __future__ import annotations
@@ -55,6 +57,13 @@ ALL_SERVING_MODES: tuple[ServingMode, ...] = (
 )
 
 
+def _validate_sampler_override(
+    on_token_override: Callable[[LiveSession], int] | None,
+) -> None:
+    if on_token_override is not None and not callable(on_token_override):
+        raise ValueError("on_token_override must be callable or None")
+
+
 class LivePauseResumeSession:
     """Keep one `LiveSession` resident across tool calls with incremental inject."""
 
@@ -64,6 +73,7 @@ class LivePauseResumeSession:
         prompt_ids: Sequence[int],
         on_token_override: Callable[[LiveSession], int] | None = None,
     ) -> None:
+        _validate_sampler_override(on_token_override)
         self._session = LiveSession(model, prompt_ids)
         if on_token_override is not None:
             self._session._next_token = lambda: on_token_override(self._session)
@@ -111,6 +121,7 @@ class PrefixCachedSession:
             else max_checkpoint_bytes
         )
         _validate_checkpoint_budget(self.max_checkpoint_bytes)
+        _validate_sampler_override(on_token_override)
         self._on_token_override = on_token_override
         self._session: LiveSession | None
         self._session, self.prefill_tokens = store.resume_prefix(model, prompt_ids)
@@ -195,6 +206,7 @@ class FullReprefillSession:
         prompt_ids: Sequence[int],
         on_token_override: Callable[[LiveSession], int] | None = None,
     ) -> None:
+        _validate_sampler_override(on_token_override)
         self.model = model
         self._on_token_override = on_token_override
         self._session: LiveSession | None = LiveSession(model, prompt_ids)

@@ -67,6 +67,34 @@ def test_serving_configuration_precedes_factory_and_prefill(
         )
 
 
+@pytest.mark.parametrize("sampler", [False, 42])
+@pytest.mark.parametrize(
+    "adapter", [LivePauseResumeSession, PrefixCachedSession, FullReprefillSession]
+)
+def test_direct_adapter_sampler_is_checked_before_prefill(
+    hybrid_model, monkeypatch, adapter, sampler
+):
+    store = CheckpointStore(max_total_bytes=1024 * 1024)
+    monkeypatch.setattr(
+        hybrid_model,
+        "forward",
+        lambda *args, **kwargs: pytest.fail("Invalid direct sampler ran model"),
+    )
+    with pytest.raises(ValueError, match="on_token_override must be callable"):
+        if adapter is PrefixCachedSession:
+            adapter(hybrid_model, [1, 2, 3], store, on_token_override=sampler)
+        else:
+            adapter(hybrid_model, [1, 2, 3], on_token_override=sampler)
+    if adapter is PrefixCachedSession:
+        assert (
+            store.entries,
+            store.total_bytes,
+            store.hits,
+            store.misses,
+            store.evictions,
+        ) == (0, 0, 0, 0, 0)
+
+
 @pytest.mark.parametrize("sampler", [None, 42, "not-callable"])
 def test_invalid_sampler_factory_result_never_prefills(
     tokenizer, hybrid_model, monkeypatch, sampler
