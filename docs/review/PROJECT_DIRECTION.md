@@ -2769,3 +2769,39 @@ accepted evaluation inputs/exact run scope, separately scoped serving-engine
 dependencies/runtime qualification, or writable cgroup predelegation and accepted
 production policies. Further provenance fields alone would not satisfy those
 gates.
+
+### 2026-11-17: persist validated offline case evidence
+
+The user explicitly delegated policy/approach selection and fully autonomous
+continuation. Routine policy consent is no longer a missing-input gate; this
+does not turn consent into factual containment qualification. The selected next
+milestone is a usable offline evidence-save/report-replay workflow, without
+model execution, new dependencies or shared-host changes.
+
+[Case evidence I/O][case-records] exports `dump_case_results(results, stream)`
+and `load_case_results(stream)` from the evaluation package. Schema version 1
+contains a `cases` array of complete nested result records. It preserves call
+failures, response timing, optional prompt/task-text/budget observations and
+legacy unknowns. The reader rejects duplicate/unknown fields, missing required
+fields, unsupported versions, boolean numeric values, nonfinite numbers and
+partial budget objects. Existing record contracts validate counts, times and
+statuses; paired-report coverage/provenance checks remain with report consumers.
+The writer validates before writing strict ASCII-escaped JSON and reports short
+writes explicitly. Streams remain caller-owned; this is not an atomic-file or
+untrusted-service interface, accepted dataset, authenticated evidence or study.
+
+**Finite scope and results:** at most 18 new synthetic fixtures, at most six
+records each; no model/guest execution in those fixtures. All **18 passed**
+(0.07 s), including failure-inclusive deterministic report equality, Unicode
+round-trip, malformed input, unknown optional observations, pre-write rejection
+and short-write reporting. Coupled evidence/evaluation/serving: **201 passed**
+(12.00 s); root: **406 passed** (16.90 s). Root Ruff, three-file format and
+whitespace checks passed; both owning-source diagnostics were empty and all
+eight dump/load callers were signature-compatible. Fourteen existing Torch
+warnings, no skips; existing jailed/native controls ran in the root gate.
+One focus, coupled and root invocation spent, with one formatter application,
+no failures or aborts. Temporary files were managed by test fixtures; no study
+artifacts, downloads or dependencies were added. Next concrete action: expose
+offline report replay in the existing CLI with explicit input/coverage failures.
+
+[case-records]: ../../src/neural_compiler/eval/records.py

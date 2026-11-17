@@ -8,6 +8,8 @@ from .families import (
 from .harness import (
     ALL_OUTCOMES,
     Budgets,
+    CallRecord,
+    CaseResult,
     EvaluationHarness,
     IntegerChecker,
     IntegerSequenceChecker,
@@ -17,6 +19,7 @@ from .harness import (
     run_matched,
     summarize,
 )
+from .records import dump_case_results, load_case_results
 from .serving import (
     ALL_SERVING_MODES,
     FullReprefillSession,
@@ -32,6 +35,8 @@ __all__ = [
     "ALL_OUTCOMES",
     "ALL_SERVING_MODES",
     "Budgets",
+    "CallRecord",
+    "CaseResult",
     "EvaluationHarness",
     "FullReprefillSession",
     "IntegerChecker",
@@ -45,6 +50,8 @@ __all__ = [
     "Task",
     "generate_family_tasks",
     "generate_matched_suite",
+    "dump_case_results",
+    "load_case_results",
     "matched_report",
     "run_matched",
     "run_serving_comparison",
