@@ -105,6 +105,79 @@ def test_invalid_format_is_not_scored_as_correct(tokenizer, hybrid_model, monkey
     assert result.generated_tokens > 0
 
 
+@pytest.mark.parametrize(
+    "path,payload,termination",
+    [
+        ("no_tool", "Final answer: 4<tool_response>2", "eos"),
+        ("python_tool", "Final answer: 42<|im_start|>", "length"),
+    ],
+)
+def test_final_answer_preserves_generated_special_tokens(
+    tokenizer, hybrid_model, monkeypatch, path, payload, termination
+):
+    text = payload + ("<|im_end|>" if termination == "eos" else "")
+    count = len(tokenizer.encode(text, add_special_tokens=False))
+    assert count <= 64
+    runner = harness_for(
+        tokenizer,
+        hybrid_model,
+        monkeypatch,
+        text,
+        budgets=replace(
+            Budgets(),
+            generated_tokens=count,
+            turn_tokens=count,
+            prompt_tokens=512,
+            context_tokens=1024,
+            wall_seconds=5,
+        ),
+        executor=lambda *args, **kwargs: pytest.fail("Must not execute"),
+    )
+    result = runner.run(
+        Task("marked-answer", "unit", "Compute six times seven.", IntegerChecker(42)),
+        path,
+    )
+    assert result.outcome == (
+        "invalid_answer" if termination == "eos" else "budget_exhausted"
+    )
+    assert result.answer == payload
+    assert result.generated_tokens == count
+    assert result.calls == () and result.injected_tokens == 0
+
+
+@pytest.mark.parametrize("terminal", ["<tool_response>", "!"])
+def test_final_answer_respects_the_sampled_eos_boundary(
+    tokenizer, hybrid_model, monkeypatch, terminal
+):
+    terminal_ids = tokenizer.encode(terminal, add_special_tokens=False)
+    assert len(terminal_ids) == 1
+    hybrid_model.generation_config.eos_token_id = terminal_ids[0]
+    text = f"Final answer: 42{terminal}"
+    count = len(tokenizer.encode(text, add_special_tokens=False))
+    assert count <= 64
+    runner = harness_for(
+        tokenizer,
+        hybrid_model,
+        monkeypatch,
+        text,
+        budgets=replace(
+            Budgets(),
+            generated_tokens=count,
+            turn_tokens=count,
+            prompt_tokens=512,
+            context_tokens=1024,
+            wall_seconds=5,
+        ),
+    )
+    result = runner.run(
+        Task("alternate-eos", "unit", "Compute six times seven.", IntegerChecker(42)),
+        "no_tool",
+    )
+    assert result.outcome == "correct"
+    assert result.answer == "Final answer: 42"
+    assert result.generated_tokens == count
+
+
 @pytest.mark.parametrize("correct,valid", [("false", True), (True, "false")])
 def test_nonboolean_checker_flags_cannot_count_as_correct(
     tokenizer, hybrid_model, monkeypatch, correct, valid
@@ -260,6 +333,7 @@ def test_total_token_budget_does_not_reset_after_a_tool_call(
         "missing_callback",
         "short_length",
         "empty_length",
+        "empty_eos",
     ],
 )
 def test_decoder_faults_cannot_be_scored_or_execute(
@@ -294,8 +368,8 @@ def test_decoder_faults_cannot_be_scored_or_execute(
         if fault == "short_length":
             limit = 1
         try:
-            if fault == "empty_length":
-                return DecodeResult((), "length")
+            if fault in ("empty_length", "empty_eos"):
+                return DecodeResult((), "eos" if fault == "empty_eos" else "length")
             result = original_decode(session, limit, callback)
             if fault == "returned_ids":
                 return replace(

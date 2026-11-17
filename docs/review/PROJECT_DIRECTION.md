@@ -3808,3 +3808,52 @@ contract; do not treat this repaired slice as project completion.
 
 [forward-boundary-source]: ../../src/neural_compiler/bridge/session.py
 [forward-boundary-tests]: ../../tests/test_checkpoints.py
+
+### 2026-11-17: preserve generated answer content and exact EOS boundaries
+
+The [cache-boundary source checkpoint passed hosted CI][answer-content-cache-ci].
+The next [evaluation producer][answer-content-source] check reproduced a real
+false positive: `Final answer: 4<tool_response>2` followed by EOS was decoded
+with all special tokens removed, becoming `Final answer: 42` and scoring
+**correct**. A token-limited marked answer also lost its marker in saved
+diagnostics. This was answer-content erasure, not a checker-definition change.
+
+Answer decoding now preserves nonterminal special tokens. For a completed
+answer it excludes exactly the sampled terminal EOS, using the existing
+`DecodeResult.reason` contract rather than assuming the tokenizer's default
+EOS or that every configured EOS is special. Generated/history token accounting
+still includes that token exactly once. Token-limited answers preserve their
+entire sampled content. An impossible zero-token EOS result now explicitly
+raises before any scored record, consistently with other invalid providers.
+The sampled-ID contract is clarified in the existing result docstring; no
+schema, tool framing, checker/reference, metric, threshold or budget changed.
+
+**Finite scope and results:** [five new cases][answer-content-tests] cover the
+interrupted integer, marked length-limit diagnostics, configured alternate
+special/ordinary EOS, and empty-EOS provider rejection. Four scripted cases
+retain <=64 sampled IDs, <=65 tiny CPU model forwards, <=512 prompt/1,024 context
+IDs and a five-second cooperative deadline each; the existing empty-provider
+fixture uses one prefill and no sampled IDs. No executor calls occur in these
+new cases. Initial focus **4 failed, 1 passed** (0.69 s); repaired focus
+**5 passed** (0.56 s). The former false positive is now **invalid_answer** and
+its exact marker-bearing text is retained. The alternate ordinary EOS now
+terminates correctly without entering the answer.
+
+Coupled evaluation/record-replay/serving regressions **308 passed** (25.67 s);
+root **566 passed, 3 skipped** (29.77 s), fourteen existing Torch warnings.
+One failing focus, one repaired focus and one coupled/root invocation spent;
+no aborts, refunded attempts or relaxed assertions. Root Ruff, three-file
+formatting/whitespace and diagnostics passed (unused-parameter hints only);
+the formatter left all files unchanged. Existing default-EOS, exact reference,
+multi-call/pending-token and full-prefill controls remain green.
+
+The three skips still require writable delegated PID/memory/CPU controllers.
+Trusted jailed Python/C/assembly and Wasm/Unicorn controls actually ran. No
+dependencies, model/data downloads, pretrained/GPU jobs, host changes, accepted
+datasets, regenerated historical measurements or retained artifacts. Next check
+EOS configuration admission at live-session initialization: sampled token IDs
+are strict integers, while the configured EOS set still uses Python equality.
+
+[answer-content-cache-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44089672751
+[answer-content-source]: ../../src/neural_compiler/eval/harness.py
+[answer-content-tests]: ../../tests/test_evaluation.py

@@ -384,6 +384,7 @@ class EvaluationHarness:
     hard subprocess deadline. An optional tool description declares a configured
     executor without changing the supported run(code) schema or Python default.
     Invalid decoder providers raise explicitly without producing scored records.
+    Answer text excludes only the sampled terminal EOS, not other special tokens.
     """
 
     def __init__(
@@ -509,13 +510,15 @@ class EvaluationHarness:
                     raise RuntimeError(
                         "DecodeSession finish reason disagrees with callback stop"
                     )
+                if decoded.reason == "eos" and not decoded.token_ids:
+                    raise RuntimeError("DecodeSession reported EOS without a token")
                 if decoded.reason == "length":
                     if len(observed_tokens) != turn_limit:
                         raise RuntimeError(
                             "DecodeSession reported length before the requested turn limit"
                         )
                     answer = self.tokenizer.decode(
-                        decoded.token_ids, skip_special_tokens=True
+                        decoded.token_ids, skip_special_tokens=False
                     )
                     raise _RunFailure(
                         "budget_exhausted",
@@ -524,7 +527,7 @@ class EvaluationHarness:
                 protocol.finish()
                 if call is None:
                     answer = self.tokenizer.decode(
-                        decoded.token_ids, skip_special_tokens=True
+                        decoded.token_ids[:-1], skip_special_tokens=False
                     )
                     checked = task.checker(answer)
                     outcome = _answer_outcome(checked)

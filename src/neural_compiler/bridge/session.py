@@ -27,6 +27,8 @@ class CheckpointBudgetError(ValueError):
 
 @dataclass(frozen=True)
 class DecodeResult:
+    """Sampled IDs include the terminal EOS or callback-stop token, if any."""
+
     token_ids: tuple[int, ...]
     reason: Literal["stop", "eos", "length"]
 
