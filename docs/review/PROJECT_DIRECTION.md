@@ -3497,3 +3497,55 @@ bounded evidence prerequisites without changing the candidate syscall list.
 
 [immutable-syscalls-prior-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44076972163
 [immutable-syscalls-source]: ../../src/neural_compiler/bridge/seccomp.py
+
+### 2026-11-17: bounded trusted Python startup syscall observations
+
+The [immutable-policy checkpoint passed hosted CI][runtime-probes-ci].
+Two separate bounded trusted requests advanced the candidate-policy evidence
+without changing its syscall list. A temporary command wrapper prepended the
+installed strace to the existing [jailed Python command][runtime-probes-execution];
+the supervisor, read-only work mount, namespaces and normal
+`/usr/bin/python3 -I -u /work/prog.py` flags were unchanged. These were default
+no-filter fixtures, not a bypass of an enabled filter. Both retained a five-second
+request deadline and 16,384-byte combined output cap.
+
+One `strace -f -c -qq -- <guest command>` request evaluated
+`math.comb(40, 20)`. Strace **6.8** on kernel
+`6.18.58.1-microsoft-standard-WSL2` reported **30 syscall names, 324 counted
+calls and 46 errors**. Status/return code were **ok/0**, stdout was exactly
+`137846528820\n`, and parsed per-row calls/errors matched the complete summary
+footer. The names outside the current candidate were:
+
+| Observed syscall | Calls | Errors |
+|---|---:|---:|
+| `access` | 1 | 1 |
+| `socket` | 2 | 0 |
+| `connect` | 2 | 2 |
+
+That new evidence prompted one narrower attribution request, not another
+summary run. It selected only `access,socket,connect,write` with 96-byte strings
+and inserted a fixed trusted stderr body marker before importing math.
+All five access/socket/connect calls preceded that marker; none followed it.
+The access checked `/etc/ld.so.preload` and failed with `ENOENT`; both sockets
+were `AF_UNIX`, and both connects targeted `/var/run/nscd/socket` and failed
+with `ENOENT`. The request again returned **ok/0** and the exact arithmetic
+answer. This attributes the observed probes before the arithmetic body,
+not to a required guest network capability.
+
+One installed-tool version query (two-second cap), one summary request and
+one evidence-driven attribution request were spent; no failed attempts,
+aborts, relaxed caps, raw trace files or retained guest source. Only owned
+in-jail children were traced. The [unchanged filtered arithmetic control][runtime-probes-tests]
+already passed in the **547-pass/two-skip** root gate with those three names
+absent from its allowlist. Observed use is not proof a call must be allowed:
+no socket/connect/access permission was added.
+
+These are local post-launcher interpreter observations, not an exhaustive
+syscall contract, trusted-launcher inventory, latency measurement or production
+containment qualification. No host-security, dependency, model/data or policy
+adoption changes. This evidence-only update does not rerun an unchanged code
+gate; scoped references and whitespace are checked before its checkpoint.
+
+[runtime-probes-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44078636047
+[runtime-probes-execution]: ../../src/neural_compiler/bridge/execution.py
+[runtime-probes-tests]: ../../tests/test_seccomp.py
