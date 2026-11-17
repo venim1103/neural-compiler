@@ -41,6 +41,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Check exact task references with --eval-report or --serving-report",
     )
     parser.add_argument(
+        "--eval-development-tasks",
+        type=Path,
+        metavar="FILE",
+        help="Report declared development-task overlaps alongside --eval-tasks",
+    )
+    parser.add_argument(
         "--check-serving-logits",
         action="store_true",
         help="Check recorded CPU logits against full reprefill with --serving-report",
@@ -88,12 +94,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--eval-tasks requires --eval-report or --serving-report")
     if args.check_serving_logits and args.serving_report is None:
         parser.error("--check-serving-logits requires --serving-report")
+    if args.eval_development_tasks is not None and args.eval_tasks is None:
+        parser.error("--eval-development-tasks requires --eval-tasks")
     if args.version:
         print(json.dumps({"name": "neural-compiler", "version": __version__}))
         return 0
     if args.eval_report or args.serving_report:
         from neural_compiler.eval import (
             ServingCaseResult,
+            inspect_task_overlap,
             load_case_results,
             load_serving_results,
             load_tasks,
@@ -112,10 +121,15 @@ def main(argv: list[str] | None = None) -> int:
                 serving_results = load_serving_results(source)
                 results = tuple(row.case for row in serving_results)
         reference_checks: dict[str, int] | None = None
+        task_overlap: dict[str, object] | None = None
         if args.eval_tasks is not None:
             with args.eval_tasks.open(encoding="utf-8") as source:
                 tasks = load_tasks(source)
             reference_checks = validate_references(tasks, results)
+            if args.eval_development_tasks is not None:
+                with args.eval_development_tasks.open(encoding="utf-8") as source:
+                    development = load_tasks(source)
+                task_overlap = inspect_task_overlap(development, tasks)
         if serving_results is None:
             report = matched_report(results)
         else:
@@ -129,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
                 report["logit_validation"] = logit_checks
         if reference_checks is not None:
             report["reference_validation"] = reference_checks
+        if task_overlap is not None:
+            report["task_overlap"] = task_overlap
         print(json.dumps(report, allow_nan=False))
         return 0
     if args.check_imports:

@@ -90,17 +90,25 @@ def test_cli_check_imports_and_native_flags(
 
 
 @pytest.mark.parametrize(
-    "with_tasks,serving,check_logits",
+    "with_tasks,serving,check_logits,with_development",
     [
-        (False, False, False),
-        (True, False, False),
-        (False, True, False),
-        (True, True, False),
-        (True, True, True),
+        (False, False, False, False),
+        (True, False, False, False),
+        (True, False, False, True),
+        (False, True, False, False),
+        (True, True, False, False),
+        (True, True, True, False),
+        (True, True, True, True),
     ],
 )
 def test_cli_replays_failed_cases_without_execution(
-    monkeypatch, tmp_path: Path, capsys, with_tasks, serving, check_logits
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+    with_tasks,
+    serving,
+    check_logits,
+    with_development,
 ):
     from neural_compiler import bridge
     from neural_compiler.bridge.session import LiveSession
@@ -179,6 +187,28 @@ def test_cli_replays_failed_cases_without_execution(
             "answer_checks": 3,
             "task_text_checks": 0,
             "nonfinal_records": 0,
+        }
+    if with_development:
+        development = tmp_path / "development.json"
+        with development.open("w", encoding="utf-8") as destination:
+            dump_tasks(
+                [
+                    Task(
+                        "development",
+                        "development",
+                        "A unit fixture.",
+                        IntegerChecker(99),
+                    )
+                ],
+                destination,
+            )
+        arguments.extend(["--eval-development-tasks", str(development)])
+        expected["task_overlap"] = {
+            "development_tasks": 1,
+            "evaluation_tasks": 1,
+            "overlapping_case_ids": [],
+            "overlapping_families": [],
+            "evaluation_prompt_overlap_ids": ["case"],
         }
     if check_logits:
         arguments.append("--check-serving-logits")
@@ -322,3 +352,58 @@ def test_cli_logit_checks_require_serving_report_before_file_access(
         captured = capsys.readouterr()
         assert captured.out == ""
         assert "--check-serving-logits requires --serving-report" in captured.err
+
+
+def test_cli_development_tasks_require_references_before_file_access(
+    tmp_path: Path, capsys
+):
+    absent = str(tmp_path / "absent.json")
+    for action in (
+        [],
+        ["--version"],
+        ["--eval-report", absent],
+        ["--serving-report", absent],
+    ):
+        with pytest.raises(SystemExit) as error:
+            main([*action, "--eval-development-tasks", absent])
+        assert error.value.code == 2
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "--eval-development-tasks requires --eval-tasks" in captured.err
+
+
+def test_cli_invalid_development_tasks_never_print_a_report(tmp_path: Path, capsys):
+    from neural_compiler.eval import (
+        CaseResult,
+        IntegerChecker,
+        Task,
+        dump_case_results,
+        dump_tasks,
+    )
+
+    evidence = tmp_path / "cases.json"
+    specification = tmp_path / "tasks.json"
+    development = tmp_path / "development.json"
+    rows = [
+        CaseResult("case", "unit", path, "correct", "", "Final answer: 42", 1, 1, 0, ())
+        for path in ("no_tool", "python_tool", "current_best")
+    ]
+    with evidence.open("w", encoding="utf-8") as destination:
+        dump_case_results(rows, destination)
+    with specification.open("w", encoding="utf-8") as destination:
+        dump_tasks(
+            [Task("case", "unit", "A fixture.", IntegerChecker(42))], destination
+        )
+    development.write_text('{"schema_version":2,"tasks":[]}', encoding="utf-8")
+    with pytest.raises(ValueError, match="Unsupported.*schema_version"):
+        main(
+            [
+                "--eval-report",
+                str(evidence),
+                "--eval-tasks",
+                str(specification),
+                "--eval-development-tasks",
+                str(development),
+            ]
+        )
+    assert capsys.readouterr().out == ""

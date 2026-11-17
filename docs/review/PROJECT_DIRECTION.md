@@ -3195,3 +3195,31 @@ signature checks and refreshed diagnostics confirmed the new API. No new task
 acceptance, datasets, studies, dependencies, downloads, GPU access or artifacts.
 Next: expose this same informational inventory during optional reference-checked
 CLI replay, leaving ordinary output and acceptance boundaries unchanged.
+
+### 2026-11-17: optionally include task-cohort inventory during report replay
+
+`--eval-development-tasks FILE` now composes with `--eval-tasks` and either
+matched or serving replay. It requires the reference-task option before file
+access; the existing reference option still requires a report action. Both
+specifications use strict task I/O, and validation/inventory finishes before
+aggregation or output. Opted-in JSON adds only `task_overlap`; ordinary report
+shapes remain unchanged. Actual overlaps are informational and can accompany
+successful report generation, not a split-acceptance or absence-of-exposure
+decision. Invalid development specifications emit no partial report.
+
+**Finite scope and results:** initially three new synthetic CLI cases, at most
+three case rows/three CPU logits and two task specifications: combined serving/
+logit/reference/inventory replay with execution trapped, four missing-reference
+argument combinations and malformed-development-schema failure. Initial CLI
+focus **17 passed** (0.09 s), root **524 passed** (19.37 s). Exact-contract
+review required a positive matched-action inventory case as well: one bounded
+extra fixture, **1 passed** (0.05 s), then the necessary final root
+**525 passed** (21.46 s). Earlier successes remain spent; no unchanged full
+focus rerun, failures, aborts or relaxed limits.
+
+Root Ruff, two-file format and whitespace passed; owning-source diagnostics
+empty, nineteen CLI/five inventory call sites signature-compatible. Fourteen
+existing Torch warnings, no skips. No new model/guest workloads beyond existing
+root controls, accepted data, studies, dependencies, downloads, GPU access or
+artifacts. README documents both actions and the informational boundary.
+Next inspect direct serving-adapter sampler admission before model prefill.

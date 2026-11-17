@@ -135,6 +135,12 @@ answers/text from nonfinal failures and unknown text observations. This verifies
 agreement with the supplied references, not their authenticity, dataset quality,
 full model prompts, matched hardware or production qualification.
 
+Add `--eval-development-tasks .runs/development_tasks.json` alongside
+`--eval-tasks` with either report action to include the informational
+`task_overlap` inventory. Overlaps are reported, not automatically rejected as a
+benchmark policy; successful replay still does not accept a split. Invalid
+development specifications fail before any report is printed.
+
 Serving-comparison rows have corresponding `dump_serving_results(results, stream)`
 and `load_serving_results(stream)` APIs. These preserve nested case evidence,
 token/logit-prefix boundaries, cache counters and detached dense CPU logits.
