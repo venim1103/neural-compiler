@@ -52,6 +52,19 @@ def test_bridge_policy_rejects_boolean_timeout():
 
 
 @pytest.mark.parametrize(
+    "field,counter", [("wat_fuel", ctypes.c_uint64), ("hex_max_insns", ctypes.c_size_t)]
+)
+@pytest.mark.parametrize("overflow", [0, 1], ids=["maximum", "overflow"])
+def test_bridge_policy_matches_runtime_counter_range(field, counter, overflow):
+    budget = (1 << (8 * ctypes.sizeof(counter))) - 1 + overflow
+    if overflow:
+        with pytest.raises(ValueError, match=rf"{field}.*counter"):
+            BridgePolicy(**{field: budget})
+    else:
+        BridgePolicy(**{field: budget})
+
+
+@pytest.mark.parametrize(
     "runner,program,budget_name,counter,module",
     [
         pytest.param(

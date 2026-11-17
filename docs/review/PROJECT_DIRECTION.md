@@ -3597,3 +3597,34 @@ counter boundary with completion of the remaining project gates.
 
 [runtime-counter-native]: ../../src/neural_compiler/bridge/native.py
 [runtime-counter-tests]: ../../tests/test_native_bridge.py
+
+### 2026-11-17: apply counter admission to shared bridge policies
+
+The [direct-runtime counter checkpoint passed hosted CI][policy-counter-ci].
+Its dependent-callsite check found that [BridgePolicy][policy-counter-source]
+still accepted out-of-range `wat_fuel` / `hex_max_insns` until dispatch.
+The existing representation check is now one shared private validator used by
+both direct runtime calls and policy construction. Unsupported frozen
+configurations reject immediately; exact maxima, defaults, old field-specific
+positive-integer errors and execution behavior remain unchanged.
+
+This narrowly revised source scope retained the preceding spent ledger.
+Four new constructor-only cases cross both fields with their exact unsigned
+maximum and one above. Initial focus **2 failed, 2 passed** (0.08 s);
+repaired focus **4 passed** (0.03 s). No bridge requests, filter exports or
+model forwards occur in those cases. The new source regression gate includes
+the preceding six runtime-boundary cases as unchanged controls: coupled
+native/execution **71 passed** (2.10 s), root **557 passed, 2 skipped**
+(32.76 s), fourteen existing Torch warnings. One failing focus, one repaired
+focus and one coupled/root invocation spent, with no new VM diagnostic,
+aborts, relaxed limits or reset of earlier attempts.
+
+Root Ruff, two-file formatting, source diagnostics and whitespace passed.
+Relevant jailed Python/C/assembly and Wasm/Unicorn controls ran, including
+exact-maximum worker checks. The two skips still require writable cgroup
+delegation. No dependency, model/data, accepted-policy, host-security or
+retained-artifact changes. This completes the identified caller-consistency
+repair, not production containment or the outstanding project milestones.
+
+[policy-counter-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44081345922
+[policy-counter-source]: ../../src/neural_compiler/bridge/native.py

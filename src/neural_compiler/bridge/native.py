@@ -36,6 +36,18 @@ ASM_HARNESS = (
 )
 
 
+def _validate_runtime_budget(
+    language: str, budget: int, name: str = "execution budget"
+) -> None:
+    if type(budget) is not int or budget <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    counter = ctypes.c_uint64 if language == "wat" else ctypes.c_size_t
+    if counter(budget).value != budget:
+        raise ValueError(
+            f"{name} exceeds the unsigned {8 * ctypes.sizeof(counter)}-bit counter range"
+        )
+
+
 def _request_deadline(timeout: float, output_limit: int) -> float:
     _validate_execution_budget(timeout, output_limit)
     return time.monotonic() + timeout
@@ -195,13 +207,7 @@ def _run_jailed_runtime(
     cgroup: CgroupLimits | None = None,
 ) -> ExecutionResult:
     validate_code(code)
-    if type(budget) is not int or budget <= 0:
-        raise ValueError("execution budget must be a positive integer")
-    counter = ctypes.c_uint64 if language == "wat" else ctypes.c_size_t
-    if counter(budget).value != budget:
-        raise ValueError(
-            f"execution budget exceeds the unsigned {8 * ctypes.sizeof(counter)}-bit counter range"
-        )
+    _validate_runtime_budget(language, budget)
     deadline = _request_deadline(timeout, output_limit)
     result = None
     try:
@@ -328,10 +334,8 @@ class BridgePolicy:
         _validate_execution_budget(self.timeout, self.output_limit)
         if self.c_compiler not in _C_COMPILER_COMMANDS:
             raise ValueError(f"Unsupported C compiler: {self.c_compiler!r}")
-        if type(self.wat_fuel) is not int or self.wat_fuel <= 0:
-            raise ValueError("wat_fuel must be a positive integer")
-        if type(self.hex_max_insns) is not int or self.hex_max_insns <= 0:
-            raise ValueError("hex_max_insns must be a positive integer")
+        _validate_runtime_budget("wat", self.wat_fuel, "wat_fuel")
+        _validate_runtime_budget("hex", self.hex_max_insns, "hex_max_insns")
 
 
 def execute_program(
