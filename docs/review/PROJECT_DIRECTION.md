@@ -3460,3 +3460,40 @@ real-engine or containment gates.
 
 [snapshot-clone-bytes-session]: ../../src/neural_compiler/bridge/session.py
 [snapshot-clone-bytes-tests]: ../../tests/test_checkpoints.py
+
+### 2026-11-17: enforce the frozen syscall policy's declared tuple input
+
+The [snapshot-byte checkpoint passed hosted CI][immutable-syscalls-prior-ci].
+The next policy-source check found that the frozen
+[SeccompPolicy][immutable-syscalls-source] accepted mutable lists, sets and
+mapping keys as its allowlist. It also accepted a bare string such as `write`,
+iterating its characters as syscall names. Frozen field assignment did not
+make those mutable input containers immutable.
+
+Constructor admission now requires the declared tuple container before the
+existing nonempty, uniqueness and name checks, matching the nearby cgroup
+tuple-validation pattern. Valid tuple policies, merge behavior, syscall
+contents, filter construction and execution limits are unchanged. This rejects
+undeclared input shapes; it does not adopt a production policy.
+
+**Finite scope and results:** four new constructor cases (string/list/set/
+mapping, at most two intended names each) plus the unchanged valid-tuple/merge
+control. The selected fixtures make no bridge requests, filter exports or
+model forwards. Initial focus **4 failed, 1 passed** (0.04 s), all failures
+showing the wrong container was accepted; repaired focus **5 passed** (0.04 s).
+One coupled syscall/execution/native/import/cgroup invocation **114 passed,
+2 skipped** (2.53 s); root **547 passed, 2 skipped** (29.84 s), fourteen
+existing Torch warnings. One failing focus, one repaired focus, one coupled/root
+invocation spent, with no aborts or relaxed limits. Root Ruff, two-file format,
+whitespace and source diagnostics passed; test diagnostics contain one existing
+unused fixture-argument hint. Trusted jailed Python/C/assembly and Wasm/Unicorn
+controls ran, including the unchanged filtered Python positive/denial controls.
+
+The two skips explicitly require `NEURAL_COMPILER_TEST_CGROUP_ROOT` to name a
+writable delegated subtree. There are no new controller, syscall-inventory,
+production-containment, model-quality or serving measurements. No dependency,
+download, host-security, accepted-cohort or retained-artifact changes. Continue
+bounded evidence prerequisites without changing the candidate syscall list.
+
+[immutable-syscalls-prior-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44076972163
+[immutable-syscalls-source]: ../../src/neural_compiler/bridge/seccomp.py

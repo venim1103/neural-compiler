@@ -24,6 +24,8 @@ class SeccompPolicy:
     allowed_syscalls: tuple[str, ...]
 
     def __post_init__(self) -> None:
+        if not isinstance(self.allowed_syscalls, tuple):
+            raise ValueError("Syscall allowlist must be an immutable tuple")
         if not self.allowed_syscalls or len(set(self.allowed_syscalls)) != len(
             self.allowed_syscalls
         ):

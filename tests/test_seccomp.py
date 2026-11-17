@@ -68,6 +68,16 @@ FIXTURE_SYSCALLS = (
 )
 
 
+@pytest.mark.parametrize(
+    "syscalls",
+    ["write", ["read", "write"], {"read", "write"}, {"read": True, "write": False}],
+    ids=["string", "list", "set", "mapping"],
+)
+def test_policy_requires_immutable_allowlist_tuple(syscalls):
+    with pytest.raises(ValueError, match="immutable tuple"):
+        SeccompPolicy(syscalls)
+
+
 @pytest.fixture
 def kernel_filter():
     if ctypes.util.find_library("seccomp") is None:
