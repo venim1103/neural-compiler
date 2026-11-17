@@ -51,11 +51,14 @@ def _snapshot_bytes(cache: Cache, logits: torch.Tensor) -> int:
         raise ValueError("Checkpoints support only non-offloaded DynamicCache")
     storages = {}
 
+    def checked_storage(value: torch.Tensor) -> torch.UntypedStorage:
+        if value.device.type != "cpu" or value.requires_grad:
+            raise ValueError("Checkpoints require CPU inference tensors")
+        return value.untyped_storage()
+
     def count(value) -> None:
         if isinstance(value, torch.Tensor):
-            if value.device.type != "cpu" or value.requires_grad:
-                raise ValueError("Checkpoints require CPU inference tensors")
-            storage = value.untyped_storage()
+            storage = checked_storage(value)
             storages[storage.data_ptr()] = storage.nbytes()
         elif isinstance(value, (tuple, list)):
             for item in value:
@@ -64,13 +67,14 @@ def _snapshot_bytes(cache: Cache, logits: torch.Tensor) -> int:
             for item in value.values():
                 count(item)
 
-    count(logits)
+    checked_storage(logits)
     for layer in cache.layers:
         if type(layer) not in (DynamicLayer, LinearAttentionLayer):
             raise ValueError(f"Unsupported checkpoint layer: {type(layer).__name__}")
         for value in vars(layer).values():
             count(value)
-    return sum(storages.values())
+    # Logits are cloned independently, materializing views without backing slack.
+    return sum(storages.values()) + logits.numel() * logits.element_size()
 
 
 def _tensor_versions(model: PreTrainedModel) -> tuple[tuple[int, int, int], ...]:

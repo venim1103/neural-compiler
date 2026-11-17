@@ -6,10 +6,14 @@ import copy
 
 import pytest
 import torch
-from transformers.cache_utils import LinearAttentionLayer, StaticCache
+from transformers.cache_utils import DynamicLayer, LinearAttentionLayer, StaticCache
 
 from neural_compiler.bridge.protocol import QwenToolProtocol, ToolCall
-from neural_compiler.bridge.session import CheckpointStore, LiveSession
+from neural_compiler.bridge.session import (
+    CheckpointBudgetError,
+    CheckpointStore,
+    LiveSession,
+)
 from neural_compiler.bridge import ExecutionResult
 
 
@@ -348,6 +352,55 @@ def test_snapshot_clones_recurrent_conv_kv_and_logits(hybrid_model):
     )
     with pytest.raises(ValueError, match="exceeding"):
         session.checkpoint(max_cache_bytes=checkpoint.cache_bytes - 1)
+
+
+@pytest.mark.parametrize("view", ["cache_alias", "broadcast", "strided"])
+def test_snapshot_budget_matches_independently_cloned_logit_storage(
+    hybrid_model, monkeypatch, view
+):
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    assert session.cache is not None
+    vocabulary = session.logits.shape[-1]
+    if view == "cache_alias":
+        layer = next(
+            layer for layer in session.cache.layers if isinstance(layer, DynamicLayer)
+        )
+        assert layer.keys is not None
+        session.logits = layer.keys[0, 0, 0, :].unsqueeze(0)
+    elif view == "broadcast":
+        session.logits = torch.zeros(1, 1).expand(1, vocabulary)
+    else:
+        session.logits = torch.zeros(1, vocabulary * 2)[:, ::2]
+
+    checkpoint = session.checkpoint()
+    tensors = [checkpoint._logits]
+    for layer in checkpoint._cache.layers:
+        if isinstance(layer, LinearAttentionLayer):
+            tensors.extend([layer.conv_states[0], layer.recurrent_states[0]])
+        else:
+            tensors.extend([layer.keys, layer.values])
+    storages = {
+        tensor.untyped_storage().data_ptr(): tensor.untyped_storage().nbytes()
+        for tensor in tensors
+    }
+    actual_bytes = sum(storages.values())
+    assert 0 < actual_bytes <= 1024 * 1024
+    assert checkpoint.cache_bytes == actual_bytes
+
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            session.cache,
+            "__deepcopy__",
+            lambda _: pytest.fail("Over-budget request cloned cache storage"),
+            raising=False,
+        )
+        with pytest.raises(CheckpointBudgetError, match="exceeding"):
+            session.checkpoint(max_cache_bytes=actual_bytes - 1)
+    assert session.checkpoint(max_cache_bytes=actual_bytes).cache_bytes == actual_bytes
+    store = CheckpointStore(max_total_bytes=actual_bytes - 1)
+    with pytest.raises(CheckpointBudgetError, match="store budget"):
+        store.put(checkpoint)
+    assert store.entries == store.total_bytes == 0
 
 
 def test_checkpoint_rejects_resource_overflow_and_unsupported_cache(hybrid_model):

@@ -3416,3 +3416,47 @@ No unchanged successful tests were rerun for this documentation-only handoff.
 [post-guard-source-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44061421911
 [post-guard-matched]: ../../src/neural_compiler/eval/harness.py
 [post-guard-serving]: ../../src/neural_compiler/eval/serving.py
+
+### 2026-11-17: account for independently materialized checkpoint logits
+
+A fresh bounded CPU repro confirmed that [snapshot preflight][snapshot-clone-bytes-session]
+deduplicated source storage across cache and logits, although capture deep-copies
+the cache and independently clones logits. A cache-alias view therefore omitted
+the separate logit allocation; broadcast logits materialized more bytes than
+their source storage; strided logits discarded backing slack but were overcharged.
+The store retains the supplied checkpoint without cloning it, so its admission
+and LRU totals inherited the incorrect producer metadata.
+
+Preflight now counts unique cache backing storage plus the independently
+materialized logit elements. Existing CPU/no-grad/storage validation, independent
+snapshot/restore ownership, public signatures, default limits and numerical
+tolerances are unchanged. Rejection still precedes cache copying; copies are
+not allocated to discover whether a request exceeds its budget.
+
+**Finite scope and results:** [three new synthetic view cases][snapshot-clone-bytes-tests]
+each use one three-ID tiny CPU hybrid prefill and at most 1 MiB of snapshot
+tensor storage. A successful case makes two captures, one rejected capture
+whose copy seam is trapped, and one rejected store insertion. Initial focus
+**3 failed** (0.35 s): declared versus actual retained tensor bytes were
+**1664/1696** (cache alias), **1668/2712** (broadcast) and **3760/2712**
+(strided). Repaired focus **3 passed** (0.09 s), checking actual cloned
+storage, exact-budget acceptance, one-byte-under rejection before copying,
+and unchanged store entries/bytes after rejection. Coupled checkpoint/serving
+regressions **154 passed** (11.94 s), including the unchanged independent-clone
+and multi-call/full-reference controls; root **543 passed, 2 skipped**
+(34.43 s), fourteen existing Torch warnings. One failing focus, one repaired
+focus, one coupled/root invocation spent, with no aborts or relaxed limits.
+Root Ruff, two-file formatting, whitespace and owning-source diagnostics passed;
+test diagnostics contain only five existing unused mock-argument hints.
+
+The two root skips remain the explicitly unconfigured writable-cgroup
+qualification probes. Trusted jailed Python/C/assembly and Wasm/Unicorn
+controls ran. These are retained CPU tensor-byte measurements, not process-RSS,
+GPU fit, latency, pretrained accuracy or production-serving qualification.
+No new dependencies, downloads, accepted cohorts, model studies, host changes
+or retained generated artifacts. Continue the remaining source prerequisites;
+this repaired budget does not complete the outstanding evaluation,
+real-engine or containment gates.
+
+[snapshot-clone-bytes-session]: ../../src/neural_compiler/bridge/session.py
+[snapshot-clone-bytes-tests]: ../../tests/test_checkpoints.py
