@@ -54,6 +54,21 @@ for offset in range(0, len(memory), 4096):
 print("memory complete")
 """
 
+_CPU_LIMIT_PROBE = """
+import time
+print("cpu started", flush=True)
+started = time.process_time()
+while time.process_time() - started < 0.25:
+    pass
+print("cpu complete")
+"""
+
+_KERNEL_LIMIT_PROBES = {
+    "pids": _PID_LIMIT_PROBE,
+    "memory": _MEMORY_LIMIT_PROBE,
+    "cpu": _CPU_LIMIT_PROBE,
+}
+
 
 def _require_precise_pid_events(mountinfo: str) -> None:
     for line in mountinfo.splitlines():
@@ -73,9 +88,9 @@ def test_pid_qualification_rejects_legacy_ancestor_event_accounting() -> None:
         )
 
 
-@pytest.mark.parametrize("controller", ("pids", "memory"))
+@pytest.mark.parametrize("controller", _KERNEL_LIMIT_PROBES)
 def test_kernel_probe_jailed_controls(controller: str) -> None:
-    source = _PID_LIMIT_PROBE if controller == "pids" else _MEMORY_LIMIT_PROBE
+    source = _KERNEL_LIMIT_PROBES[controller]
     result = run_python(source, timeout=5, output_limit=1024)
     if result.status == "sandbox_error":
         pytest.skip(
@@ -89,11 +104,13 @@ def test_kernel_probe_jailed_controls(controller: str) -> None:
                 f"Host prevents the eight-child control: {result.stdout.strip()}"
             )
         assert int(created) == 8 and int(failure) == 0, result
-    else:
+    elif controller == "memory":
         assert result.stdout.splitlines() == ["memory started", "memory complete"]
+    else:
+        assert result.stdout.splitlines() == ["cpu started", "cpu complete"]
 
 
-@pytest.mark.parametrize("controller", ("pids", "memory"))
+@pytest.mark.parametrize("controller", _KERNEL_LIMIT_PROBES)
 def test_opt_in_kernel_cgroup_limits(controller: str, monkeypatch) -> None:
     """Require an owner-provided subtree; never enable or remount controllers."""
     root = os.environ.get("NEURAL_COMPILER_TEST_CGROUP_ROOT")
@@ -105,14 +122,16 @@ def test_opt_in_kernel_cgroup_limits(controller: str, monkeypatch) -> None:
         _require_precise_pid_events(Path("/proc/self/mountinfo").read_text())
     limits = CgroupLimits(
         Path(root),
-        memory_bytes=(128 if controller == "pids" else 64) * 1024 * 1024,
+        memory_bytes=(64 if controller == "memory" else 128) * 1024 * 1024,
         pids=8,
+        cpu_max=(25_000, 100_000) if controller == "cpu" else None,
     )
     owned_groups: list[Path] = []
     deltas: dict[str, int] = {}
+    counter_file = "cpu.stat" if controller == "cpu" else f"{controller}.events.local"
 
-    def read_events(group: Path) -> dict[str, int]:
-        lines = (group / f"{controller}.events.local").read_text().splitlines()
+    def read_counters(group: Path) -> dict[str, int]:
+        lines = (group / counter_file).read_text().splitlines()
         return {name: int(value) for name, value in (line.split() for line in lines)}
 
     @contextmanager
@@ -121,17 +140,17 @@ def test_opt_in_kernel_cgroup_limits(controller: str, monkeypatch) -> None:
             group = Path(os.readlink(f"/proc/self/fd/{descriptors[0]}")).parent
             assert group.parent == Path(root).resolve()
             owned_groups.append(group)
-            before = read_events(group)
+            before = read_counters(group)
             try:
                 yield descriptors
             finally:
                 deltas.update(
                     (name, value - before[name])
-                    for name, value in read_events(group).items()
+                    for name, value in read_counters(group).items()
                 )
 
     monkeypatch.setattr(execution, "request_cgroup", observe_request)
-    source = _PID_LIMIT_PROBE if controller == "pids" else _MEMORY_LIMIT_PROBE
+    source = _KERNEL_LIMIT_PROBES[controller]
     result = run_python(source, timeout=5, output_limit=1024, cgroup=limits)
     assert len(owned_groups) == 1, result
     assert not owned_groups[0].exists(), "The owned request cgroup was not removed"
@@ -140,15 +159,22 @@ def test_opt_in_kernel_cgroup_limits(controller: str, monkeypatch) -> None:
         _, created, failure = result.stdout.split()
         assert int(failure) == errno.EAGAIN and 0 < int(created) < 8, result
         assert deltas["max"] > 0, deltas
-    else:
+    elif controller == "memory":
         assert result.status == "runtime_error", result
         assert result.stdout.splitlines() == ["memory started"], result
         assert all(deltas[name] > 0 for name in ("max", "oom", "oom_kill")), deltas
+    else:
+        assert result.status == "ok", result
+        assert result.stdout.splitlines() == ["cpu started", "cpu complete"], result
+        assert all(
+            deltas[name] > 0
+            for name in ("nr_periods", "nr_throttled", "throttled_usec")
+        ), deltas
     print(
         json.dumps(
             {
                 "controller": controller,
-                "event_deltas": deltas,
+                "counter_deltas": deltas,
                 "returncode": result.returncode,
                 "status": result.status,
                 "stdout": result.stdout,

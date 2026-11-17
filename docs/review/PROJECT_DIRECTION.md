@@ -3679,3 +3679,55 @@ update; scoped references and whitespace are validated before checkpointing.
 [tier-runtime-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44082394849
 [tier-runtime-source]: ../../src/neural_compiler/bridge/native.py
 [tier-runtime-tests]: ../../tests/test_native_bridge.py
+
+### 2026-11-17: prepare a bounded trusted CPU-bandwidth probe
+
+The [existing controller fixture matrix][cpu-probe-tests] now also prepares a
+CPU case. Its single-process trusted program loops for a nominal **0.25
+process-CPU seconds**, with start/completion markers, the existing five-second
+wall deadline and 1,024-byte output cap. The default control actually runs in
+the normal Python jail without requesting a cgroup; no unjailed fallback exists.
+
+The opt-in case requests `cpu.max = 25000 100000`, 128 MiB memory, eight PIDs
+and the existing zero-swap setting in one newly owned request group. It requires
+successful completion plus positive `cpu.stat` deltas for `nr_periods`,
+`nr_throttled` and `throttled_usec`, read before normal group removal. This is
+a prepared check for triggered fair-class bandwidth throttling, not a
+wall-time-ratio estimate or production CPU-rate qualification.
+[Linux's interface contract][cpu-probe-interface] distinguishes these counters
+from ordinary usage; the [scheduler exporter][cpu-probe-exporter] reads the task
+group's CFS bandwidth state and its [period timer][cpu-probe-accounting] records
+throttled periods. PID/memory still use their local event files. Test diagnostic
+JSON calls the values `counter_deltas`; guest protocol/status framing is unchanged.
+
+To select only the new real-controller case on an already owner-delegated,
+CPU-enabled subtree:
+
+```sh
+NEURAL_COMPILER_TEST_CGROUP_ROOT=/owner/delegated/subtree \
+  python -m pytest -q -s tests/test_cgroups.py \
+  -k 'opt_in_kernel_cgroup_limits and cpu'
+```
+
+An unset root skips it. A configured invalid/read-only root or missing CPU
+controller/counters fails; the fixture never enables controllers or remounts.
+The current root is unset and the only visible cgroup-v2 mount is read-only,
+so **no real CPU/PID/memory controller probe passed or wrote host controls**.
+
+**Finite ledger:** new two-case CPU focus **1 passed, 1 skipped** (0.33 s);
+coupled cgroup/native/seccomp gate **74 passed, 3 skipped** (1.95 s);
+root **558 passed, 3 skipped** (30.89 s), fourteen existing Torch warnings.
+Three nominal 0.25-second jailed CPU loops ran across these required checks;
+the controller cases skipped each time. No failed/aborted attempts or reruns.
+Root Ruff, changed-file formatting/whitespace and Pylance diagnostics passed
+(existing unused-parameter hints only). The formatter left the file unchanged.
+Trusted jailed C/assembly, Wasm/Unicorn and filtered Python controls actually ran.
+The three skips are missing writable-delegation evidence, not containment passes.
+No new dependencies, model/data downloads, GPU jobs, host changes, raw logs or
+retained guest artifacts; the three bounded primary-source reads were in memory.
+Continue the remaining offline evaluation/serving prerequisite sweep.
+
+[cpu-probe-tests]: ../../tests/test_cgroups.py
+[cpu-probe-interface]: https://github.com/torvalds/linux/blob/v6.18/Documentation/admin-guide/cgroup-v2.rst
+[cpu-probe-exporter]: https://github.com/torvalds/linux/blob/v6.18/kernel/sched/core.c#L10082
+[cpu-probe-accounting]: https://github.com/torvalds/linux/blob/v6.18/kernel/sched/fair.c#L6258
