@@ -3549,3 +3549,51 @@ gate; scoped references and whitespace are checked before its checkpoint.
 [runtime-probes-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44078636047
 [runtime-probes-execution]: ../../src/neural_compiler/bridge/execution.py
 [runtime-probes-tests]: ../../tests/test_seccomp.py
+
+### 2026-11-17: reject unrepresentable native runtime work counters
+
+The [native runtime wrapper][runtime-counter-native] admitted any positive
+Python integer, but the installed Wasmtime **50.0.1** binding passes fuel as
+`ctypes.c_uint64` and Unicorn **2.1.4** passes instruction count as
+`ctypes.c_size_t`. Both are 64 bits here: `18446744073709551615` survives
+conversion, while one above becomes zero. A bounded actual jailed WAT program
+returning constant 42, requested with fuel `2**64`, reproduced the failure:
+**timeout/3**, empty stdout and an all-fuel-consumed trap instead of 42.
+
+Admission now verifies that the positive budget survives its actual unsigned
+C-counter conversion unchanged, before deadlines, workspace creation or worker
+launch. The public runner docstrings document those representation limits.
+Defaults, representable budgets, source/output/wall limits, compiler settings
+and status mappings are unchanged. This enforces the underlying binding's
+range, not a new workload threshold. VM engines remain inside jailed workers.
+
+**Finite scope and results:** one diagnostic constant-WAT request, capped at
+three seconds and 1,024 output bytes; [six new boundary cases][runtime-counter-tests]
+cross the two runtimes with their exact unsigned maximum and the next two
+integers. Each maximum case uses one bounded namespace probe and one actual
+constant worker; each overflow case traps workspace creation. Programs contain
+no WAT loops/imports or exactly `mov eax,42; ret` in hex. Initial focus
+**4 failed, 2 passed** (0.34 s): every overflow reached the setup trap, while
+both maximum-value workers returned 42. Repaired focus **6 passed** (0.22 s);
+coupled native/execution regressions **67 passed** (2.49 s); root
+**553 passed, 2 skipped** (30.68 s), fourteen existing Torch warnings.
+One diagnostic, one failing focus, one repaired focus, one coupled/root
+invocation spent; no aborts or relaxed limits.
+
+Scoped Ruff passed. The first format check found only a new long decorator;
+the existing formatter repaired it and the two-file format check passed.
+Root Ruff/whitespace and source diagnostics passed; test diagnostics contain
+only pre-existing unused mock-argument hints. Two binding-definition lookups
+hit a Pylance internal error; installed distribution metadata/source reads and
+standard-library ABI probes supplied the facts without importing VM engines.
+
+Trusted jailed Python/C/assembly and Wasm/Unicorn controls actually ran,
+including the new exact-maximum worker cases. The only root skips remain the
+unconfigured writable-cgroup probes. No dependency, download, model/data,
+accepted-policy, host-security or retained-artifact changes. These fixtures
+do not establish production containment or throughput at enormous budgets.
+Continue useful offline/native prerequisites rather than equating a green
+counter boundary with completion of the remaining project gates.
+
+[runtime-counter-native]: ../../src/neural_compiler/bridge/native.py
+[runtime-counter-tests]: ../../tests/test_native_bridge.py

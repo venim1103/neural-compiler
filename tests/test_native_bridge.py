@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ctypes
+import importlib.util
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -47,6 +49,52 @@ def test_boolean_timeout_fails_before_subprocess_launch(monkeypatch, runner, pro
 def test_bridge_policy_rejects_boolean_timeout():
     with pytest.raises(ValueError, match="finite positive"):
         BridgePolicy(timeout=True)
+
+
+@pytest.mark.parametrize(
+    "runner,program,budget_name,counter,module",
+    [
+        pytest.param(
+            run_wat,
+            '(module (func (export "solve") (result i64) i64.const 42))',
+            "fuel",
+            ctypes.c_uint64,
+            "wasmtime",
+            id="wasm",
+        ),
+        pytest.param(
+            run_hex,
+            "b8 2a 00 00 00 c3",
+            "max_insns",
+            ctypes.c_size_t,
+            "unicorn",
+            id="hex",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "overflow", [0, 1, 2], ids=["maximum", "wrap-zero", "wrap-one"]
+)
+def test_runtime_budget_matches_unsigned_counter_range(
+    monkeypatch, runner, program, budget_name, counter, module, overflow
+):
+    budget = (1 << (8 * ctypes.sizeof(counter))) - 1 + overflow
+    if overflow:
+        monkeypatch.setattr(
+            "neural_compiler.bridge.native.tempfile.TemporaryDirectory",
+            lambda **_: pytest.fail("Overflowing counter reached workspace setup"),
+        )
+        with pytest.raises(ValueError, match="counter"):
+            runner(program, timeout=3, output_limit=1024, **{budget_name: budget})
+        return
+    if importlib.util.find_spec(module) is None:
+        pytest.skip(f"{module} runtime dependency unavailable; no unjailed fallback")
+    probe = run_python("print(0)", timeout=3, output_limit=1024)
+    if probe.status == "sandbox_error":
+        pytest.skip(f"bubblewrap namespaces unavailable: {probe.stderr}")
+    assert probe.status == "ok", probe
+    result = runner(program, timeout=3, output_limit=1024, **{budget_name: budget})
+    assert result.status == "ok" and result.stdout == "42\n", result
 
 
 @pytest.mark.parametrize("extra,status", [(0, "ok"), (1, "output_limit")])

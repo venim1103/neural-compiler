@@ -7,6 +7,7 @@ containment qualification before running untrusted workloads.
 
 from __future__ import annotations
 
+import ctypes
 import sys
 import tempfile
 import time
@@ -196,6 +197,11 @@ def _run_jailed_runtime(
     validate_code(code)
     if type(budget) is not int or budget <= 0:
         raise ValueError("execution budget must be a positive integer")
+    counter = ctypes.c_uint64 if language == "wat" else ctypes.c_size_t
+    if counter(budget).value != budget:
+        raise ValueError(
+            f"execution budget exceeds the unsigned {8 * ctypes.sizeof(counter)}-bit counter range"
+        )
     deadline = _request_deadline(timeout, output_limit)
     result = None
     try:
@@ -251,7 +257,10 @@ def run_wat(
     seccomp: SeccompPolicy | None = None,
     cgroup: CgroupLimits | None = None,
 ) -> ExecutionResult:
-    """Validate, compile, and execute WAT (`export "solve" -> i64`) in a jailed Wasmtime worker."""
+    """Execute WAT (`export "solve" -> i64`) in a jailed Wasmtime worker.
+
+    Fuel must be a positive integer representable by an unsigned 64-bit counter.
+    """
     return _run_jailed_runtime(
         "wat",
         code,
@@ -272,7 +281,10 @@ def run_hex(
     seccomp: SeccompPolicy | None = None,
     cgroup: CgroupLimits | None = None,
 ) -> ExecutionResult:
-    """Emulate raw x86-64 machine-code hex in a jailed Unicorn process."""
+    """Emulate raw x86-64 machine-code hex in a jailed Unicorn process.
+
+    The positive instruction budget must be representable by C ``size_t``.
+    """
     validate_code(code)
     try:
         blob = bytes.fromhex(code)
