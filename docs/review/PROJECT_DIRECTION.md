@@ -2989,3 +2989,34 @@ Torch warnings, no skips; existing jailed/native controls ran. One focus,
 coupled/root invocation and formatter check/application spent (no formatting
 changes), no failures/aborts, model forwards, guest execution, GPU access,
 downloads, dependencies or retained fixture artifacts.
+
+### 2026-11-17: reject serving pairs with known prompt-length mismatches
+
+Serving comparisons now reject differing observed `prompt_tokens` within the
+same case, including groups with another unknown observation. Unlike the
+no-tool/tool comparison, serving modes already require the same evaluation path
+and prompt. Missing counts remain unknown; different tasks can retain different
+lengths. Existing sample-coverage fields and metric formulas are unchanged.
+Equal counts do not certify identical prompts, tokenizers, models or hardware.
+The new check runs after shared task-text/budget validation, preserving existing
+more-specific diagnostics.
+
+**Finite scope and results:** three new record-only fixtures, at most four rows.
+First focus: **2 failed/1 passed** (0.10 s), reproducing false matched acceptance.
+After repair: **3 passed** (0.08 s); coupled serving/record: **126 passed**
+(4.45 s). Root attempt one: **2 failed/470 passed** (18.31 s): the initial check
+masked task-text diagnostics for records with both mismatches. Moving it after
+shared provenance validation repaired the precedence rather than weakening
+assertions. A narrowly revised necessary focus (three new and six existing
+provenance fixtures): **9 passed** (0.78 s), with at most eighteen tiny CPU
+prefills/600 scripted IDs. Required root revalidation: **472 passed** (17.83 s).
+The unchanged successful coupled selector was not rerun for reassurance.
+
+Root Ruff, two-file format and whitespace passed; owning-source diagnostics
+empty and fifteen summary callers signature-compatible. Fourteen existing
+Torch warnings, no skips; existing jailed/native controls ran. All spent failed
+attempts are retained above; no aborts, tolerance changes, studies, downloads,
+dependencies or host changes. A bounded public-REST check confirmed
+[`861bb78` serving replay CI][serving-replay-ci] and `a0fc479` both succeeded.
+
+[serving-replay-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44046390586

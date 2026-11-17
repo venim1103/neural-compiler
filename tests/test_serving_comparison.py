@@ -529,6 +529,78 @@ def test_invalid_serving_work_cannot_reach_report(field, invalid):
         summarize_serving([replace(row, **{field: invalid})])
 
 
+@pytest.mark.parametrize("with_unknown", [False, True])
+def test_serving_rejects_different_observed_prompt_lengths(with_unknown):
+    case = CaseResult(
+        "case",
+        "unit",
+        "python_tool",
+        "correct",
+        "",
+        "42",
+        1,
+        3,
+        0,
+        (),
+        prompt_tokens=12,
+    )
+    first = ServingCaseResult("live_pause_resume", case, (), None, 12, 0, 0, 0, 0)
+    rows = [
+        first,
+        replace(
+            first,
+            mode="prefix_cached_resubmission",
+            case=replace(case, prompt_tokens=13),
+        ),
+    ]
+    if with_unknown:
+        rows.append(
+            replace(
+                first,
+                mode="full_reprefill_resubmission",
+                case=replace(case, prompt_tokens=None),
+            )
+        )
+    with pytest.raises(ValueError, match="Prompt token counts differ"):
+        summarize_serving(rows)
+
+
+def test_serving_prompt_matching_preserves_unknowns_and_per_case_lengths():
+    rows = []
+    for case_id, prompt_tokens in (("a", 12), ("b", 21)):
+        case = CaseResult(
+            case_id,
+            "unit",
+            "python_tool",
+            "correct",
+            "",
+            "42",
+            1,
+            3,
+            0,
+            (),
+            prompt_tokens=prompt_tokens,
+        )
+        first = ServingCaseResult(
+            "live_pause_resume", case, (), None, prompt_tokens, 0, 0, 0, 0
+        )
+        rows.extend(
+            [
+                first,
+                replace(
+                    first,
+                    mode="prefix_cached_resubmission",
+                    case=case if case_id == "a" else replace(case, prompt_tokens=None),
+                ),
+            ]
+        )
+    report = summarize_serving(rows)
+    live = report["by_mode"]["live_pause_resume"]
+    cached = report["by_mode"]["prefix_cached_resubmission"]
+    assert live["prompt_tokens"] == 33 and live["prompt_token_samples"] == 2
+    assert cached["prompt_tokens"] == 12 and cached["prompt_token_samples"] == 1
+
+
 def test_serving_summary_exposes_opposing_paired_family_effects():
     rows = []
     for case_id, family, cached_time, live_correct in (

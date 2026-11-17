@@ -410,7 +410,8 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
     Comparisons use the first present mode in canonical order as baseline:
     live pause/resume when present, otherwise prefix-cached resubmission.
     A single-mode summary has no paired deltas.
-    Observed task-text/budget mismatches are rejected; missing provenance is unknown.
+    Observed task-text/budget/prompt-count mismatches are rejected within a case;
+    missing observations remain unknown.
     """
     if not results:
         raise ValueError("Serving summary requires at least one result")
@@ -432,12 +433,21 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
             raise ValueError(f"Missing serving modes for {case_id}")
         if len({row.case.family for row in case.values()}) != 1:
             raise ValueError(f"Family identity differs between modes for {case_id}")
-
     paired_cases: dict[str, dict[str, CaseResult]] = {
         case_id: {mode: row.case for mode, row in case.items()}
         for case_id, case in paired.items()
     }
     coverage = _paired_observation_coverage(paired_cases)
+    for case_id, case in paired.items():
+        observed_prompts = {
+            row.case.prompt_tokens
+            for row in case.values()
+            if row.case.prompt_tokens is not None
+        }
+        if len(observed_prompts) > 1:
+            raise ValueError(
+                f"Prompt token counts differ between serving modes for {case_id}"
+            )
 
     def summarize_mode(subset: Sequence[ServingCaseResult]) -> dict[str, object]:
         base = summarize([r.case for r in subset])
