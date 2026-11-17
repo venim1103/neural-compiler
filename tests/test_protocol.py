@@ -133,11 +133,13 @@ def test_response_token_budget_is_enforced_with_visible_truncation(tokenizer) ->
 def test_installed_qwen_template_round_trip():
     try:
         tokenizer = AutoTokenizer.from_pretrained(
-            "Qwen/Qwen3.5-4B", local_files_only=True
+            "Qwen/Qwen3.5-4B",
+            revision="851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+            local_files_only=True,
         )
     except OSError:
         pytest.skip(
-            "Qwen tokenizer is not cached; this integration test never downloads it"
+            "Reviewed Qwen tokenizer revision is not cached; this test never downloads it"
         )
     protocol = QwenToolProtocol(tokenizer)
     result = ExecutionResult("ok", "42\n", "", 0)

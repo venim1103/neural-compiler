@@ -2667,3 +2667,37 @@ admission][greedy-admission-ci], `bd292bf` and `93623b9`; this does not assert a
 hosted result for the subsequent exec-reporting change.
 
 [greedy-admission-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44034930751
+
+### 2026-11-17: pin offline tokenizer evidence and recheck next milestones
+
+The cached-tokenizer two-call integration now requests the reviewed
+`851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a` revision explicitly instead of mutable
+cached `main`. It remains local-only and skips if that exact artifact is absent.
+Six local cache-entry probes found both references currently resolve to that
+same snapshot (tokenizer JSON 12,807,982 bytes, config 16,710, template 7,756);
+this is a reproducibility repair, not evidence that prior framing was wrong.
+Historical experiment scripts/results were not rerun or rewritten.
+
+**Bounded ledger:** the existing exact-template two-call integration passed
+(0.77 s); root: **369 passed** (23.51 s). Root Ruff, one-file format, whitespace
+and test-file diagnostics passed. Fourteen existing Torch warnings, no skips.
+One six-entry read-only cache probe, one focused and one root attempt spent;
+no separate constant-checking test or unchanged coupled rerun. No model weights,
+downloads, new dependencies, GPU/pretrained/data studies or host changes.
+One subsequent hosted inspection found [exec-reporting CI][exec-report-ci]
+still in progress; the completed greedy-admission CI remained green.
+
+The remaining queue was checked against owning code, nearby regressions and
+current resources, not just todo status. Synthetic family generation, exact
+checkers and matched uncertainty reporting are implemented; advancing accepted
+evaluation needs accepted family/cohort/split inputs and fresh exact run scope.
+CPU snapshots/LRU/three-strategy comparisons are implemented; real serving needs
+separately scoped engine dependencies/runtime and qualification (neither SGLang
+nor vLLM is installed). Jailed tier/policy/cgroup prerequisites and trusted
+controls are implemented; real containment needs accepted production policies
+and writable predelegation. The current cgroup-v2 mount is still read-only,
+advertises `cpu memory pids`, and has empty subtree control. Free disk is
+362.24 GiB, not download authority. No further concrete compatible source repair
+was identified; additional synthetic work would not satisfy those milestones.
+
+[exec-report-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44035539763
