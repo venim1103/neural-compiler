@@ -350,6 +350,10 @@ class CaseResult:
             )
         if self.budgets is not None and not isinstance(self.budgets, Budgets):
             raise ValueError("budgets must be a Budgets instance or None")
+        if not isinstance(self.calls, tuple) or any(
+            not isinstance(call, CallRecord) for call in self.calls
+        ):
+            raise ValueError("calls must be a tuple of CallRecord instances")
         if self.path == "no_tool" and (self.calls or self.injected_tokens):
             raise ValueError(
                 "no_tool results must not record tool calls or injected tokens"

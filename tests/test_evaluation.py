@@ -1258,6 +1258,16 @@ def test_impossible_case_records_cannot_enter_aggregates(field, value):
 
 
 @pytest.mark.parametrize(
+    "calls",
+    [[], [CallRecord("ok", 0.1, 0)], iter(()), (object(),)],
+    ids=["empty-list", "mutable-list", "iterator", "non-record"],
+)
+def test_case_call_records_require_an_immutable_typed_tuple(calls):
+    with pytest.raises(ValueError, match="calls must be a tuple of CallRecord"):
+        CaseResult("a", "unit", "python_tool", "correct", "", "42", 1, 3, 0, calls)
+
+
+@pytest.mark.parametrize(
     "field,value",
     [("calls", (CallRecord("runtime_error", 0.1, 0),)), ("injected_tokens", 1)],
 )

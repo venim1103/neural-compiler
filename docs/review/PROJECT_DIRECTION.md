@@ -4270,3 +4270,41 @@ separate gates for accepted task data, trajectory collection and model studies.
 
 [dispatch-import-regressions]: ../../tests/test_red_team_contracts.py
 [runtime-import-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44281549074
+
+### 2026-11-18: enforce immutable typed call histories in case evidence
+
+The [frozen case record][no-tool-record-source] declared
+`calls: tuple[CallRecord, ...]`, but accepted caller-owned lists and consumable
+iterators. Their contents could therefore outlive the constructor's no-tool
+and injected-token consistency checks. A tuple containing another object failed
+later with `AttributeError` while summing response counts. The producer now
+requires the declared tuple/record shape before either invariant is evaluated,
+with an explicit `ValueError`. It does not silently convert invalid inputs.
+Valid harness rows and strict JSON reconstruction already supply tuples;
+outcomes, metric formulas, versioned schemas and accepted data policies are
+unchanged.
+
+**Finite routine ledger:** four [constructor-only cases][case-call-regressions]
+use an empty list, one-item list, empty iterator and wrong-record tuple, with
+one result construction per case and one fixed call fixture. No new case loads
+a model, executes a guest or performs network work. Failing focus **4 failed**
+(0.23 s): three missing rejections and the later `AttributeError`; repaired focus,
+including existing no-tool/injected-total controls, **8 passed** (0.06 s).
+Coupled evaluation/evidence **215 passed** (8.87 s), root **603 passed, 3 skipped**
+(21.41 s), fourteen existing Torch warnings. One failing focus, one repaired
+focus, one coupled/root invocation spent, with no aborts, changed thresholds or
+repeated unchanged green gates. One of two scoped Python files was formatted;
+root Ruff, scoped formatting/whitespace and product diagnostics passed. Test
+diagnostics contain unused-parameter hints only.
+
+Existing tiny CPU hybrid, strict evidence replay and actual jailed
+Python/C/assembly/Wasm/Unicorn controls ran. The three real-controller skips
+remain unqualified without writable delegation. The [dispatch-import checkpoint
+passed hosted CI][dispatch-import-ci]. No dependencies, downloads, model/GPU
+studies, services or host changes; constructor fixtures leave no artifacts,
+and existing pytest temporary retention is unchanged. Next inspect the owning
+serving-record/token-history checks and their JSON reconstruction, preserving
+optional numerical replay and exact-boundary qualification limits.
+
+[case-call-regressions]: ../../tests/test_evaluation.py
+[dispatch-import-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44282147850
