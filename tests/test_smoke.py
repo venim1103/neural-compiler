@@ -90,6 +90,40 @@ def test_cli_check_imports_and_native_flags(
 
 
 @pytest.mark.parametrize(
+    "runner,result",
+    [
+        ("run_wat", ExecutionResult("ok", "42\n", "", 0)),
+        ("run_hex", ExecutionResult("timeout", "", "instruction limit", 3)),
+    ],
+)
+def test_cli_standalone_runtime_flags(
+    monkeypatch, tmp_path: Path, capsys, runner, result
+):
+    from neural_compiler import bridge
+
+    received = []
+
+    def fake_runtime(code, timeout=20):
+        received.append((code, timeout))
+        return result
+
+    monkeypatch.setattr(bridge, runner, fake_runtime)
+    source = tmp_path / "program"
+    source.write_bytes(b"fixture\r\n")
+    action = "--" + runner.replace("_", "-")
+    assert main(["--timeout", "2.5", action, str(source)]) == (
+        0 if result.status == "ok" else 1
+    )
+    assert received == [("fixture\n", 2.5)]
+    assert json.loads(capsys.readouterr().out) == {
+        "status": result.status,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "returncode": result.returncode,
+    }
+
+
+@pytest.mark.parametrize(
     "with_tasks,serving,check_logits,with_development",
     [
         (False, False, False, False),

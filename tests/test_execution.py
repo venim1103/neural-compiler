@@ -271,8 +271,9 @@ def test_cli_runs_python_with_structured_failure(jail, tmp_path: Path, capsys) -
     assert "cli regression" in result["stderr"]
 
 
+@pytest.mark.parametrize("action", ["--run-python", "--run-wat", "--run-hex"])
 def test_cli_accepts_exact_utf8_source_limit_without_changing_newlines(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, capsys, action
 ):
     from neural_compiler import bridge
 
@@ -281,17 +282,19 @@ def test_cli_accepts_exact_utf8_source_limit_without_changing_newlines(
     source.write_bytes(raw)
     received = []
 
-    def fake_python(code, timeout=20):
+    def fake_runtime(code, timeout=20):
         received.append(code)
         return bridge.ExecutionResult("ok", "42\n")
 
-    monkeypatch.setattr(bridge, "run_python", fake_python)
-    assert main(["--run-python", str(source)]) == 0
+    monkeypatch.setattr(bridge, action[2:].replace("-", "_"), fake_runtime)
+    assert main([action, str(source)]) == 0
     assert received == [raw.decode("utf-8").replace("\r\n", "\n")]
     assert '"status": "ok"' in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("action", ["--run-c", "--check-imports"])
+@pytest.mark.parametrize(
+    "action", ["--run-c", "--check-imports", "--run-wat", "--run-hex"]
+)
 def test_cli_source_ingestion_reads_only_the_bounded_prefix(
     tmp_path, monkeypatch, action
 ):
@@ -320,10 +323,42 @@ def test_cli_source_ingestion_reads_only_the_bounded_prefix(
 
     monkeypatch.setattr(Path, "open", bounded_open)
     monkeypatch.setattr(bridge, "run_c", reject_processing)
+    monkeypatch.setattr(bridge, "run_wat", reject_processing)
+    monkeypatch.setattr(bridge, "run_hex", reject_processing)
     monkeypatch.setattr(bridge, "evaluate_import_policy", reject_processing)
     with pytest.raises(ValueError, match="Program exceeds .* UTF-8 bytes"):
         main([action, str(source)])
     assert sizes == [MAX_CODE_BYTES + 1]
+
+
+@pytest.mark.parametrize(
+    "action,code,dependency",
+    [
+        (
+            "--run-wat",
+            '(module (func (export "solve") (result i64) i64.const 42))',
+            "wasmtime",
+        ),
+        ("--run-hex", "b8 2a 00 00 00 c3", "unicorn"),
+    ],
+)
+def test_cli_standalone_runtime_uses_jailed_worker(
+    jail, tmp_path: Path, capsys, action, code, dependency
+):
+    import importlib.util
+    import json
+
+    if importlib.util.find_spec(dependency) is None:
+        pytest.skip(f"{dependency} unavailable; no unjailed fallback")
+    source = tmp_path / "program"
+    source.write_text(code, encoding="utf-8")
+    assert main(["--timeout", "3", action, str(source)]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "ok",
+        "stdout": "42\n",
+        "stderr": "",
+        "returncode": 0,
+    }
 
 
 def test_run_jailed_command_assembly_and_fd_plumbing(

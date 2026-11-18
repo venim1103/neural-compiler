@@ -77,6 +77,28 @@ CLI program files, including `--check-imports` inputs, must be UTF-8 and at most
 On the audit host, 30 calls to the already-loaded Python API measured **23.92 ms p50 / 25.38 ms p95**,
 including fresh jail/interpreter startup. This excludes CLI/model startup and is not a production SLO.
 
+### Standalone research runtimes
+
+The existing [jailed Wasm and x86-emulation APIs][jailed-runtime-apis] are also
+available through mutually exclusive CLI actions in the prepared devcontainer:
+
+```bash
+neural-compiler --timeout 3 --run-wat path/to/program.wat
+neural-compiler --timeout 3 --run-hex path/to/program.hex
+```
+
+WAT must export `solve` with no arguments and one `i64` result. Hex input is an
+x86-64 function that returns with `ret`, with the signed 64-bit result in `RAX`.
+Both actions use the same bounded UTF-8 file reader, JSON result format and
+nonzero failure exit as `--run-python`. They preserve the API's default work caps
+(20 billion Wasmtime fuel units or 200 million Unicorn instructions) in addition
+to the supplied wall-clock timeout. Wasmtime/Unicorn must already be installed;
+neither action installs dependencies or falls back to execution outside the jail.
+These remain experimental tiers, not production containment or the default
+model-emission path.
+
+[jailed-runtime-apis]: ./src/neural_compiler/bridge/native.py
+
 ### Offline evaluation evidence
 
 Save existing result rows from the [matched evaluation harness][offline-harness]

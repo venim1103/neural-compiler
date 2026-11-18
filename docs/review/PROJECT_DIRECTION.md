@@ -4102,3 +4102,49 @@ production workload/syscall policies.
 [sglang-observer-batch]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/sampling/sampling_batch_info.py
 [sglang-observer-auxiliary]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/managers/auxiliary_output.py
 [input-materialization-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44277647761
+
+### 2026-11-18: expose existing jailed Wasm/hex tiers through the CLI
+
+Fresh autonomous continuation selected a compatible P1 usability prerequisite,
+not another model study or policy-adoption gate. The [native API][cli-runtime-api]
+already exported jailed Wasmtime/Unicorn execution, while [the CLI][cli-runtime-source]
+exposed only Python/C/assembly. New mutually exclusive `--run-wat FILE` and
+`--run-hex FILE` actions reuse the existing bounded UTF-8/newline-normalizing
+reader, `--timeout`, `ExecutionResult` JSON and nonzero failure exit. Existing
+fuel/instruction/output defaults, isolation and status mapping are unchanged.
+Neither language becomes the default model-emission path.
+
+[Public usage][cli-runtime-usage] now describes the no-argument/i64 WAT export,
+x86-64 return/result convention, prepared dependencies, work/wall-clock caps
+and experimental containment limits. No progress log or test counts were
+added to the public introduction.
+
+**Finite routine ledger:** [two dispatch/status cases][cli-runtime-smoke],
+four added exact/oversized byte-budget cases, and [two actual jailed CLI
+successes][cli-runtime-execution]. Each trusted runtime source is under
+128 bytes and returns `42` in fewer than ten guest operations, with a
+three-second subprocess deadline and no loops or model execution. Namespace/
+dependency absence would skip explicitly, never use a host fallback; both
+runtime cases actually ran. Initial focus **8 failed, 3 passed** (0.68 s):
+all eight new cases hit unrecognized CLI arguments. Repaired focus **11 passed**
+(0.30 s), coupled CLI/execution/native **99 passed** (2.08 s), root **583 passed,
+3 skipped** (31.92 s), fourteen existing Torch warnings. One failing focus,
+one repaired focus, one coupled/root invocation spent, no aborts, changed
+thresholds or repeated unchanged green gates. One of three scoped Python
+files was formatted; root Ruff, scoped formatting/whitespace and CLI diagnostics
+passed; test diagnostics contain unused-parameter hints only.
+
+The three skips still lack writable real-controller qualification. Existing
+jailed Python/C/assembly/Wasm/Unicorn controls ran without production containment,
+model/GPU or serving-performance claims. No dependencies, downloads,
+pretrained/GPU jobs, services or host changes. Worker workspaces are cleaned;
+tiny fixture files follow pytest's normal temporary-directory retention.
+Next expose opt-in access to the same API fuel/instruction caps,
+preserving defaults and rejecting mismatched CLI options before file access,
+then verify actual bounded exhaustion rather than wall-time alone.
+
+[cli-runtime-api]: ../../src/neural_compiler/bridge/native.py
+[cli-runtime-source]: ../../src/neural_compiler/cli.py
+[cli-runtime-usage]: ../../README.md#standalone-research-runtimes
+[cli-runtime-smoke]: ../../tests/test_smoke.py
+[cli-runtime-execution]: ../../tests/test_execution.py

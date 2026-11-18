@@ -72,6 +72,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Assemble and run an x86-64 assembly file (`long long solve(void)`) in the P1 jail executor",
     )
     action.add_argument(
+        "--run-wat",
+        type=Path,
+        metavar="FILE",
+        help="Run WAT exporting solve() -> i64 in a jailed Wasmtime worker",
+    )
+    action.add_argument(
+        "--run-hex",
+        type=Path,
+        metavar="FILE",
+        help="Emulate x86-64 machine-code hex in a jailed Unicorn worker",
+    )
+    action.add_argument(
         "--check-imports",
         type=Path,
         metavar="FILE",
@@ -153,8 +165,8 @@ def main(argv: list[str] | None = None) -> int:
         report = evaluate_import_policy(_read_program(args.check_imports))
         print(json.dumps(asdict(report)))
         return 0 if report.compliant else 1
-    if args.run_python or args.run_c or args.run_asm:
-        from neural_compiler.bridge import run_asm, run_c, run_python
+    if args.run_python or args.run_c or args.run_asm or args.run_wat or args.run_hex:
+        from neural_compiler.bridge import run_asm, run_c, run_hex, run_python, run_wat
 
         if args.run_python:
             result = run_python(_read_program(args.run_python), timeout=args.timeout)
@@ -164,8 +176,12 @@ def main(argv: list[str] | None = None) -> int:
                 timeout=args.timeout,
                 compiler=args.compiler,
             )
-        else:
+        elif args.run_asm:
             result = run_asm(_read_program(args.run_asm), timeout=args.timeout)
+        elif args.run_wat:
+            result = run_wat(_read_program(args.run_wat), timeout=args.timeout)
+        else:
+            result = run_hex(_read_program(args.run_hex), timeout=args.timeout)
         print(json.dumps(asdict(result)))
         return 0 if result.status == "ok" else 1
     return 0
