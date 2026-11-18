@@ -4233,3 +4233,40 @@ compatible repair.
 [cli-runtime-worker]: ../../src/neural_compiler/bridge/runtime.py
 [cli-runtime-regressions]: ../../tests/test_native_bridge.py
 [cli-runtime-budget-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44280678618
+
+### 2026-11-18: snapshot the frozen dispatch policy's import allowlist
+
+The [shared dispatch policy][cli-runtime-api] retained the caller's mutable
+`Set[str]` even though the dataclass was frozen. Two instrumented dispatch
+fixtures reproduced admission changing after construction: adding `math`
+changed a rejection into a launch, while removing it changed a launch into
+a rejection. The constructor now snapshots a supplied allowlist as `frozenset`;
+the accepted `Set[str] | None` API, `None` default, candidate module contents,
+standalone `run_python` behavior and other execution controls are unchanged.
+The class docstring states the construction-time snapshot semantics. This
+repairs configuration ownership, not the known limits of static import checks
+or an adoption of any production import/syscall policy.
+
+**Finite routine ledger:** two [regression cases][dispatch-import-regressions],
+each with two dispatches of the same sub-128-byte `import math` program,
+one-second/1,024-byte configured limits and an instrumented jail boundary.
+These cases exercise the real static admission path but launch no child;
+temporary accepted-source workspaces are cleaned by the existing executor.
+Failing focus **2 failed** (0.05 s), confirming both opposite status changes;
+repaired focus **2 passed** (0.03 s), coupled policy/native/execution **101 passed**
+(2.85 s), root **599 passed, 3 skipped** (24.63 s), fourteen existing Torch
+warnings. One failing focus, one repaired focus, one coupled/root invocation
+spent, with no aborts, changed limits or repeated unchanged green gates.
+Scoped formatting left both files unchanged; root Ruff, scoped whitespace and
+product diagnostics passed; test diagnostics contain unused-parameter hints.
+Actual jailed Python/C/assembly/Wasm/Unicorn controls ran in regression. The
+three skipped real-controller probes remain unqualified without delegation.
+
+The [runtime-import checkpoint passed hosted CI][runtime-import-ci]. No new
+dependencies, downloads, model/GPU jobs, services or host changes; tiny fixture
+retention remains pytest's normal policy. Next resume the offline-evidence
+prerequisite queue with bounded source/fixture inspection, retaining the
+separate gates for accepted task data, trajectory collection and model studies.
+
+[dispatch-import-regressions]: ../../tests/test_red_team_contracts.py
+[runtime-import-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44281549074

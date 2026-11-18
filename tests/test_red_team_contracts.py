@@ -87,6 +87,34 @@ def test_bridge_policy_dispatch_and_validation(monkeypatch, tmp_path: Path) -> N
         execute_program("rust", "fn main() {}", policy)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("initially_allowed", [False, True], ids=["add", "remove"])
+def test_bridge_policy_import_admission_ignores_caller_set_mutation(
+    monkeypatch, initially_allowed: bool
+) -> None:
+    allowed = {"math"} if initially_allowed else set()
+    policy = BridgePolicy(allowed_imports=allowed, timeout=1, output_limit=1024)
+    launches = 0
+
+    def fake_jailed(*_args, **_kwargs):
+        nonlocal launches
+        launches += 1
+        return ExecutionResult("ok", "42\n", returncode=0)
+
+    monkeypatch.setattr("neural_compiler.bridge.execution.run_jailed", fake_jailed)
+    expected_status = "ok" if initially_allowed else "sandbox_error"
+    code = "import math\nprint(42)"
+    assert execute_program("python", code, policy).status == expected_status
+    if initially_allowed:
+        allowed.remove("math")
+    else:
+        allowed.add("math")
+    result = execute_program("python", code, policy)
+    assert result.status == expected_status, result
+    assert launches == (2 if initially_allowed else 0)
+    if not initially_allowed:
+        assert "Blocked by static import policy: math" in result.stderr
+
+
 @pytest.mark.parametrize(
     "kwargs,match",
     [

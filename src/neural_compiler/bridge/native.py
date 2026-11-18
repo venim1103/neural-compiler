@@ -322,7 +322,10 @@ ALL_LANGUAGES: tuple[Language, ...] = ("python", "c", "asm", "wat", "hex")
 
 @dataclass(frozen=True)
 class BridgePolicy:
-    """Shared execution and containment configuration across bridge tiers."""
+    """Shared execution and containment configuration across bridge tiers.
+
+    Import allowlists are snapshotted so caller mutation cannot change admission.
+    """
 
     timeout: float = 20.0
     output_limit: int = MAX_OUTPUT_BYTES
@@ -340,6 +343,8 @@ class BridgePolicy:
             raise ValueError(f"Unsupported C compiler: {self.c_compiler!r}")
         _validate_runtime_budget("wat", self.wat_fuel, "wat_fuel")
         _validate_runtime_budget("hex", self.hex_max_insns, "hex_max_insns")
+        if self.allowed_imports is not None:
+            object.__setattr__(self, "allowed_imports", frozenset(self.allowed_imports))
 
 
 def execute_program(
