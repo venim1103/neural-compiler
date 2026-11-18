@@ -87,6 +87,13 @@ neural-compiler --timeout 3 --run-wat path/to/program.wat
 neural-compiler --timeout 3 --run-hex path/to/program.hex
 ```
 
+For tighter work limits, add `--wat-fuel COUNT` with `--run-wat`, or
+`--hex-max-insns COUNT` with `--run-hex`. Counts must be positive integers
+representable by the runtime counter; invalid counts and mismatched actions
+fail before reading the program file. Exhaustion is reported as `timeout`,
+independently of the wall-clock deadline. Omitting these options preserves the
+API defaults.
+
 WAT must export `solve` with no arguments and one `i64` result. Hex input is an
 x86-64 function that returns with `ret`, with the signed 64-bit result in `RAX`.
 Both actions use the same bounded UTF-8 file reader, JSON result format and

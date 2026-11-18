@@ -4148,3 +4148,41 @@ then verify actual bounded exhaustion rather than wall-time alone.
 [cli-runtime-usage]: ../../README.md#standalone-research-runtimes
 [cli-runtime-smoke]: ../../tests/test_smoke.py
 [cli-runtime-execution]: ../../tests/test_execution.py
+
+### 2026-11-18: expose bounded runtime work controls without new defaults
+
+[The CLI][cli-runtime-source] now accepts `--wat-fuel COUNT` with `--run-wat`
+and `--hex-max-insns COUNT` with `--run-hex`. These directly expose existing
+[native API][cli-runtime-api] arguments, not new execution policies or
+thresholds. Omitted options still omit those keywords and preserve API defaults;
+explicit values reuse the existing positive/unsigned-ABI-counter validator
+before source-file access. Mismatched action/option pairs fail through argparse.
+The [public usage][cli-runtime-usage] distinguishes these work controls from
+the independent wall deadline and retains the experimental safety caveats.
+
+**Finite routine ledger:** ten new cases comprise two supplied-cap dispatches,
+four zero/ABI-overflow rejections before `Path.open`, two mismatched-action
+errors and two actual jailed exhaustion cases in the existing runtime matrix.
+The unchanged default-dispatch and actual `42` controls remain. The trusted WAT
+loop is bounded by **1,000 fuel**, the hex loop by **100 instructions**; each
+source is under 128 bytes with a separate three-second deadline and the existing
+64 KiB output cap. Both actually returned worker code `3`/`timeout` with fuel/
+instruction diagnostics, not a wall-clock-only failure or unjailed simulation.
+
+Initial selector **10 failed, 4 passed** (0.95 s), all from unsupported new
+options; repaired selector **14 passed** (0.49 s). Coupled CLI/execution/native
+**109 passed** (2.29 s), root **593 passed, 3 skipped** (31.15 s), fourteen
+existing Torch warnings. One failing focus, one repaired focus, one coupled/root
+invocation spent; no aborts, changed safety/work thresholds or repeated unchanged
+green gates. Scoped formatter left all three files unchanged. Root Ruff,
+scoped formatting/whitespace and CLI diagnostics passed; test diagnostics are
+unused-parameter hints only. Real controller skips are not qualification.
+Existing jailed Python/C/assembly/Wasm/Unicorn controls ran. No dependencies,
+downloads, pretrained/GPU jobs, services or host changes; worker workspaces
+clean, tiny fixture files retained under pytest's normal policy.
+
+Next examine the directly coupled setup-failure path: Wasmtime/Unicorn are
+already optional prepared-environment prerequisites, and their absence should
+not be presented to inference as a guest-program error eligible for repair.
+Keep dependency setup failures explicit without importing native runtimes into
+the supervisor, changing dependencies or trusting guest stderr as control.

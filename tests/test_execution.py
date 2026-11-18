@@ -332,18 +332,34 @@ def test_cli_source_ingestion_reads_only_the_bounded_prefix(
 
 
 @pytest.mark.parametrize(
-    "action,code,dependency",
+    "action,code,dependency,work_args,status",
     [
         (
             "--run-wat",
             '(module (func (export "solve") (result i64) i64.const 42))',
             "wasmtime",
+            (),
+            "ok",
         ),
-        ("--run-hex", "b8 2a 00 00 00 c3", "unicorn"),
+        ("--run-hex", "b8 2a 00 00 00 c3", "unicorn", (), "ok"),
+        (
+            "--run-wat",
+            '(module (func (export "solve") (result i64) (loop $again (br $again)) i64.const 0))',
+            "wasmtime",
+            ("--wat-fuel", "1000"),
+            "timeout",
+        ),
+        (
+            "--run-hex",
+            "eb fe",
+            "unicorn",
+            ("--hex-max-insns", "100"),
+            "timeout",
+        ),
     ],
 )
 def test_cli_standalone_runtime_uses_jailed_worker(
-    jail, tmp_path: Path, capsys, action, code, dependency
+    jail, tmp_path: Path, capsys, action, code, dependency, work_args, status
 ):
     import importlib.util
     import json
@@ -352,13 +368,22 @@ def test_cli_standalone_runtime_uses_jailed_worker(
         pytest.skip(f"{dependency} unavailable; no unjailed fallback")
     source = tmp_path / "program"
     source.write_text(code, encoding="utf-8")
-    assert main(["--timeout", "3", action, str(source)]) == 0
-    assert json.loads(capsys.readouterr().out) == {
-        "status": "ok",
-        "stdout": "42\n",
-        "stderr": "",
-        "returncode": 0,
-    }
+    assert main(["--timeout", "3", *work_args, action, str(source)]) == (
+        0 if status == "ok" else 1
+    )
+    result = json.loads(capsys.readouterr().out)
+    if status == "ok":
+        assert result == {
+            "status": "ok",
+            "stdout": "42\n",
+            "stderr": "",
+            "returncode": 0,
+        }
+    else:
+        assert result["status"] == "timeout" and result["returncode"] == 3
+        assert result["stdout"] == ""
+        diagnostic = "fuel" if dependency == "wasmtime" else "instruction limit"
+        assert diagnostic in result["stderr"]
 
 
 def test_run_jailed_command_assembly_and_fd_plumbing(

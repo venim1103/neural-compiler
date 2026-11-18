@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -96,31 +97,77 @@ def test_cli_check_imports_and_native_flags(
         ("run_hex", ExecutionResult("timeout", "", "instruction limit", 3)),
     ],
 )
+@pytest.mark.parametrize("bounded", [False, True])
 def test_cli_standalone_runtime_flags(
-    monkeypatch, tmp_path: Path, capsys, runner, result
+    monkeypatch, tmp_path: Path, capsys, runner, result, bounded
 ):
     from neural_compiler import bridge
 
     received = []
 
-    def fake_runtime(code, timeout=20):
-        received.append((code, timeout))
+    def fake_runtime(code, timeout=20, **options):
+        received.append((code, timeout, options))
         return result
 
     monkeypatch.setattr(bridge, runner, fake_runtime)
     source = tmp_path / "program"
     source.write_bytes(b"fixture\r\n")
     action = "--" + runner.replace("_", "-")
-    assert main(["--timeout", "2.5", action, str(source)]) == (
+    flag, keyword = (
+        ("--wat-fuel", "fuel")
+        if runner == "run_wat"
+        else ("--hex-max-insns", "max_insns")
+    )
+    arguments = [flag, "17"] if bounded else []
+    assert main(["--timeout", "2.5", *arguments, action, str(source)]) == (
         0 if result.status == "ok" else 1
     )
-    assert received == [("fixture\n", 2.5)]
+    assert received == [("fixture\n", 2.5, {keyword: 17} if bounded else {})]
     assert json.loads(capsys.readouterr().out) == {
         "status": result.status,
         "stdout": result.stdout,
         "stderr": result.stderr,
         "returncode": result.returncode,
     }
+
+
+@pytest.mark.parametrize(
+    "flag,action,counter",
+    [
+        ("--wat-fuel", "--run-wat", ctypes.c_uint64),
+        ("--hex-max-insns", "--run-hex", ctypes.c_size_t),
+    ],
+)
+@pytest.mark.parametrize("overflow", [False, True])
+def test_cli_runtime_work_limits_fail_before_file_access(
+    tmp_path: Path, monkeypatch, flag, action, counter, overflow
+):
+    value = 1 << (8 * ctypes.sizeof(counter)) if overflow else 0
+    monkeypatch.setattr(
+        Path,
+        "open",
+        lambda *args, **kwargs: pytest.fail("Invalid work limit read a file"),
+    )
+    with pytest.raises(ValueError, match=rf"{flag}.*(positive integer|counter)"):
+        main([flag, str(value), action, str(tmp_path / "absent")])
+
+
+@pytest.mark.parametrize(
+    "flag,action,required",
+    [
+        ("--wat-fuel", "--run-hex", "--run-wat"),
+        ("--hex-max-insns", "--run-wat", "--run-hex"),
+    ],
+)
+def test_cli_runtime_work_options_require_matching_action(
+    tmp_path: Path, capsys, flag, action, required
+):
+    with pytest.raises(SystemExit) as error:
+        main([flag, "17", action, str(tmp_path / "absent")])
+    assert error.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert f"{flag} requires {required}" in captured.err
 
 
 @pytest.mark.parametrize(

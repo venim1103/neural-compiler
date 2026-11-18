@@ -35,6 +35,18 @@ def main(argv: list[str] | None = None) -> int:
         help="C compiler inside the jail for --run-c (default: gcc)",
     )
     parser.add_argument(
+        "--wat-fuel",
+        type=int,
+        metavar="COUNT",
+        help="Override the API fuel limit for --run-wat",
+    )
+    parser.add_argument(
+        "--hex-max-insns",
+        type=int,
+        metavar="COUNT",
+        help="Override the API instruction limit for --run-hex",
+    )
+    parser.add_argument(
         "--eval-tasks",
         type=Path,
         metavar="FILE",
@@ -108,6 +120,16 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--check-serving-logits requires --serving-report")
     if args.eval_development_tasks is not None and args.eval_tasks is None:
         parser.error("--eval-development-tasks requires --eval-tasks")
+    for flag, limit, source, language in (
+        ("--wat-fuel", args.wat_fuel, args.run_wat, "wat"),
+        ("--hex-max-insns", args.hex_max_insns, args.run_hex, "hex"),
+    ):
+        if limit is not None:
+            if source is None:
+                parser.error(f"{flag} requires --run-{language}")
+            from neural_compiler.bridge.native import _validate_runtime_budget
+
+            _validate_runtime_budget(language, limit, flag)
     if args.version:
         print(json.dumps({"name": "neural-compiler", "version": __version__}))
         return 0
@@ -179,9 +201,21 @@ def main(argv: list[str] | None = None) -> int:
         elif args.run_asm:
             result = run_asm(_read_program(args.run_asm), timeout=args.timeout)
         elif args.run_wat:
-            result = run_wat(_read_program(args.run_wat), timeout=args.timeout)
+            result = run_wat(
+                _read_program(args.run_wat),
+                timeout=args.timeout,
+                **({"fuel": args.wat_fuel} if args.wat_fuel is not None else {}),
+            )
         else:
-            result = run_hex(_read_program(args.run_hex), timeout=args.timeout)
+            result = run_hex(
+                _read_program(args.run_hex),
+                timeout=args.timeout,
+                **(
+                    {"max_insns": args.hex_max_insns}
+                    if args.hex_max_insns is not None
+                    else {}
+                ),
+            )
         print(json.dumps(asdict(result)))
         return 0 if result.status == "ok" else 1
     return 0
