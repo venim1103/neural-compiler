@@ -453,6 +453,7 @@ def test_serving_observations_round_trip_bits_and_report(dtype):
     [
         ("mode", "Unknown serving mode"),
         ("token", "final_token"),
+        ("negative_token", "nonnegative"),
         ("byte_order", "byte order"),
         ("shape", "byte length"),
         ("dtype", "Unsupported logit dtype"),
@@ -482,6 +483,8 @@ def test_invalid_serving_observations_fail_before_tensor_reconstruction(
         record["mode"] = "unknown"
     elif fault == "token":
         record["final_tokens"][0] = True
+    elif fault == "negative_token":
+        record["final_tokens"][0] = -1
     elif fault == "byte_order":
         record["final_logits"]["byte_order"] = (
             "big" if sys.byteorder == "little" else "little"

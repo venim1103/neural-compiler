@@ -268,6 +268,7 @@ class FullReprefillSession:
 class ServingCaseResult:
     """Captured logits can precede a pending final ID in the token history.
 
+    Token histories are immutable tuples of nonnegative integer IDs.
     logit_prefix_tokens identifies their observed prefix; None is unmeasured.
     """
 
@@ -293,6 +294,11 @@ class ServingCaseResult:
             value = getattr(self, name)
             if type(value) is not int or value < 0:
                 raise ValueError(f"{name} must be a nonnegative integer")
+        if not isinstance(self.final_tokens, tuple):
+            raise ValueError("final_tokens must be an immutable tuple")
+        _validate_token_ids(self.final_tokens)
+        if any(token < 0 for token in self.final_tokens):
+            raise ValueError("final_tokens must contain nonnegative token IDs")
         value = self.logit_prefix_tokens
         if value is not None and (
             type(value) is not int or not 0 <= value <= len(self.final_tokens)

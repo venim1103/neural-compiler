@@ -553,6 +553,22 @@ def test_serving_summary_rejects_unmatched_results(fault):
 
 
 @pytest.mark.parametrize(
+    "tokens,error",
+    [
+        ([1], "final_tokens.*tuple"),
+        ((True,), "Token IDs must be integers"),
+        ((1.0,), "Token IDs must be integers"),
+        ((-1,), "nonnegative"),
+    ],
+    ids=["mutable-list", "boolean", "fractional", "negative"],
+)
+def test_invalid_serving_token_history_is_rejected(tokens, error):
+    case = CaseResult("case", "unit", "python_tool", "correct", "", "42", 1, 3, 0, ())
+    with pytest.raises(ValueError, match=error):
+        ServingCaseResult("live_pause_resume", case, tokens, None, 3, 0, 0, 0, 0)
+
+
+@pytest.mark.parametrize(
     "field",
     [
         "prefill_tokens",

@@ -4308,3 +4308,46 @@ optional numerical replay and exact-boundary qualification limits.
 
 [case-call-regressions]: ../../tests/test_evaluation.py
 [dispatch-import-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44282147850
+
+### 2026-11-18: validate serving token histories before evidence allocation
+
+The [serving record][pause-gate-serving] accepted mutable histories and
+boolean/floating/negative token IDs. Shared integer validation previously ran
+only during opt-in numerical comparison. In ordinary [JSON replay][serving-token-io],
+negative IDs passed integer parsing and reached logit-tensor reconstruction.
+Four constructor fixtures reproduced acceptance, and the negative-ID wire case
+hit the existing tensor-allocation trap.
+
+The constructor now requires the declared immutable tuple, reuses shared strict
+integer-ID validation and rejects negative history IDs before checking the
+observed logit boundary. Consequently JSON reconstruction fails before logits
+are allocated. Empty histories remain valid for missing/failed observations;
+vocabulary bounds are not invented without model metadata. Live-session/EOS
+behavior, raw logit-bit preservation, optional numerical checking and its fixed
+tolerances are unchanged. This is structural evidence validation, not engine
+integration or authenticated model measurements.
+
+**Finite routine ledger:** five new cases: four constructor-only histories,
+with one case/serving row each and at most one token, plus the existing wire
+fixture extended with a negative ID. The latter uses six fixed base rows,
+one serving row, three IDs and a 1x4 float32/16-byte tensor. No new fixture
+loads a model or executes a guest. Failing focus **5 failed** (0.18 s),
+repaired focus including existing empty-observation controls **7 passed**
+(0.06 s), coupled serving/evidence **159 passed** (5.08 s), root **608 passed,
+3 skipped** (22.21 s), fourteen existing Torch warnings. One failing focus,
+one repaired focus, one coupled/root invocation spent, no aborts, changed
+thresholds or repeated unchanged green gates. All three scoped Python files
+were already formatted; root Ruff, scoped whitespace and product diagnostics
+passed. Test diagnostics contain unused-parameter hints.
+
+Existing exact-boundary/multi-call tiny CPU fixtures, raw-bit evidence round trips
+and actual jailed Python/C/assembly/Wasm/Unicorn controls ran. The three real
+controller skips still require writable delegation. The [immutable-call checkpoint
+passed hosted CI][case-call-ci]. No dependencies, downloads, pretrained/GPU
+studies, services or host changes; new records/streams remain in memory and
+existing pytest retention is unchanged. Next recheck current queue/resources
+against the owning code and existing offline prerequisites rather than
+mistaking these unit passes for held-out, real-engine or containment qualification.
+
+[serving-token-io]: ../../src/neural_compiler/eval/records.py
+[case-call-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44282933535
