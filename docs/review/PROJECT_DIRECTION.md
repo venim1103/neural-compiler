@@ -4186,3 +4186,50 @@ already optional prepared-environment prerequisites, and their absence should
 not be presented to inference as a guest-program error eligible for repair.
 Keep dependency setup failures explicit without importing native runtimes into
 the supervisor, changing dependencies or trusting guest stderr as control.
+
+### 2026-11-18: separate jailed runtime import failures from guest errors
+
+The [trusted jailed worker][cli-runtime-worker] imported optional native runtimes
+before constructing the engine/guest. Missing modules and native-loader errors
+escaped with child code `1`, which [the parent][cli-runtime-api] classified as
+`runtime_error`. Four actual jailed import-fault fixtures reproduced this,
+so an unavailable environment could incorrectly appear eligible for code repair.
+Only the Wasmtime/Unicorn import statements now catch `ImportError`/`OSError`;
+they emit an explicit runtime-unavailable diagnostic and trusted worker code `4`,
+mapped to the existing public `sandbox_error`. Guest, compile and work-exhaustion
+statuses, raw return codes, budgets and result schema are unchanged. No native
+engine import moved into the supervisor, no stderr text became a control signal,
+and no dependency installation or execution fallback was introduced.
+
+**Finite routine ledger:** four [end-to-end fixtures][cli-runtime-regressions]
+cross Wasmtime/Unicorn with missing-module/broken-loader faults. Each uses one
+Python namespace control and one guarded worker, with a three-second deadline,
+at most 2,048 output bytes, guest source under 128 bytes and a trusted import
+guard under 1 KiB. The guard exists only in the owned temporary worker directory;
+normal imports are forwarded, with no installed-package or host import changes.
+WAT fuel remains 1,000 and hex instructions 100, although failure precedes
+engine/guest construction.
+
+Failing focus **4 failed** (0.36 s), all as `runtime_error`/code `1` with uncaught
+tracebacks; repaired focus **4 passed** (0.31 s), coupled native/execution/CLI
+**113 passed** (2.34 s), root **597 passed, 3 skipped** (21.55 s), fourteen existing
+Torch warnings. One failing focus, one repaired focus, one coupled/root invocation
+spent; no aborts, changed limits or repeated unchanged green gates. One of three
+scoped Python files was formatted. Root Ruff, scoped formatting/whitespace and
+product diagnostics passed; test diagnostics contain unused-parameter hints only.
+Existing jailed Python/C/assembly/Wasm/Unicorn controls ran. The three real
+controller skips still lack writable delegation and are not qualification.
+The [preceding work-budget checkpoint passed hosted CI][cli-runtime-budget-ci].
+
+The [public usage][cli-runtime-usage] and native docstrings now distinguish
+unavailable runtime imports from guest-code errors. Worker workspaces are
+cleaned; pytest retains tiny fixture files under its normal policy. No new
+dependencies, downloads, model/GPU jobs, services or host changes. This is
+prototype error classification, not production containment evidence. Next
+inspect whether the frozen shared dispatch policy retains a caller-owned mutable
+import allowlist, and reproduce any change in admission before deciding on a
+compatible repair.
+
+[cli-runtime-worker]: ../../src/neural_compiler/bridge/runtime.py
+[cli-runtime-regressions]: ../../tests/test_native_bridge.py
+[cli-runtime-budget-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44280678618

@@ -101,6 +101,8 @@ nonzero failure exit as `--run-python`. They preserve the API's default work cap
 (20 billion Wasmtime fuel units or 200 million Unicorn instructions) in addition
 to the supplied wall-clock timeout. Wasmtime/Unicorn must already be installed;
 neither action installs dependencies or falls back to execution outside the jail.
+Missing or unloadable runtime imports report `sandbox_error`, not a guest-program
+failure that can be repaired by changing the submitted code.
 These remain experimental tiers, not production containment or the default
 model-emission path.
 

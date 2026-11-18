@@ -243,7 +243,9 @@ def _run_jailed_runtime(
     except OSError as exc:
         return _sandbox_error(exc, result)
     if result.status == "runtime_error":
-        mapped = {2: "compile_error", 3: "timeout"}.get(result.returncode)
+        mapped = {2: "compile_error", 3: "timeout", 4: "sandbox_error"}.get(
+            result.returncode
+        )
         if mapped is not None:
             return ExecutionResult(
                 mapped,
@@ -266,6 +268,7 @@ def run_wat(
     """Execute WAT (`export "solve" -> i64`) in a jailed Wasmtime worker.
 
     Fuel must be a positive integer representable by an unsigned 64-bit counter.
+    Missing/unloadable runtime imports are sandbox_error, not guest errors.
     """
     return _run_jailed_runtime(
         "wat",
@@ -290,6 +293,7 @@ def run_hex(
     """Emulate raw x86-64 machine-code hex in a jailed Unicorn process.
 
     The positive instruction budget must be representable by C ``size_t``.
+    Missing/unloadable runtime imports are sandbox_error, not guest errors.
     """
     validate_code(code)
     try:

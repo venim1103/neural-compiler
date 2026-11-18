@@ -381,6 +381,61 @@ def test_native_bridge_real_jail_when_toolchain_available() -> None:
     assert asm_res.status == "ok" and asm_res.stdout.strip() == "42"
 
 
+@pytest.mark.parametrize(
+    "runner,program,dependency,budget",
+    [
+        (
+            run_wat,
+            '(module (func (export "solve") (result i64) i64.const 42))',
+            "wasmtime",
+            {"fuel": 1000},
+        ),
+        (run_hex, "b8 2a 00 00 00 c3", "unicorn", {"max_insns": 100}),
+    ],
+)
+@pytest.mark.parametrize("failure", ["missing", "loader"])
+def test_jailed_runtime_import_failures_are_infrastructure_errors(
+    monkeypatch, runner, program, dependency, budget, failure
+):
+    from neural_compiler.bridge import native
+
+    probe = run_python("print(0)", timeout=3, output_limit=1024)
+    if probe.status == "sandbox_error":
+        pytest.skip(f"bubblewrap namespaces unavailable: {probe.stderr}")
+    assert probe.status == "ok", probe
+    run_jailed = native.run_jailed
+    guard = f"""
+import builtins, runpy
+original_import = builtins.__import__
+def guarded_import(name, *args, **kwargs):
+    if name == {dependency!r}:
+        if {failure!r} == "missing":
+            raise ModuleNotFoundError("fixture dependency unavailable", name=name)
+        raise OSError("fixture binding unavailable")
+    return original_import(name, *args, **kwargs)
+builtins.__import__ = guarded_import
+runpy.run_path("/work/runtime.py", run_name="__main__")
+"""
+
+    def guarded_worker(command, workdir, timeout=20, **options):
+        assert command[2] == "/work/runtime.py"
+        (Path(workdir) / "importguard.py").write_text(guard, encoding="utf-8")
+        return run_jailed(
+            [*command[:2], "/work/importguard.py", *command[3:]],
+            workdir,
+            timeout,
+            **options,
+        )
+
+    monkeypatch.setattr(native, "run_jailed", guarded_worker)
+    result = runner(program, timeout=3, output_limit=2048, **budget)
+    assert result.status == "sandbox_error" and result.returncode == 4, result
+    assert result.stdout == ""
+    assert dependency in result.stderr.lower()
+    assert "fixture" in result.stderr and "unavailable" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
 def test_run_wat_and_run_hex_jail_contract_and_exit_mapping(
     monkeypatch, tmp_path: Path
 ) -> None:

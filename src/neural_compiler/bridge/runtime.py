@@ -7,7 +7,10 @@ from pathlib import Path
 
 
 def run_wat(code: str, fuel: int) -> tuple[int, str]:
-    import wasmtime
+    try:
+        import wasmtime
+    except (ImportError, OSError) as exc:
+        return 4, f"Wasmtime runtime unavailable: {exc}"
 
     config = wasmtime.Config()
     config.consume_fuel = True
@@ -39,8 +42,11 @@ def run_wat(code: str, fuel: int) -> tuple[int, str]:
 
 
 def run_hex(code: str, max_insns: int) -> tuple[int, str]:
-    from unicorn import UC_ARCH_X86, UC_MODE_64, Uc, UcError
-    from unicorn.x86_const import UC_X86_REG_RAX, UC_X86_REG_RIP, UC_X86_REG_RSP
+    try:
+        from unicorn import UC_ARCH_X86, UC_MODE_64, Uc, UcError
+        from unicorn.x86_const import UC_X86_REG_RAX, UC_X86_REG_RIP, UC_X86_REG_RSP
+    except (ImportError, OSError) as exc:
+        return 4, f"Unicorn runtime unavailable: {exc}"
 
     blob = bytes.fromhex(code)
     base, stack, ret = 0x100000, 0x800000, 0x300000
@@ -57,7 +63,10 @@ def run_hex(code: str, max_insns: int) -> tuple[int, str]:
         emulator.emu_start(base, ret, count=max_insns)
     except UcError as exc:
         return 1, str(exc)
-    if emulator.reg_read(UC_X86_REG_RIP) != ret or emulator.reg_read(UC_X86_REG_RSP) != rsp + 8:
+    if (
+        emulator.reg_read(UC_X86_REG_RIP) != ret
+        or emulator.reg_read(UC_X86_REG_RSP) != rsp + 8
+    ):
         return 3, "did not return before the instruction limit"
     value = emulator.reg_read(UC_X86_REG_RAX)
     return 0, str(value - (1 << 64) if value >> 63 else value)
@@ -66,6 +75,8 @@ def run_hex(code: str, max_insns: int) -> tuple[int, str]:
 if __name__ == "__main__":
     language, source, budget = sys.argv[1:]
     code = Path(source).read_text(encoding="utf-8")
-    status, output = run_wat(code, int(budget)) if language == "wat" else run_hex(code, int(budget))
+    status, output = (
+        run_wat(code, int(budget)) if language == "wat" else run_hex(code, int(budget))
+    )
     print(output, file=sys.stdout if status == 0 else sys.stderr)
     raise SystemExit(status)
