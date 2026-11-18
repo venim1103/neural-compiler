@@ -225,6 +225,36 @@ def test_invalid_response_ids_preserve_pending_cache_boundary(
     assert_reference(session)
 
 
+@pytest.mark.parametrize("pending", [False, True])
+def test_input_materialization_failure_preserves_healthy_cache(
+    hybrid_model, monkeypatch, pending
+):
+    session = LiveSession(hybrid_model, [1, 2, 3])
+    if pending:
+        monkeypatch.setattr(session, "_next_token", lambda: 4)
+        session.decode_until(1, lambda _: True)
+    checkpoint = session.checkpoint()
+    cache = session.cache
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            hybrid_model,
+            "forward",
+            lambda *args, **kwargs: pytest.fail("Unrepresentable input ran model"),
+        )
+        with pytest.raises(ValueError, match="Overflow when unpacking long long"):
+            session.inject([2**64])
+    assert session.cache is cache
+    assert session.tokens == checkpoint.tokens
+    assert session._pending == checkpoint.pending_token
+    torch.testing.assert_close(session.logits, checkpoint._logits, atol=0, rtol=0)
+    retained = session.checkpoint()
+    assert retained.tokens == checkpoint.tokens
+    assert retained.pending_token == checkpoint.pending_token
+    session.inject([5, 6])
+    assert session.tokens == (*checkpoint.tokens, 5, 6)
+    assert_reference(session)
+
+
 def test_initial_cache_must_cover_the_prompt(hybrid_model, monkeypatch):
     original_forward = hybrid_model.forward
 

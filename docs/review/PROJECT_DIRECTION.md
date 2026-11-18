@@ -3971,3 +3971,79 @@ resource sweep; these are remaining project gates, not project completion.
 [pause-gate-eval]: ../../src/neural_compiler/eval/harness.py
 [pause-gate-serving]: ../../src/neural_compiler/eval/serving.py
 [pause-gate-cgroups]: ../../tests/test_cgroups.py
+
+### 2026-11-18: distinguish input construction from a mutating forward
+
+A fresh continuation found a compatible local recovery defect in
+[LiveSession][input-materialization-source]. `_forward` marked its cache
+unusable before evaluating the input-tensor constructor. Injecting `2**64`
+raised Torch's `ValueError: Overflow when unpacking long long` without entering
+the model, yet permanently blocked checkpointing and subsequent valid use of
+the unchanged session. The defect reproduced with and without a pending token.
+
+Input tensors are now materialized after the existing input/model/prefix
+guards and **before** marking the cache unusable. Actual model entry still
+poisons the session until its returned logits/cache boundary is validated;
+partially mutated recurrent state is never reused. No exception is swallowed,
+invalid input discarded, new token-range policy adopted or cache rollback added.
+[Two regressions][input-materialization-tests] trap model entry on the failing
+input, preserve token history/pending state/cache identity/logits, capture a
+healthy checkpoint and then verify valid injection against full-prefill logits
+at the unchanged `atol=1e-6, rtol=1e-5`.
+
+**Finite routine ledger:** two new cases, each at most three tiny CPU forwards,
+six input IDs per forward and one forced sample. The first focus **2 failed**
+(0.29 s) because the test initially expected `RuntimeError`, while this Torch
+raises `ValueError`; that was a fixture error, not proof of cache poisoning.
+After correcting the assertion to the observed exception, the unchanged-source
+focus **2 failed** (0.21 s) at healthy checkpoint recovery. Repaired focus
+**2 passed** (0.06 s), coupled checkpoint/protocol/serving **187 passed**
+(9.15 s), root **575 passed, 3 skipped** (22.45 s), fourteen existing Torch
+warnings. Both failed attempts remain spent; no aborts or relaxed work/logit
+limits. Root Ruff, two-file formatting, whitespace and source diagnostics
+passed; test diagnostics contain unused-parameter hints only. Genuine
+mutating-forward failures and multi-call/full-prefill controls remain green.
+The three skips still lack writable real-controller qualification; actual
+jailed native/runtime controls ran. No dependencies, downloads, pretrained/GPU
+jobs, services, shared-host changes or retained artifacts.
+
+### 2026-11-18: pinned observer hook is a more relevant integration candidate
+
+The previous pause review explicitly left custom processors uninspected.
+At the same inspected source pin, [custom processors][sglang-custom-processors]
+serialize a class with `dill`, wrapped in JSON; their call returns a same-shape
+logit tensor. This is a trusted executable extension mechanism, not a safe
+recorded-evidence format or justification to enable arbitrary request code.
+No processor was deserialized, imported, installed or executed.
+
+The pinned [sampling observer contract][sglang-sampling-observer] is a more
+relevant candidate for observational instrumentation: it defines `is_active`,
+`before_grammar` and `after_sample`, the latter returning graph-safe device
+auxiliary output for scheduler-side copying. Its documented integration spans
+ModelRunner, Scheduler and TokenizerManager plugin hooks.
+[ModelRunner][sglang-observer-runner] explicitly excludes speculative and DLLM
+paths from its default observer-support predicate. Its complete `sample`
+method also assigns local `observer_state` only in the active-observer branch,
+then tests that local after either branch: inactive-path handling is a
+source-visible adoption risk, not an observed engine-run failure.
+
+Observer placement relative to all preprocessing, request/row identity, complete
+auxiliary-output transport, exact tool-boundary state and target kernels remain
+unqualified. Do not equate this interface with working raw-logit exports or
+implement a pretend engine adapter around it. A future isolated integration
+should investigate this explicit observer path before using a mutating custom
+processor; this does not adopt a dependency/revision or change the comparison
+contract.
+
+**Finite source ledger:** six successful primary HTTPS responses, **179,311
+bytes** total, within six-response/768 KiB total/256 KiB per-response caps,
+15-second I/O timeouts and 16,000 emitted source characters. Two narrow directory
+metadata reads led to the actual sampling files and measured ModelRunner size.
+No failures/aborts, widened caps, checkouts, retained bodies or engine execution.
+This closes the bounded source review, not runtime/cache/resource qualification.
+
+[input-materialization-source]: ../../src/neural_compiler/bridge/session.py
+[input-materialization-tests]: ../../tests/test_checkpoints.py
+[sglang-custom-processors]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/sampling/custom_logit_processor.py
+[sglang-sampling-observer]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/sampling/sampling_observer.py
+[sglang-observer-runner]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/model_executor/model_runner.py

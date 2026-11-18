@@ -138,6 +138,7 @@ class LiveSession:
     allowed when another entry can be selected.
     Failed model forwards invalidate the session; resume a prior valid checkpoint
     or prefill a new session rather than reusing potentially mutated state.
+    Input tensor construction failures before model entry preserve the cache.
     Invalid token budgets and non-callable stop callbacks are rejected before
     pending tokens are forwarded.
     Configuration changes are rejected even without tensor version counters.
@@ -196,11 +197,12 @@ class LiveSession:
         expected_cache_length = (
             0 if self.cache is None else self.cache.get_seq_length()
         ) + len(ids)
+        input_ids = torch.tensor(
+            [list(ids)], dtype=torch.long, device=self.model.device
+        )
         self._cache_usable = False
         output = self.model(
-            input_ids=torch.tensor(
-                [list(ids)], dtype=torch.long, device=self.model.device
-            ),
+            input_ids=input_ids,
             past_key_values=self.cache,
             use_cache=True,
             logits_to_keep=1,
