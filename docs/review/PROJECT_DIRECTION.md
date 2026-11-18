@@ -4047,3 +4047,58 @@ This closes the bounded source review, not runtime/cache/resource qualification.
 [sglang-custom-processors]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/sampling/custom_logit_processor.py
 [sglang-sampling-observer]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/sampling/sampling_observer.py
 [sglang-observer-runner]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/model_executor/model_runner.py
+
+### 2026-11-18: observer capture is after penalties, not inherently raw
+
+A bounded follow-up resolved the newly discovered observer's tensor stage.
+[ModelRunner preprocessing][sglang-observer-runner] delegates observation to
+[SamplingBatchInfo][sglang-observer-batch]. Its complete observed path applies
+pre-grammar transformations, invokes `before_grammar`, applies any grammar mask,
+then applies post-grammar transformations. The pre-grammar methods apply
+accumulated additive/scaling penalties or the non-overlap penalizer orchestrator;
+the post-grammar method applies logit bias. Therefore the hook's name does not
+establish that it exposes unchanged model logits. Matching our current raw-logit
+reference requires demonstrated identity preprocessing or an earlier capture,
+not relabelling transformed scores as raw observations.
+
+The [auxiliary-output contracts][sglang-observer-auxiliary] require device tensors
+not to alias graph-static buffers that can be overwritten before the later host
+copy. Host `consume` is specified to run after token commits and before streaming;
+its commit sequence aligns with `batch.reqs`. The contract permits per-request
+buffering for a streamer subclass. A snapshot of the tensor and explicit request/
+commit association are prerequisites, not evidence that default responses export
+those observations. An output-streamer selector found no auxiliary-named methods;
+inline/inherited/subclass transport was not ruled out or fully traced. No full
+transport, runtime boundary, graph or target-kernel qualification is claimed.
+
+**Finite source ledger:** five successful primary responses, **205,262 bytes**
+total, within five-response/768 KiB aggregate/256 KiB per-response caps,
+15-second I/O timeouts and 14,000 selected source characters. A second
+SamplingBatchInfo query followed the actual named pre/post-transform helpers,
+not a repeated settled token-output trace. No failed/aborted requests, widened
+caps, retained bodies, imports/execution, checkouts, dependencies, downloads of
+model/data artifacts, pretrained/GPU jobs, services or host changes. This
+documentation-only follow-up does not repeat the unchanged **575 passed,
+3 skipped** code gate.
+
+The [input-recovery checkpoint passed hosted CI][input-materialization-ci]
+at `2a8876b`. A fresh resource/queue recheck retains the existing boundaries:
+the [offline evaluation implementation][pause-gate-eval] is available, but
+accepted held-out cohorts/splits and a fresh exact study scope remain absent;
+the [serving implementation][pause-gate-serving] remains a CPU-fixture
+comparison, while current terminal metadata still finds no SGLang/vLLM.
+Installed Torch `2.10.0+cu128` and Transformers `5.22.1` still differ from the
+inspected release's dependency requirements. Isolated compatible runtime
+adoption, an actual exact-boundary/logit hook and measured target behavior
+remain separate next steps, not replaceable with a synthetic HTTP/plugin adapter.
+The [three real controller probes][pause-gate-cgroups] still need writable
+owner delegation: `/sys/fs/cgroup` remains the sole visible cgroup2 mount,
+read-only/nonwritable with empty subtree control, and the test-root variable is
+unset. No additional concrete permitted local implementation prerequisite was
+identified after the cache repair and these source follow-ups; project
+qualification remains incomplete, without changing host privileges or adopting
+production workload/syscall policies.
+
+[sglang-observer-batch]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/sampling/sampling_batch_info.py
+[sglang-observer-auxiliary]: https://github.com/sgl-project/sglang/blob/297e54fd105e974cdf401e5b4d20253a22c16f90/python/sglang/srt/managers/auxiliary_output.py
+[input-materialization-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44277647761
