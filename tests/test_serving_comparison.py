@@ -205,6 +205,52 @@ def test_invalid_snapshot_override_is_rejected_before_prefix_lookup(
     assert store.hits == store.misses == 0
 
 
+@pytest.mark.parametrize("cached", [False, True])
+def test_resubmission_copies_logits_only_at_checkpoint_or_release(
+    hybrid_model, monkeypatch, cached
+):
+    source = None
+
+    def sample(session):
+        nonlocal source
+        source = session
+        return 4
+
+    clone = torch.Tensor.clone
+    logit_copies = []
+    logit_shape = (1, hybrid_model.config.vocab_size)
+
+    def tracked_clone(tensor, *args, **kwargs):
+        if tensor.shape == logit_shape:
+            logit_copies.append(None)
+        return clone(tensor, *args, **kwargs)
+
+    monkeypatch.setattr(torch.Tensor, "clone", tracked_clone)
+    if cached:
+        adapter = PrefixCachedSession(
+            hybrid_model, [1, 2, 3], CheckpointStore(), on_token_override=sample
+        )
+    else:
+        adapter = FullReprefillSession(hybrid_model, [1, 2, 3], sample)
+
+    assert len(logit_copies) == int(cached)  # Only the initial checkpoint.
+    logit_copies.clear()
+    assert adapter.decode_until(1, lambda _: True).reason == "stop"
+    assert len(logit_copies) == 1 + cached  # Release, plus a stored checkpoint.
+    assert source is not None
+    released_logits = clone(adapter.logits)
+    source.logits.add_(1)
+    torch.testing.assert_close(adapter.logits, released_logits, atol=0, rtol=0)
+
+    logit_copies.clear()
+    adapter.inject([5, 6])
+    assert len(logit_copies) == int(cached)  # Only restoring the checkpoint.
+    logit_copies.clear()
+    assert adapter.decode_until(1).reason == "length"
+    assert not logit_copies
+    assert adapter.tokens == (1, 2, 3, 4, 5, 6, 4)
+
+
 def test_captured_logits_are_independent_of_mutable_sampler_sessions(
     tokenizer, hybrid_model
 ):

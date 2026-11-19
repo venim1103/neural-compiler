@@ -128,8 +128,7 @@ class PrefixCachedSession:
         self._prefix_tensor_versions = self._session._prefix_tensor_versions
         self._prefix_config = self._session._prefix_config
         self._bind_sampler(self._session)
-        self._last_tokens: tuple[int, ...] = self._session.tokens
-        self._last_logits: torch.Tensor = self._session.logits.detach().clone()
+        self._released: tuple[tuple[int, ...], torch.Tensor] | None = None
         self.checkpoint_bytes_peak = store.total_bytes
         if self.prefill_tokens > 0:
             self._save_checkpoint(self._session)
@@ -147,11 +146,17 @@ class PrefixCachedSession:
 
     @property
     def tokens(self) -> tuple[int, ...]:
-        return self._last_tokens if self._session is None else self._session.tokens
+        if self._session is not None:
+            return self._session.tokens
+        assert self._released is not None
+        return self._released[0]
 
     @property
     def logits(self) -> torch.Tensor:
-        return self._last_logits if self._session is None else self._session.logits
+        if self._session is not None:
+            return self._session.logits
+        assert self._released is not None
+        return self._released[1]
 
     def decode_until(
         self,
@@ -164,16 +169,18 @@ class PrefixCachedSession:
                 self.model, self._prefix_tensor_versions, self._prefix_config
             )
             self._session, step_prefilled = self.store.resume_prefix(
-                self.model, self._last_tokens
+                self.model, self.tokens
             )
+            self._released = None
             self._bind_sampler(self._session)
             self.prefill_tokens += step_prefilled
         result = self._session.decode_until(max_new_tokens, on_token)
-        self._last_tokens = self._session.tokens
-        self._last_logits = self._session.logits.detach().clone()
         if result.reason == "stop":
             self._save_checkpoint(self._session)
-            # Release live session to model stateless turn boundary handoff.
+            self._released = (
+                self._session.tokens,
+                self._session.logits.detach().clone(),
+            )
             self._session = None
         return result
 
@@ -183,17 +190,13 @@ class PrefixCachedSession:
         _validate_prefix_model(
             self.model, self._prefix_tensor_versions, self._prefix_config
         )
-        base_tokens = (
-            self._last_tokens if self._session is None else self._session.tokens
-        )
-        resubmitted = (*base_tokens, *response_ids)
+        resubmitted = (*self.tokens, *response_ids)
         self._session, step_prefilled = self.store.resume_prefix(
             self.model, resubmitted
         )
+        self._released = None
         self._bind_sampler(self._session)
         self.prefill_tokens += step_prefilled
-        self._last_tokens = self._session.tokens
-        self._last_logits = self._session.logits.detach().clone()
 
 
 class FullReprefillSession:
@@ -212,8 +215,7 @@ class FullReprefillSession:
         self._prefix_tensor_versions = self._session._prefix_tensor_versions
         self._prefix_config = self._session._prefix_config
         self._bind_sampler(self._session)
-        self._tokens = list(prompt_ids)
-        self._last_logits: torch.Tensor = self._session.logits.detach().clone()
+        self._released: tuple[tuple[int, ...], torch.Tensor] | None = None
         self.prefill_tokens = len(prompt_ids)
 
     def _bind_sampler(self, session: LiveSession) -> None:
@@ -222,11 +224,17 @@ class FullReprefillSession:
 
     @property
     def tokens(self) -> tuple[int, ...]:
-        return tuple(self._tokens) if self._session is None else self._session.tokens
+        if self._session is not None:
+            return self._session.tokens
+        assert self._released is not None
+        return self._released[0]
 
     @property
     def logits(self) -> torch.Tensor:
-        return self._last_logits if self._session is None else self._session.logits
+        if self._session is not None:
+            return self._session.logits
+        assert self._released is not None
+        return self._released[1]
 
     def decode_until(
         self,
@@ -238,13 +246,17 @@ class FullReprefillSession:
             _validate_prefix_model(
                 self.model, self._prefix_tensor_versions, self._prefix_config
             )
-            self._session = LiveSession(self.model, self._tokens)
+            tokens = self.tokens
+            self._session = LiveSession(self.model, tokens)
+            self._released = None
             self._bind_sampler(self._session)
-            self.prefill_tokens += len(self._tokens)
+            self.prefill_tokens += len(tokens)
         result = self._session.decode_until(max_new_tokens, on_token)
-        self._tokens = list(self._session.tokens)
-        self._last_logits = self._session.logits.detach().clone()
         if result.reason == "stop":
+            self._released = (
+                self._session.tokens,
+                self._session.logits.detach().clone(),
+            )
             self._session = None
         return result
 
@@ -257,10 +269,9 @@ class FullReprefillSession:
         tokens = [*self.tokens, *response_ids]
         session = LiveSession(self.model, tokens)
         self._bind_sampler(session)
-        self._tokens = tokens
         self._session = session
+        self._released = None
         self.prefill_tokens += len(tokens)
-        self._last_logits = session.logits.detach().clone()
 
 
 @dataclass(frozen=True)

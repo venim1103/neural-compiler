@@ -2547,3 +2547,19 @@ A nonzero-offset strided fixture reproduced **1 failure** (0.07 s); the
 repaired evidence suite had **60 passes** (0.14 s), and root had
 **634 passed, 3 skipped** (21.34 s). Ruff, scoped formatting, whitespace and
 source diagnostics passed. No dependencies, data, model or host changes.
+
+### 2026-11-19: copy stateless serving logits only when releasing a session
+
+The prefix-cached and full-reprefill adapters now read the active session's
+tokens and logits directly. They retain an independent observation only on a
+callback stop and discard it after successful resumption. Cache capture,
+restore, observed output ownership and prefill accounting are unchanged.
+
+Two tiny CPU fixtures used three prompt IDs, two sampled IDs and two response
+IDs each. Initial **2 failures** (0.20 s) exposed a fixture config lookup; with
+that corrected, **2 failures** (0.16 s) showed one redundant initial copy in
+each adapter. Repaired serving focus **9 passed** (1.81 s); root
+**636 passed, 3 skipped** (30.42 s). Ruff, scoped formatting, whitespace and
+source diagnostics passed. Controller probes still lack writable delegation.
+Copy counts are not latency measurements; no dependencies, model study or host
+changes.
