@@ -6,6 +6,7 @@ import importlib.util
 import json
 from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -13,7 +14,7 @@ from transformers import AutoTokenizer
 
 from neural_compiler.bridge import ExecutionResult, run_python
 from neural_compiler.bridge.protocol import ProtocolError, QwenToolProtocol, ToolCall
-from neural_compiler.bridge.session import LiveSession
+from neural_compiler.bridge.session import DecodeResult, LiveSession
 
 
 def call_text(code: str) -> str:
@@ -242,22 +243,107 @@ def test_eos_and_exhausted_budgets_do_not_duplicate_tokens(
     assert_full_prefill(session)
 
 
-def test_native_experiment_executes_two_calls_and_rejects_malformed_calls(
-    tokenizer, hybrid_model, monkeypatch
-):
-    probe = run_python("print(0)")
-    if probe.status == "sandbox_error":
-        pytest.skip(f"bubblewrap namespaces unavailable: {probe.stderr}")
-    assert probe.status == "ok", probe
+@pytest.fixture
+def native_experiment(tokenizer, monkeypatch):
     path = Path(__file__).resolve().parents[1] / "docs/review/experiments/exp_loop.py"
     spec = importlib.util.spec_from_file_location("experiment_loop", path)
     assert spec is not None and spec.loader is not None
     experiment = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(experiment)
     monkeypatch.setattr(experiment, "tok", tokenizer, raising=False)
-    monkeypatch.setattr(experiment, "model", hybrid_model, raising=False)
     monkeypatch.setattr(experiment, "TASKS", {"simple": {"prompt": "6 * 7?"}})
     monkeypatch.setattr(experiment, "EXPECTED", {"simple": 42})
+    return experiment
+
+
+@pytest.mark.parametrize("scenario", ["eos", "length", "last_answer", "sandbox_error"])
+def test_native_experiment_requires_a_complete_answer_and_stops_on_isolation_failure(
+    tokenizer, monkeypatch, native_experiment, scenario
+):
+    text = "Final answer: 42<|im_end|>"
+    if scenario == "length":
+        answer = "Final answer: 42"
+        count = len(tokenizer.encode(answer, add_special_tokens=False))
+        text = "x" * (400 - count - 1) + "\n" + answer
+    elif scenario == "last_answer":
+        text = "Final answer: 42\nFinal answer: 41<|im_end|>"
+    elif scenario == "sandbox_error":
+        text = call_text("print(42)") + text
+    ids = tokenizer.encode(text, add_special_tokens=False)
+    assert len(ids) == 400 if scenario == "length" else len(ids) < 128
+    sessions = []
+    executions = []
+
+    class ScriptedSession:
+        def __init__(self, _model, prompt_ids):
+            assert 0 < len(prompt_ids) <= 512
+            self.tokens = tuple(prompt_ids)
+            self.injected = []
+            self.stream = iter(ids)
+            sessions.append(self)
+
+        def decode_until(self, max_new_tokens, on_token):
+            sampled = []
+            for _ in range(max_new_tokens):
+                token = next(self.stream)
+                sampled.append(token)
+                self.tokens += (token,)
+                assert len(self.tokens) <= 1024
+                if on_token(token):
+                    return DecodeResult(tuple(sampled), "stop")
+                if token == tokenizer.eos_token_id:
+                    return DecodeResult(tuple(sampled), "eos")
+            return DecodeResult(tuple(sampled), "length")
+
+        def inject(self, response_ids):
+            self.injected.append(tuple(response_ids))
+            self.tokens += tuple(response_ids)
+
+    def execute(code):
+        assert scenario == "sandbox_error" and code == "print(42)"
+        executions.append(code)
+        return ExecutionResult("sandbox_error", stderr="Fixture runtime unavailable")
+
+    monkeypatch.setattr(native_experiment, "LiveSession", ScriptedSession)
+    monkeypatch.setattr(
+        native_experiment,
+        "model",
+        SimpleNamespace(device=SimpleNamespace(type="cpu")),
+        raising=False,
+    )
+    monkeypatch.setattr(native_experiment, "run_python", execute)
+    row = native_experiment.part_c_native(["simple"])["simple"]
+    assert row["final_correct"] is (scenario == "eos"), row
+    assert row["final_answer"] == (
+        "42" if scenario == "eos" else "41" if scenario == "last_answer" else None
+    )
+    assert row["stop_reason"] == (
+        scenario if scenario in ("length", "sandbox_error") else "eos"
+    )
+    assert len(sessions) == 1 and sessions[0].injected == []
+    if scenario == "sandbox_error":
+        call_ids = tokenizer.encode(call_text("print(42)"), add_special_tokens=False)
+        assert row["generated_tokens"] == len(call_ids)
+        assert executions == ["print(42)"]
+        assert len(row["calls"]) == 1
+        assert row["calls"][0]["exec_status"] == "sandbox_error"
+        assert row["calls"][0]["result_tokens"] == 0
+        assert row["calls"][0]["prefill_result_ms"] is None
+        assert row["error"] == "Fixture runtime unavailable"
+    else:
+        assert row["generated_tokens"] == len(ids)
+        assert executions == [] and row["calls"] == []
+
+
+def test_native_experiment_executes_two_calls_and_rejects_malformed_calls(
+    tokenizer, hybrid_model, monkeypatch, native_experiment
+):
+    probe = run_python("print(0)")
+    if probe.status == "sandbox_error":
+        pytest.skip(f"bubblewrap namespaces unavailable: {probe.stderr}")
+    assert probe.status == "ok", probe
+    experiment = native_experiment
+    monkeypatch.setattr(experiment, "model", hybrid_model, raising=False)
     text = (
         call_text("raise ValueError('repair me')")
         + call_text("print(7 * 6)")
@@ -282,3 +368,7 @@ def test_native_experiment_executes_two_calls_and_rejects_malformed_calls(
     row = experiment.part_c_native(["simple"])["simple"]
     assert row["stop_reason"] == "protocol_error"
     assert row["error"] and row["calls"] == [] and row["final_correct"] is False
+    assert row["generated_tokens"] == len(
+        tokenizer.encode("<tool_call>bad</tool_call>", add_special_tokens=False)
+    )
+    assert row["prompt_prefill_ms"] >= 0 and row["total_ms"] >= 0

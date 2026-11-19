@@ -2352,3 +2352,48 @@ The sole visible cgroup2 mount remains read-only/nonwritable, with cpu/memory/pi
 controllers, empty subtree control and no delegated test-root variable. These
 are current prerequisites, not hardware-fit or containment measurements; no
 downloads, model/GPU jobs, services, dependencies or host settings changed.
+
+### 2026-11-19: close false-positive scoring in the native experiment path
+
+The [native experiment entry point][native-scoring-source] still used a first-match
+answer regex rather than the offline harness's exact checker. Scripted fixtures
+reproduced three false successes: a correct-looking answer at the **400-token
+length cutoff**, an earlier `42` followed by final `41`, and an isolation failure
+injected as a repairable result before an eventual `42`. This is a separate
+entry point from the already-verified evaluation harness.
+
+Native final scoring now requires completed EOS termination, removes only that
+sampled terminal token and uses the existing `IntegerChecker` last-line contract.
+Length cuts cannot receive credit; nonterminal special tokens are not stripped.
+`sandbox_error` stops the case without response injection or another decode.
+Executed calls are recorded before result framing, with zero injected tokens
+and unmeasured prefill time when no return is attempted. A shared terminal-row
+builder retains sampled-token counts, timing and transcript on protocol failures;
+counting in the callback also retains tokens sampled before parsing raises.
+Completed-row field names, five-call default and 400-token turn cap remain;
+historical Part B/C code, the loader and checked-in result JSON are unchanged.
+No new native accuracy or latency study was run.
+
+**Finite routine ledger:** four new scripted, no-model cases, one synthetic
+task each, at most 400 sampled IDs (only the exact cutoff reaches 400), 512 prompt
+tokens and 1,024 total history IDs. Fake execution makes at most one call and
+launches no child. The existing actual jailed two-call/tiny CPU hybrid regression
+now also checks retained malformed-call token counts/timing. Initial focus
+**3 failed, 1 passed** (0.08 s); repaired focus **4 passed** (0.04 s); coupled
+protocol/evaluation **183 passed** (8.99 s); root **612 passed, 3 skipped**
+(18.04 s), fourteen existing Torch warnings. One failing focus, one repaired
+focus, one coupled/root invocation spent, no aborts or relaxed limits.
+
+Root Ruff and whitespace passed; Pylance reports only unused-parameter hints.
+The initial full-file format check exposed pre-existing formatting throughout
+the historical script. Only the edited native routine was range-formatted:
+its AST-extracted formatting check and the complete changed test-file check
+pass, and an exact prefix/suffix check confirms unrelated script text is intact.
+This is not a claim that the historical file now passes full-file formatting.
+Actual jailed Python/C/assembly/Wasm/Unicorn controls ran in regression; the three
+real-controller skips still lack writable delegation. Fixtures remain in memory
+or normal pytest retention; no dependencies, downloads, pretrained/GPU jobs,
+services or host changes. Next inspect native token-limit and failure-accounting
+boundaries against the same harness contract before any future study.
+
+[native-scoring-source]: experiments/exp_loop.py

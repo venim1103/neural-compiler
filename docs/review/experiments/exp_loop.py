@@ -25,6 +25,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenize
 from neural_compiler.bridge import run_python
 from neural_compiler.bridge.protocol import RUN_TOOL, ProtocolError, QwenToolProtocol
 from neural_compiler.bridge.session import LiveSession
+from neural_compiler.eval import IntegerChecker
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -204,7 +205,7 @@ def part_c(names):
 
 
 def part_c_native(names, max_calls=5):
-    """Native turns, bounded repair calls, and incremental live-cache injection."""
+    """Native turns and exact final answers; isolation errors are not repairable."""
     if max_calls <= 0:
         raise ValueError("max_calls must be positive")
 
@@ -216,12 +217,23 @@ def part_c_native(names, max_calls=5):
     for name in names:
         protocol = QwenToolProtocol(tok)
         prompt_ids = tok.apply_chat_template(
-            [{"role": "system", "content": "Use run for computation. After seeing its output, "
-              "reply with Final answer: <number>. Repair errors using another call if needed."},
-             {"role": "user", "content": TASKS[name]["prompt"]}],
-            tools=[RUN_TOOL], tokenize=True, return_dict=False, add_generation_prompt=True, enable_thinking=False,
+            [
+                {
+                    "role": "system",
+                    "content": "Use run for computation. After seeing its output, "
+                    "reply with Final answer: <number>. Repair errors using another call if needed.",
+                },
+                {"role": "user", "content": TASKS[name]["prompt"]},
+            ],
+            tools=[RUN_TOOL],
+            tokenize=True,
+            return_dict=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
         )
-        if not isinstance(prompt_ids, list) or not all(isinstance(token, int) for token in prompt_ids):
+        if not isinstance(prompt_ids, list) or not all(
+            isinstance(token, int) for token in prompt_ids
+        ):
             raise ProtocolError("Chat template must return a single token sequence")
         synchronize()
         started = time.perf_counter()
@@ -231,9 +243,13 @@ def part_c_native(names, max_calls=5):
         calls = []
         emitted = 0
         call = None
+        final = None
+        final_correct = False
+        error = ""
 
         def on_token(token):
-            nonlocal call
+            nonlocal call, emitted
+            emitted += 1
             call = protocol.feed(token)
             return call is not None
 
@@ -241,45 +257,79 @@ def part_c_native(names, max_calls=5):
             while True:
                 call = None
                 decoded = session.decode_until(400, on_token)
-                emitted += len(decoded.token_ids)
+                synchronize()
                 protocol.finish()
                 if call is None:
-                    answer = tok.decode(decoded.token_ids, skip_special_tokens=False)
-                    match = re.search(r"Final answer:\s*\**\s*(-?[\d,]+)", answer)
-                    final = match.group(1).replace(",", "") if match else None
-                    synchronize()
-                    rows[name] = dict(
-                        final_answer=final, final_correct=final == str(EXPECTED[name]),
-                        stop_reason=decoded.reason, generated_tokens=emitted, calls=calls,
-                        prompt_prefill_ms=round(prefill_ms, 1),
-                        total_ms=round((time.perf_counter() - started) * 1e3, 1),
-                        transcript=tok.decode(session.tokens[len(prompt_ids):], skip_special_tokens=False),
+                    stop_reason = decoded.reason
+                    if decoded.reason == "length":
+                        error = "Response turn ended at the generation-token limit"
+                        break
+                    answer = tok.decode(
+                        decoded.token_ids[:-1], skip_special_tokens=False
                     )
+                    checked = IntegerChecker(EXPECTED[name])(answer)
+                    if checked.valid:
+                        final = (
+                            answer.rstrip()
+                            .splitlines()[-1]
+                            .removeprefix("Final answer:")
+                            .strip()
+                        )
+                    final_correct = checked.correct and checked.valid
+                    error = checked.diagnostic
                     break
                 if len(calls) >= max_calls:
                     raise ProtocolError("Tool-call budget exhausted")
                 exec_start = time.perf_counter()
                 result = run_python(call.code)
                 exec_ms = (time.perf_counter() - exec_start) * 1e3
+                record = dict(
+                    exec_status=result.status,
+                    exec_output=(result.stdout or result.stderr)[-200:],
+                    program_correct=result.status == "ok"
+                    and judge(result.stdout, EXPECTED[name]),
+                    program_tokens=len(decoded.token_ids),
+                    exec_ms=round(exec_ms, 2),
+                    result_tokens=0,
+                    prefill_result_ms=None,
+                )
+                calls.append(record)
+                if result.status == "sandbox_error":
+                    stop_reason, error = "sandbox_error", result.stderr
+                    break
                 response_ids = protocol.response_ids(call, result)
                 synchronize()
                 inject_start = time.perf_counter()
                 session.inject(response_ids)
                 synchronize()
-                calls.append(dict(
-                    exec_status=result.status, exec_output=(result.stdout or result.stderr)[-200:],
-                    program_correct=result.status == "ok" and judge(result.stdout, EXPECTED[name]),
-                    program_tokens=len(decoded.token_ids), exec_ms=round(exec_ms, 2),
+                record.update(
                     result_tokens=len(response_ids),
-                    prefill_result_ms=round((time.perf_counter() - inject_start) * 1e3, 1),
-                ))
+                    prefill_result_ms=round(
+                        (time.perf_counter() - inject_start) * 1e3, 1
+                    ),
+                )
         except ProtocolError as exc:
-            rows[name] = dict(
-                final_answer=None, final_correct=False, stop_reason="protocol_error",
-                error=str(exc), calls=calls,
-                transcript=tok.decode(session.tokens[len(prompt_ids):], skip_special_tokens=False),
-            )
-        print(name, {key: value for key, value in rows[name].items() if key != "transcript"}, flush=True)
+            stop_reason, error = "protocol_error", str(exc)
+        synchronize()
+        rows[name] = dict(
+            final_answer=final,
+            final_correct=final_correct,
+            stop_reason=stop_reason,
+            generated_tokens=emitted,
+            calls=calls,
+            prompt_prefill_ms=round(prefill_ms, 1),
+            total_ms=round((time.perf_counter() - started) * 1e3, 1),
+            transcript=tok.decode(
+                session.tokens[len(prompt_ids) :], skip_special_tokens=False
+            ),
+        )
+        if error:
+            rows[name]["error"] = error
+        print(
+            name,
+            {key: value for key, value in rows[name].items() if key != "transcript"},
+            flush=True,
+        )
     return rows
 
 
