@@ -2516,3 +2516,16 @@ then reproduced **1 failure** (0.19 s); combined focus **9 passed** (0.70 s)
 and final root **630 passed, 3 skipped** (50.10 s). Ruff, scoped formatting,
 whitespace and source diagnostics passed. No new model or guest setup in the
 scripted cases; real controller probes still lack writable delegation.
+
+### 2026-11-19: apply the store cap before copying a serving snapshot
+
+The prefix-cached adapter now takes the smaller of the per-snapshot limit and
+store capacity before capture, at prompt and tool-call boundaries. A snapshot
+that cannot fit no longer allocates a cache copy before rejection. Admitted
+explicit overrides and LRU accounting are unchanged.
+
+Two bounded tiny-CPU cases used a synthetic one-byte excess (no oversized
+allocation). Initial **2 failed** (0.22 s); repaired cache/serving focus
+**12 passed** (3.16 s); root **632 passed, 3 skipped** (28.25 s). Ruff, changed
+formatting, whitespace and source diagnostics passed. Real controller probes
+still lack delegation; this is not a measured serving-memory or latency result.

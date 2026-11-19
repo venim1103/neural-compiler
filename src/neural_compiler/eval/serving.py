@@ -132,11 +132,14 @@ class PrefixCachedSession:
         self._last_logits: torch.Tensor = self._session.logits.detach().clone()
         self.checkpoint_bytes_peak = store.total_bytes
         if self.prefill_tokens > 0:
-            cp = self._session.checkpoint(self.max_checkpoint_bytes)
-            store.put(cp)
-            self.checkpoint_bytes_peak = max(
-                self.checkpoint_bytes_peak, store.total_bytes
-            )
+            self._save_checkpoint(self._session)
+
+    def _save_checkpoint(self, session: LiveSession) -> None:
+        limit = min(self.max_checkpoint_bytes, self.store.max_total_bytes)
+        self.store.put(session.checkpoint(limit))
+        self.checkpoint_bytes_peak = max(
+            self.checkpoint_bytes_peak, self.store.total_bytes
+        )
 
     def _bind_sampler(self, session: LiveSession) -> None:
         if self._on_token_override is not None:
@@ -169,11 +172,7 @@ class PrefixCachedSession:
         self._last_tokens = self._session.tokens
         self._last_logits = self._session.logits.detach().clone()
         if result.reason == "stop":
-            cp = self._session.checkpoint(self.max_checkpoint_bytes)
-            self.store.put(cp)
-            self.checkpoint_bytes_peak = max(
-                self.checkpoint_bytes_peak, self.store.total_bytes
-            )
+            self._save_checkpoint(self._session)
             # Release live session to model stateless turn boundary handoff.
             self._session = None
         return result

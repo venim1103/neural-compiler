@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 from copy import deepcopy
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -24,7 +25,11 @@ from neural_compiler.eval import (
     validate_serving_logits,
 )
 from neural_compiler.eval.harness import CallRecord, CaseResult
-from neural_compiler.bridge.session import CheckpointStore, LiveSession
+from neural_compiler.bridge.session import (
+    CheckpointBudgetError,
+    CheckpointStore,
+    LiveSession,
+)
 
 
 def _call_text(code: str) -> str:
@@ -900,6 +905,40 @@ def test_default_snapshot_limit_is_not_the_aggregate_store_budget(
     monkeypatch.setattr(session, "_snapshot_bytes", lambda *_: 64 * 1024 * 1024 + 1)
     with pytest.raises(ValueError, match="exceeding"):
         PrefixCachedSession(hybrid_model, [1, 2, 3], CheckpointStore())
+
+
+@pytest.mark.parametrize("boundary", ["initial", "turn"])
+def test_snapshot_larger_than_store_is_rejected_before_copy(
+    hybrid_model, monkeypatch, boundary
+):
+    from neural_compiler.bridge import session
+
+    store = CheckpointStore(max_total_bytes=1024)
+    size = 1025 if boundary == "initial" else 1024
+    monkeypatch.setattr(session, "_snapshot_bytes", lambda *_: size)
+
+    def copy_cache(cache):
+        assert size <= store.max_total_bytes, "Oversized cache was copied"
+        return deepcopy(cache)
+
+    monkeypatch.setattr(session, "copy", SimpleNamespace(deepcopy=copy_cache))
+
+    def create():
+        return PrefixCachedSession(
+            hybrid_model, [1, 2, 3], store, max_checkpoint_bytes=2048
+        )
+
+    if boundary == "initial":
+        with pytest.raises(CheckpointBudgetError, match="exceeding"):
+            create()
+        assert store.entries == 0
+    else:
+        adapter = create()
+        size = 1025
+        with pytest.raises(CheckpointBudgetError, match="exceeding"):
+            adapter.decode_until(1, lambda _: True)
+        assert store.entries == 1
+        assert store.total_bytes == 1024 and store.evictions == 0
 
 
 @pytest.mark.parametrize("boundary", ["initial", "turn"])
