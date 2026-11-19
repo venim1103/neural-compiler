@@ -602,14 +602,20 @@ def test_context_limit_caps_requested_generation(tokenizer, monkeypatch, boundar
         def inject(self, _response_ids):
             pytest.fail("No tool response can be injected at the context cap")
 
+    def factory(_ids):
+        if boundary == "prompt":
+            pytest.fail("A prompt that fills the context must not prefill")
+        return ScriptedSession()
+
     result = EvaluationHarness(
         tokenizer,
-        lambda _ids: ScriptedSession(),
+        factory,
         lambda: None,
         budgets=replace(Budgets(), context_tokens=len(prompt_ids) + capacity),
         executor=lambda *_a, **_kw: pytest.fail("No context remains for a tool reply"),
     ).run(task, path)
 
+    assert result.prompt_tokens == len(prompt_ids)
     assert result.generated_tokens == capacity
     assert requested == ([capacity] if capacity else [])
     assert result.calls == () and result.injected_tokens == 0
@@ -620,6 +626,63 @@ def test_context_limit_caps_requested_generation(tokenizer, monkeypatch, boundar
         assert "context-token" in result.diagnostic.lower()
         if boundary == "length":
             assert result.answer == "Final answer: 42"
+
+
+@pytest.mark.parametrize("final_slots", [-1, 0, 1])
+def test_tool_return_leaves_context_for_final_generation(
+    tokenizer, monkeypatch, final_slots
+):
+    task = Task("return-context", "unit", "Compute.", IntegerChecker(42))
+    call_ids = tokenizer.encode(call_text("print(42)"), add_special_tokens=False)
+    prompt_ids, response_ids = [1, 2, 3], [4, 5, 6]
+    monkeypatch.setattr(tokenizer, "apply_chat_template", lambda *_a, **_kw: prompt_ids)
+    monkeypatch.setattr(QwenToolProtocol, "response_ids", lambda *_: response_ids)
+    requested = []
+    injected = []
+    stream = iter([*call_ids, tokenizer.eos_token_id])
+
+    class ScriptedSession:
+        def decode_until(self, max_new_tokens, on_token):
+            requested.append(max_new_tokens)
+            sampled = []
+            for _ in range(max_new_tokens):
+                token = next(stream)
+                sampled.append(token)
+                if on_token(token):
+                    return DecodeResult(tuple(sampled), "stop")
+                if token == tokenizer.eos_token_id:
+                    return DecodeResult(tuple(sampled), "eos")
+            return DecodeResult(tuple(sampled), "length")
+
+        def inject(self, ids):
+            injected.append(ids)
+
+    context = len(prompt_ids) + len(call_ids) + len(response_ids) + final_slots
+    result = EvaluationHarness(
+        tokenizer,
+        lambda _ids: ScriptedSession(),
+        lambda: None,
+        budgets=replace(Budgets(), context_tokens=context),
+        executor=lambda code, timeout: ExecutionResult("ok", "42"),
+    ).run(task, "python_tool")
+
+    assert len(result.calls) == 1
+    assert result.calls[0].status == "ok"
+    assert result.calls[0].response_seconds is not None
+    assert result.calls[0].response_tokens == result.injected_tokens
+    if final_slots == 1:
+        assert requested == [context - len(prompt_ids), 1]
+        assert injected == [response_ids]
+        assert result.injected_tokens == len(response_ids)
+        assert result.generated_tokens == len(call_ids) + 1
+        assert result.outcome == "invalid_answer"  # EOS completes an empty answer.
+    else:
+        assert requested == [context - len(prompt_ids)]
+        assert injected == [] and result.injected_tokens == 0
+        assert result.generated_tokens == len(call_ids)
+        assert result.outcome == "budget_exhausted"
+        expected = "would exceed" if final_slots < 0 else "for a final answer"
+        assert expected in result.diagnostic
 
 
 def test_isolation_failure_is_not_a_model_repair_or_success(

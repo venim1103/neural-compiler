@@ -483,16 +483,17 @@ class EvaluationHarness:
                     "Prompt-token budget exhausted before model prefill",
                 )
             remaining_time()
+            if prompt_count == self.budgets.context_tokens:
+                raise _RunFailure(
+                    "budget_exhausted",
+                    "Prompt leaves no context-token capacity for a final answer",
+                )
             session = self.session_factory(prompt)
             while generated < self.budgets.generated_tokens:
                 remaining_time()
                 context_remaining = (
                     self.budgets.context_tokens - prompt_count - generated - injected
                 )
-                if context_remaining <= 0:
-                    raise _RunFailure(
-                        "budget_exhausted", "Context-token budget exhausted"
-                    )
                 call = None
                 observed_tokens = []
                 generation_limit = min(
@@ -573,13 +574,16 @@ class EvaluationHarness:
                 response_count = 0
                 try:
                     response = protocol.response_ids(call, result)
-                    if (
-                        prompt_count + generated + injected + len(response)
-                        > self.budgets.context_tokens
-                    ):
+                    reply_capacity = context_remaining - len(observed_tokens)
+                    if len(response) > reply_capacity:
                         raise _RunFailure(
                             "budget_exhausted",
                             "Tool response would exceed the context-token budget",
+                        )
+                    if len(response) == reply_capacity:
+                        raise _RunFailure(
+                            "budget_exhausted",
+                            "Tool response leaves no context-token capacity for a final answer",
                         )
                     remaining_time()
                     session.inject(response)

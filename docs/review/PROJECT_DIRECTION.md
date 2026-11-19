@@ -2505,3 +2505,14 @@ Four scripted cases with three prompt IDs each, no model or guest: initial
 (1.51 s); root **627 passed, 3 skipped** (24.22 s). Ruff, changed formatting
 and source diagnostics passed. Real controller probes still lack writable
 delegation. No dependencies, downloads, data or model studies.
+
+The follow-up skips prefill if the prompt or a framed reply would leave no token
+for final generation. Observed prompt length, completed calls and attempted
+return timing are retained. A reply leaving one slot still allows decoding;
+oversized replies keep their existing outcome. Three scripted reply cases:
+**1 failed, 2 passed** (0.19 s), repaired focus **18 passed** (2.57 s), root
+**630 passed, 3 skipped** (21.98 s). The strengthened scripted prompt case
+then reproduced **1 failure** (0.19 s); combined focus **9 passed** (0.70 s)
+and final root **630 passed, 3 skipped** (50.10 s). Ruff, scoped formatting,
+whitespace and source diagnostics passed. No new model or guest setup in the
+scripted cases; real controller probes still lack writable delegation.
