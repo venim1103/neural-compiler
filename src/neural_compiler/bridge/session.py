@@ -146,6 +146,8 @@ class LiveSession:
     Configured EOS IDs are validated before model prefill.
     """
 
+    _sampler_override: Callable[[LiveSession], int] | None = None
+
     def __init__(self, model: PreTrainedModel, prompt_ids: Sequence[int]):
         if not _is_eval_mode(model):
             raise ValueError("LiveSession requires a model in eval mode")
@@ -233,6 +235,8 @@ class LiveSession:
         self._cache_usable = True
 
     def _next_token(self) -> int:
+        if self._sampler_override is not None:
+            return self._sampler_override(self)
         maximum, token = self.logits.max(dim=-1)
         if not torch.isfinite(maximum).item():
             raise RuntimeError("Greedy decoding requires a finite maximum logit")

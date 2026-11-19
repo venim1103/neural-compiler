@@ -75,8 +75,7 @@ class LivePauseResumeSession:
     ) -> None:
         _validate_sampler_override(on_token_override)
         self._session = LiveSession(model, prompt_ids)
-        if on_token_override is not None:
-            self._session._next_token = lambda: on_token_override(self._session)
+        self._session._sampler_override = on_token_override
         self.prefill_tokens = len(prompt_ids)
 
     @property
@@ -141,8 +140,7 @@ class PrefixCachedSession:
         )
 
     def _bind_sampler(self, session: LiveSession) -> None:
-        if self._on_token_override is not None:
-            session._next_token = lambda: self._on_token_override(session)
+        session._sampler_override = self._on_token_override
 
     @property
     def tokens(self) -> tuple[int, ...]:
@@ -219,8 +217,7 @@ class FullReprefillSession:
         self.prefill_tokens = len(prompt_ids)
 
     def _bind_sampler(self, session: LiveSession) -> None:
-        if self._on_token_override is not None:
-            session._next_token = lambda: self._on_token_override(session)
+        session._sampler_override = self._on_token_override
 
     @property
     def tokens(self) -> tuple[int, ...]:
@@ -356,81 +353,73 @@ def run_serving_comparison(
     if on_token_factory is not None and not callable(on_token_factory):
         raise ValueError("on_token_factory must be callable")
 
-    results: list[ServingCaseResult] = []
-    for task in tasks:
-        for mode in modes:
-            sampler = None if on_token_factory is None else on_token_factory(task, mode)
-            if on_token_factory is not None and not callable(sampler):
-                raise ValueError("on_token_factory must return a callable sampler")
-            store = CheckpointStore(
-                max_total_bytes=max_store_bytes, max_entries=max_store_entries
-            )
-            active: list[
-                LivePauseResumeSession | PrefixCachedSession | FullReprefillSession
-            ] = []
-            failed_prompt: tuple[int, ...] = ()
+    def run_case(task: Task, mode: ServingMode) -> ServingCaseResult:
+        sampler = None if on_token_factory is None else on_token_factory(task, mode)
+        if on_token_factory is not None and not callable(sampler):
+            raise ValueError("on_token_factory must return a callable sampler")
+        store = CheckpointStore(
+            max_total_bytes=max_store_bytes, max_entries=max_store_entries
+        )
+        active: (
+            LivePauseResumeSession | PrefixCachedSession | FullReprefillSession | None
+        ) = None
+        failed_prompt: tuple[int, ...] = ()
 
-            def factory(prompt_ids: Sequence[int]):
-                nonlocal failed_prompt
-                if mode == "live_pause_resume":
-                    session = LivePauseResumeSession(model, prompt_ids, sampler)
-                elif mode == "prefix_cached_resubmission":
-                    try:
-                        session = PrefixCachedSession(
-                            model,
-                            prompt_ids,
-                            store,
-                            max_checkpoint_bytes=max_checkpoint_bytes,
-                            on_token_override=sampler,
-                        )
-                    except CheckpointBudgetError:
-                        # The fresh per-case store cold-prefills before capture.
-                        failed_prompt = tuple(prompt_ids)
-                        raise
-                else:
-                    session = FullReprefillSession(model, prompt_ids, sampler)
-                active.append(session)
-                return session
+        def factory(prompt_ids: Sequence[int]):
+            nonlocal active, failed_prompt
+            if mode == "live_pause_resume":
+                session = LivePauseResumeSession(model, prompt_ids, sampler)
+            elif mode == "prefix_cached_resubmission":
+                try:
+                    session = PrefixCachedSession(
+                        model,
+                        prompt_ids,
+                        store,
+                        max_checkpoint_bytes=max_checkpoint_bytes,
+                        on_token_override=sampler,
+                    )
+                except CheckpointBudgetError:
+                    # The fresh per-case store cold-prefills before capture.
+                    failed_prompt = tuple(prompt_ids)
+                    raise
+            else:
+                session = FullReprefillSession(model, prompt_ids, sampler)
+            active = session
+            return session
 
-            harness = EvaluationHarness(
-                tokenizer,
-                factory,
-                synchronize,
-                budgets=budgets,
-                executor=executor,
-                tool_description=tool_description,
-            )
-            case_result = harness.run(task, path)
-            last_session = active[-1] if active else None
-            logit_prefix_tokens = None
-            if last_session is not None:
-                native = last_session._session
-                # Stateless adapters release only at a pending callback-stop boundary.
-                pending = native is None or native._pending is not None
-                logit_prefix_tokens = len(last_session.tokens) - pending
-            results.append(
-                ServingCaseResult(
-                    mode=mode,
-                    case=case_result,
-                    final_tokens=failed_prompt
-                    if last_session is None
-                    else last_session.tokens,
-                    final_logits=None
-                    if last_session is None
-                    else last_session.logits.detach().to("cpu", copy=True),
-                    prefill_tokens=len(failed_prompt)
-                    if last_session is None
-                    else last_session.prefill_tokens,
-                    checkpoint_bytes_peak=getattr(
-                        last_session, "checkpoint_bytes_peak", 0
-                    ),
-                    cache_hits=store.hits,
-                    cache_misses=store.misses,
-                    checkpoints_evicted=store.evictions,
-                    logit_prefix_tokens=logit_prefix_tokens,
-                )
-            )
-    return tuple(results)
+        harness = EvaluationHarness(
+            tokenizer,
+            factory,
+            synchronize,
+            budgets=budgets,
+            executor=executor,
+            tool_description=tool_description,
+        )
+        case_result = harness.run(task, path)
+        logit_prefix_tokens = None
+        if active is not None:
+            native = active._session
+            # Stateless adapters release only at a pending callback-stop boundary.
+            pending = native is None or native._pending is not None
+            logit_prefix_tokens = len(active.tokens) - pending
+        return ServingCaseResult(
+            mode=mode,
+            case=case_result,
+            final_tokens=failed_prompt if active is None else active.tokens,
+            final_logits=None
+            if active is None
+            else active.logits.detach().to("cpu", copy=True),
+            prefill_tokens=len(failed_prompt)
+            if active is None
+            else active.prefill_tokens,
+            checkpoint_bytes_peak=getattr(active, "checkpoint_bytes_peak", 0),
+            cache_hits=store.hits,
+            cache_misses=store.misses,
+            checkpoints_evicted=store.evictions,
+            logit_prefix_tokens=logit_prefix_tokens,
+        )
+
+    return tuple(run_case(task, mode) for task in tasks for mode in modes)
 
 
 @dataclass(frozen=True)

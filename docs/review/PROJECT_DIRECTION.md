@@ -2563,3 +2563,21 @@ each adapter. Repaired serving focus **9 passed** (1.81 s); root
 source diagnostics passed. Controller probes still lack writable delegation.
 Copy counts are not latency measurements; no dependencies, model study or host
 changes.
+
+### 2026-11-19: release comparison state before the next mode
+
+The comparison previously kept references to a live session while the next
+mode prefills. Scripted samplers also introduced reference cycles that could
+retain caches until cyclic garbage collection. Each comparison case now owns
+its session and store in a separate scope, and the optional sampler receives
+the current session as an argument without an adapter-owned closure capturing
+it. Saved CPU observations remain independent of live state.
+
+Two tiny CPU comparisons (one case across three modes, one sampled EOS per mode)
+observed prior live sessions at prefill: `[0, 1, 1]` without a scripted override
+and `[0, 1, 2]` with it. Both now see `[0, 0, 0]` without depending on cyclic
+collection. Initial focus **2 failed** (0.23 s); repaired **11 passed** (3.05 s);
+root **638 passed, 3 skipped** (25.69 s). Ruff, scoped formatting, whitespace
+and source diagnostics passed after removing an unused declaration and wrapping
+the reported lines. Real controller probes still require writable delegation.
+Object lifetime is not a measurement of allocator RSS, GPU fit or latency.

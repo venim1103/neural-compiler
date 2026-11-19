@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import gc
 import shutil
 from copy import deepcopy
 from dataclasses import replace
 from types import SimpleNamespace
+from weakref import ref
 
 import pytest
 import torch
@@ -358,6 +360,47 @@ def test_invalid_logit_prefix_counts_are_explicit(count):
     assert legacy.logit_prefix_tokens is None
     with pytest.raises(ValueError, match="logit_prefix_tokens"):
         replace(legacy, logit_prefix_tokens=count)
+
+
+@pytest.mark.parametrize("scripted", [False, True])
+def test_serving_comparison_releases_state_between_modes(
+    tokenizer, hybrid_model, monkeypatch, scripted
+):
+    session_refs = []
+    previously_live = []
+    init = LiveSession.__init__
+
+    def track_session(session, *args, **kwargs):
+        previously_live.append(sum(weak() is not None for weak in session_refs))
+        init(session, *args, **kwargs)
+        session_refs.append(ref(session))
+
+    monkeypatch.setattr(LiveSession, "__init__", track_session)
+    if not scripted:
+        monkeypatch.setattr(
+            LiveSession, "_next_token", lambda _: tokenizer.eos_token_id
+        )
+
+    gc_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        rows = run_serving_comparison(
+            [Task("lifetime", "unit", "Compute.", IntegerChecker(42))],
+            tokenizer,
+            hybrid_model,
+            lambda: None,
+            executor=lambda *_a, **_kw: pytest.fail("Must not execute"),
+            on_token_factory=(lambda *_: lambda _: tokenizer.eos_token_id)
+            if scripted
+            else None,
+        )
+        assert previously_live == [0, 0, 0]
+        assert all(weak() is None for weak in session_refs)
+    finally:
+        if gc_enabled:
+            gc.enable()
+    assert all(row.case.generated_tokens == 1 for row in rows)
+    assert all(row.final_logits is not None for row in rows)
 
 
 def test_serving_modes_match_logits_and_reduce_prefill_tokens(tokenizer, hybrid_model):
