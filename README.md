@@ -136,6 +136,8 @@ records. A successful exit means report generation succeeded, not that an
 accuracy threshold or dataset-acceptance gate passed. Missing legacy provenance
 remains unknown. Evidence streams are caller-owned, not authenticated or atomic
 file transactions; no dataset or model study is accepted by saving a file.
+Summary statistics, including fixed-seed bootstrap intervals, do not depend on
+the order of case records.
 
 For reusable exact task specifications, the same stream API provides
 `dump_tasks(tasks, destination)` and `load_tasks(source)`. The separate schema-v1

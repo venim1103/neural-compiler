@@ -668,11 +668,13 @@ def _bootstrap_seconds_per_correct_ci(
 
 
 def summarize(results: Sequence[CaseResult]) -> dict[str, object]:
-    """Failure-inclusive aggregate with quantiles and confidence intervals."""
+    """Failure-inclusive aggregate with confidence intervals stable under row reordering."""
     if len({result.path for result in results}) > 1:
         raise ValueError("Summarize one evaluation path at a time")
     if len({result.case_id for result in results}) != len(results):
         raise ValueError("Duplicate case IDs cannot be counted as independent attempts")
+    # The seeded bootstrap draws positions, so assign them independently of row order.
+    results = sorted(results, key=lambda result: result.case_id)
     total = len(results)
     correct = sum(result.outcome == "correct" for result in results)
     elapsed_list = [result.elapsed_seconds for result in results]
@@ -867,7 +869,8 @@ def _paired_comparison(
     n = len(paired)
     both = target_only = baseline_only = neither = 0
     time_deltas: list[float] = []
-    for case in paired.values():
+    for case_id in sorted(paired):
+        case = paired[case_id]
         t_res = case[target]
         b_res = case[baseline]
         t_ok = t_res.outcome == "correct"

@@ -1226,6 +1226,34 @@ def test_bootstrap_does_not_discard_zero_success_resamples():
     assert summary["seconds_per_correct_ci_status"] == "unbounded_upper"
 
 
+def test_matched_report_is_independent_of_case_record_order():
+    rows = [
+        CaseResult(
+            str(index),
+            "unit",
+            path,
+            "correct" if index % 3 != 0 else "wrong_answer",
+            "",
+            "",
+            elapsed,
+            0,
+            0,
+            (),
+        )
+        for index, elapsed in enumerate((0.3, 10.1, 0.6, 12.5, 1.7, 1.2, 0.5, 5.7))
+        for path in ("no_tool", "python_tool", "current_best")
+    ]
+    report = matched_report(rows)
+    reordered = matched_report(rows[::-1])
+    summary = report["by_path"]["no_tool"]
+    assert summary["seconds_per_correct_ci_status"] == "defined"
+    assert (
+        summary["seconds_per_correct_ci_95"]
+        == reordered["by_path"]["no_tool"]["seconds_per_correct_ci_95"]
+    )
+    assert reordered == report
+
+
 def test_execution_time_cannot_produce_nonfinite_report_metrics():
     with pytest.raises(ValueError, match="finite and nonnegative"):
         CallRecord("ok", float("nan"), 0)

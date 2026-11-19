@@ -2473,3 +2473,21 @@ dependencies, model studies, services or host changes. The previous
 [native-timing CI][native-timing-ci] passed at its exact revision.
 
 [native-timing-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44506620598
+
+### 2026-11-19: make evaluation intervals independent of record order
+
+Reversing the same eight saved cases changed a fixed-seed cost interval from
+about `[1.82, 18.44]` to `[1.94, 16.47]` seconds per correct answer in a
+synthetic fixture. The bootstrap draws array positions, so single-path and
+serving summaries now assign positions by case ID; paired time deltas also
+aggregate in case-ID order. The estimator, seed, draw count and treatment of
+zero-success resamples are unchanged. This improves replay reproducibility,
+not the validity of an unaccepted study.
+
+**Finite routine ledger:** one matched 24-row fixture, two report calls, and
+the existing zero-success bootstrap control; no new model or guest setup.
+Initial focus **1 failed** (0.18 s); repaired **2 passed** (0.16 s); root
+**623 passed, 3 skipped** (33.66 s), fourteen existing Torch warnings.
+Ruff, changed Python formatting (after fixing the new assertion), whitespace
+and source diagnostics passed. Real controller probes still lack writable
+delegation. No data downloads, model studies, dependencies or host changes.
