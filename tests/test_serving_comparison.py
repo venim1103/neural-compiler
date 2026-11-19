@@ -797,6 +797,19 @@ def test_logit_validation_enforces_absolute_tolerance_for_fp16(
             validate_serving_logits(rows)
 
 
+@pytest.mark.parametrize("trailing_tokens", [0, 1, 2])
+def test_logit_validation_requires_final_forward_boundary(trailing_tokens):
+    rows = [
+        replace(row, logit_prefix_tokens=len(row.final_tokens) - trailing_tokens)
+        for row in _logit_observations()[::2]
+    ]
+    if trailing_tokens == 2:
+        with pytest.raises(ValueError, match="more than one pending token"):
+            validate_serving_logits(rows)
+    else:
+        assert validate_serving_logits(rows)["full_reprefill_comparisons"] == 1
+
+
 @pytest.mark.parametrize(
     "mode,prompt_tokens,prefix,error",
     [

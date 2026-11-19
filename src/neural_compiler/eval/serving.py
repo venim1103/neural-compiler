@@ -517,6 +517,7 @@ def validate_serving_logits(
 
     When the prompt count is known, the complete history must account for the
     prompt, generated and injected IDs, and the logit prefix must cover the prompt.
+    The prefix can exclude at most one pending sampled token.
     Live/prefix agreement is exact. Full-reprefill comparisons apply the
     existing tiny CPU hybrid fixture tolerance in float64; no task outcomes
     are rewritten.
@@ -569,6 +570,11 @@ def validate_serving_logits(
             ):
                 raise ValueError(f"Live/prefix logits differ for {case_id}")
             exact_pairs += 1
+        # Check the shared boundary after the existing per-mode evidence checks.
+        if len(reference.final_tokens) - reference.logit_prefix_tokens > 1:
+            raise ValueError(
+                f"Logit prefix leaves more than one pending token for {case_id}"
+            )
     return {
         "cases": len(comparison.rows),
         "full_reprefill_comparisons": full_comparisons,

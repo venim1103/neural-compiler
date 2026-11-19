@@ -2628,3 +2628,18 @@ A two-mode fixture used the adjacent FP16 values around the threshold:
 **42 passes** (3.30 s), and root had **650 passed, 3 skipped** (25.00 s).
 Ruff, scoped formatting, whitespace and source diagnostics passed. This is
 an offline numerical check, not engine qualification or a model study.
+
+### 2026-11-19: reject stale final-logit boundaries during numerical replay
+
+The serving adapters expose the final forwarded prefix, with at most one
+sampled token still pending. Numerical replay now rejects matching records
+that omit two or more tokens from that prefix. Ordinary summaries and the
+evidence schema are unchanged.
+
+A two-mode fixture with three history IDs per row reproduced **1 failure,
+2 passes** (0.16 s). The first fix masked an existing prompt-count error
+(**1 failure, 44 passes**); checking the shared boundary after the existing
+per-mode checks preserves that diagnostic. The replay focus then had
+**45 passes** (4.44 s), and root had **653 passed, 3 skipped** (36.50 s).
+Ruff, scoped formatting, whitespace and source diagnostics passed. This
+checks record consistency, not live-engine or controller qualification.
