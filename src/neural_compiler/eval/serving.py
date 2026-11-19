@@ -517,8 +517,9 @@ def validate_serving_logits(
 
     When the prompt count is known, the complete history must account for the
     prompt, generated and injected IDs, and the logit prefix must cover the prompt.
-    Live/prefix agreement is exact. Full-reprefill comparisons use the existing
-    tiny CPU hybrid fixture tolerance; no task outcomes are rewritten.
+    Live/prefix agreement is exact. Full-reprefill comparisons apply the
+    existing tiny CPU hybrid fixture tolerance in float64; no task outcomes
+    are rewritten.
     """
     comparison = _pair_serving_results(results)
     reference_mode: ServingMode = "full_reprefill_resubmission"
@@ -534,6 +535,7 @@ def validate_serving_logits(
             raise ValueError(f"Measured nonempty logit prefix required for {case_id}")
         _validate_token_ids(reference.final_tokens)
         reference_logits = _observed_logits(reference)
+        comparison_logits = reference_logits.double()
         observed = {reference_mode: reference_logits}
         for mode, row in rows.items():
             if mode == reference_mode:
@@ -553,7 +555,9 @@ def validate_serving_logits(
                 or logits.dtype != reference_logits.dtype
             ):
                 raise ValueError(f"Logit shape/dtype differs for {case_id}/{mode}")
-            if not torch.allclose(logits, reference_logits, atol=atol, rtol=rtol):
+            if not torch.allclose(
+                logits.double(), comparison_logits, atol=atol, rtol=rtol
+            ):
                 raise ValueError(
                     f"Logits differ from full reprefill for {case_id}/{mode}"
                 )

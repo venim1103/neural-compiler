@@ -780,6 +780,23 @@ def test_logit_validation_uses_existing_full_reprefill_tolerance(delta):
     assert checked["cache_live_exact_pairs"] == 0
 
 
+@pytest.mark.parametrize("ulps_from_zero,accepted", [(16, True), (17, False)])
+def test_logit_validation_enforces_absolute_tolerance_for_fp16(
+    ulps_from_zero, accepted
+):
+    rows = [
+        replace(row, final_logits=row.final_logits.to(torch.float16))
+        for row in _logit_observations()[::2]
+    ]
+    # Consecutive representable FP16 values on either side of 1e-6.
+    rows[0].final_logits[0, 0] = ulps_from_zero * 2**-24
+    if accepted:
+        assert validate_serving_logits(rows)["full_reprefill_comparisons"] == 1
+    else:
+        with pytest.raises(ValueError, match="Logits differ from full reprefill"):
+            validate_serving_logits(rows)
+
+
 @pytest.mark.parametrize(
     "mode,prompt_tokens,prefix,error",
     [

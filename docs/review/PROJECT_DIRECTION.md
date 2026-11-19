@@ -2614,3 +2614,17 @@ focus **32 passed** (0.14 s); root **648 passed, 3 skipped** (26.30 s). Ruff,
 scoped formatting, whitespace, source diagnostics and call-site compatibility
 passed. This measures reconstruction counts, not peak memory or latency. No
 model, guest execution in the focus, dependencies or host changes were needed.
+
+### 2026-11-19: apply recorded logit tolerances in float64
+
+FP16 replay accepted a stored value of `1.01327896e-6` against zero because
+native-precision comparison rounded the advertised `1e-6` threshold.
+Full-reprefill checks now compare widened values with the same absolute and
+relative tolerances. Saved dtypes still have to match, and exact live/cache
+agreement still uses the original tensors.
+
+A two-mode fixture used the adjacent FP16 values around the threshold:
+**1 failed, 1 passed** (0.13 s) before the fix. The replay/logit focus then had
+**42 passes** (3.30 s), and root had **650 passed, 3 skipped** (25.00 s).
+Ruff, scoped formatting, whitespace and source diagnostics passed. This is
+an offline numerical check, not engine qualification or a model study.

@@ -205,8 +205,9 @@ For an explicit [recorded-logit check][serving-observations],
 plus another mode, identical token histories and measured logit boundaries.
 When the prompt length was recorded, the history must account for the prompt,
 generated and injected tokens, and the logit prefix must include the full prompt.
-It checks exact live/prefix agreement when both are present and full-reprefill
-agreement at the existing CPU fixture tolerances (`atol=1e-6`, `rtol=1e-5`).
+It checks exact live/prefix agreement when both are present and uses float64
+arithmetic for full-reprefill agreement at the existing CPU fixture tolerances
+(`atol=1e-6`, `rtol=1e-5`).
 Matching negative-infinity masks are allowed; NaNs, positive-infinity maxima and
 all-masked logits fail. Returned counts identify which comparisons ran. This is
 agreement of supplied CPU values, not task accuracy, authenticated execution,
