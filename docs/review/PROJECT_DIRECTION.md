@@ -2424,3 +2424,31 @@ three actual cgroup-controller probes still skip without delegation. No data,
 model/GPU studies, downloads, dependencies, services or host changes; fixtures
 remain in memory/normal pytest retention. Next recheck real milestone resources
 and remaining compatible prerequisites; these tests do not qualify native studies.
+
+### 2026-11-19: include prompt framing in native total latency
+
+The [native timer][native-scoring-source] started after protocol construction and
+prompt tokenization, unlike the already-required full prompt-to-answer metric.
+It now starts before that work, after initial device synchronization, with a
+separate prefill timer preserving `prompt_prefill_ms`. A controlled no-model
+clock reproduced `total_ms=30` instead of `60` for 30 ms framing, 20 ms prefill
+and 10 ms decoding; after repair it records `60` total and `20` prefill. These are
+fixture values, not measured model/hardware latency.
+
+**Finite routine ledger:** one in-memory case, 17 sampled IDs, at most 512 prompt/
+1,024 history IDs; no sleeps, guest execution or model load. Failing focus
+**1 failed** (0.07 s); repaired **1 passed** (0.03 s); coupled **189 passed**
+(8.49 s); root **618 passed, 3 skipped** (18.23 s), fourteen existing Torch
+warnings. One failing focus, one repaired focus, one coupled/root invocation,
+no aborts or changed limits. Root Ruff/whitespace, full test-file format and
+scoped native-routine formatting passed; unrelated script text preserved exactly,
+including its existing formatting debt. Pylance reports only unused parameters.
+Jailed controls ran; controller skips remain unqualified. [Scoring CI][native-scoring-ci]
+and [boundary CI][native-boundary-ci] passed at their exact pushed revisions.
+No historical result regeneration, dependencies, downloads, model/GPU studies,
+services or host changes. Next actual studies still require accepted task/run
+scope; real serving needs an adopted compatible runtime, and controller
+qualification needs an owner-provided writable delegation.
+
+[native-scoring-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44505688956
+[native-boundary-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44506102479

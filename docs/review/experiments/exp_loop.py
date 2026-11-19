@@ -205,7 +205,7 @@ def part_c(names):
 
 
 def part_c_native(names, max_calls=5):
-    """Native turns and exact final answers; isolation errors are not repairable."""
+    """Time prompt framing through exact final scoring; never repair isolation."""
     if type(max_calls) is not int or max_calls <= 0:
         raise ValueError("max_calls must be a positive integer")
 
@@ -215,6 +215,8 @@ def part_c_native(names, max_calls=5):
 
     rows = {}
     for name in names:
+        synchronize()
+        started = time.perf_counter()
         protocol = QwenToolProtocol(tok)
         prompt_ids = tok.apply_chat_template(
             [
@@ -236,10 +238,10 @@ def part_c_native(names, max_calls=5):
         ):
             raise ProtocolError("Chat template must return a single token sequence")
         synchronize()
-        started = time.perf_counter()
+        prefill_started = time.perf_counter()
         session = LiveSession(model, prompt_ids)
         synchronize()
-        prefill_ms = (time.perf_counter() - started) * 1e3
+        prefill_ms = (time.perf_counter() - prefill_started) * 1e3
         calls = []
         emitted = 0
         call = None

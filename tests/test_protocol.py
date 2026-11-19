@@ -269,6 +269,55 @@ def test_native_experiment_rejects_noninteger_call_caps_before_setup(
         native_experiment.part_c_native([], max_calls=max_calls)
 
 
+def test_native_experiment_total_time_includes_prompt_framing(
+    tokenizer, monkeypatch, native_experiment
+):
+    clock = SimpleNamespace(seconds=0.0)
+    render = tokenizer.apply_chat_template
+    ids = tokenizer.encode("Final answer: 42<|im_end|>", add_special_tokens=False)
+    assert len(ids) <= 32
+
+    def framed_prompt(*args, **kwargs):
+        clock.seconds += 0.03
+        return render(*args, **kwargs)
+
+    class TimedSession:
+        def __init__(self, _model, prompt_ids):
+            assert 0 < len(prompt_ids) <= 512
+            self.tokens = tuple(prompt_ids)
+            clock.seconds += 0.02
+
+        def decode_until(self, max_new_tokens, on_token):
+            assert len(ids) <= max_new_tokens
+            for token in ids:
+                self.tokens += (token,)
+                assert not on_token(token)
+            assert len(self.tokens) <= 1024
+            clock.seconds += 0.01
+            return DecodeResult(tuple(ids), "eos")
+
+    monkeypatch.setattr(tokenizer, "apply_chat_template", framed_prompt)
+    monkeypatch.setattr(native_experiment, "LiveSession", TimedSession)
+    monkeypatch.setattr(
+        native_experiment, "time", SimpleNamespace(perf_counter=lambda: clock.seconds)
+    )
+    monkeypatch.setattr(
+        native_experiment,
+        "model",
+        SimpleNamespace(device=SimpleNamespace(type="cpu")),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        native_experiment,
+        "run_python",
+        lambda *_args, **_kwargs: pytest.fail("No execution expected"),
+    )
+    row = native_experiment.part_c_native(["simple"])["simple"]
+    assert row["final_correct"] is True and row["calls"] == []
+    assert row["total_ms"] == 60.0
+    assert row["prompt_prefill_ms"] == 20.0
+
+
 @pytest.mark.parametrize(
     "scenario", ["eos", "length", "incomplete_length", "last_answer", "sandbox_error"]
 )
