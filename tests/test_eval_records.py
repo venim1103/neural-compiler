@@ -470,6 +470,30 @@ def test_saving_strided_serving_logits_does_not_decode_them(monkeypatch):
     )
 
 
+def test_logit_encoding_preserves_view_bytes_without_a_python_list(monkeypatch):
+    logits = torch.tensor(
+        [[99.0, -0.0, 99.0, float("nan"), 99.0, -float("inf")]], dtype=torch.bfloat16
+    )[:, 1::2]
+    expected_hex = bytes(logits.contiguous().view(torch.uint8).flatten().tolist()).hex()
+    row = ServingCaseResult(
+        "live_pause_resume", case_rows()[2], (), logits, 0, 0, 0, 0, 0
+    )
+    stream = io.StringIO()
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            torch.Tensor, "tolist", lambda *_: pytest.fail("Encoding built a list")
+        )
+        dump_serving_results([row], stream)
+
+    encoded = json.loads(stream.getvalue())["serving_cases"][0]["final_logits"]
+    assert encoded == {
+        "dtype": "bfloat16",
+        "shape": [1, 3],
+        "byte_order": sys.byteorder,
+        "bytes_hex": expected_hex,
+    }
+
+
 @pytest.mark.parametrize(
     "fault,error",
     [

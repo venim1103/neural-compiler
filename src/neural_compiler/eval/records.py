@@ -305,14 +305,12 @@ def _logits_data(value: torch.Tensor | None) -> dict[str, object] | None:
     )
     if dtype is None:
         raise ValueError(f"Unsupported logit dtype: {value.dtype}")
-    raw = bytes(
-        value.detach().resolve_neg().contiguous().reshape(-1).view(torch.uint8).tolist()
-    )
+    raw = value.detach().resolve_neg().contiguous().reshape(-1).view(torch.uint8)
     return {
         "dtype": dtype,
         "shape": list(value.shape),
         "byte_order": sys.byteorder,
-        "bytes_hex": raw.hex(),
+        "bytes_hex": memoryview(raw.numpy()).hex(),
     }
 
 

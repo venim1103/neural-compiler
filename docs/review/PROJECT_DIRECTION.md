@@ -2537,3 +2537,13 @@ One three-value strided CPU fixture reproduced **1 failure** (0.08 s); the
 repaired evidence suite had **59 passes** (0.13 s), and root had
 **633 passed, 3 skipped** (22.28 s). Ruff, scoped formatting, whitespace and
 source diagnostics passed. No dependencies, downloads, model or host changes.
+
+The encoder now reads the contiguous byte view through the existing NumPy
+dependency instead of making a Python list of bytes. Schema v1 is unchanged.
+A 64 KiB synthetic BF16 buffer produced identical hex with traced Python peak
+allocations of about 576 KiB before and 129 KiB with the buffer conversion.
+This is a local allocation check, not process RSS or serving latency evidence.
+A nonzero-offset strided fixture reproduced **1 failure** (0.07 s); the
+repaired evidence suite had **60 passes** (0.14 s), and root had
+**634 passed, 3 skipped** (21.34 s). Ruff, scoped formatting, whitespace and
+source diagnostics passed. No dependencies, data, model or host changes.
