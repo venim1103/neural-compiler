@@ -2581,3 +2581,19 @@ root **638 passed, 3 skipped** (25.69 s). Ruff, scoped formatting, whitespace
 and source diagnostics passed after removing an unused declaration and wrapping
 the reported lines. Real controller probes still require writable delegation.
 Object lifetime is not a measurement of allocator RSS, GPU fit or latency.
+
+### 2026-11-19: group validated offline report pairs once
+
+Matched evaluation and serving summaries now reuse family groups built from
+validated pairs for both aggregate metrics and paired deltas. Both reports visit
+the original input once; canonical ordering, admission rules and statistical
+definitions are unchanged.
+
+Each 48-row all-failure fixture (16 families, three rows per family) failed
+before the change: 3,552 input-row visits for evaluation and 2,598 for serving.
+Both now visit 48 rows. A separate mixed-outcome fixture produced byte-identical
+strict JSON for each report before and after the change. The focused report and
+replay checks had **56 passes** (4.87 s); root had **640 passed, 3 skipped**
+(24.28 s). Ruff, scoped formatting, whitespace and source diagnostics passed.
+This measures input traversal, not reporting latency or model behavior. No
+artifacts, datasets, model runs or host changes were needed.

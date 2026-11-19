@@ -39,6 +39,7 @@ from .harness import (
     Path,
     Task,
     _PATHS,
+    _pairs_by_family,
     _paired_comparison,
     _paired_observation_coverage,
     _validate_tool_description,
@@ -434,6 +435,8 @@ def _pair_serving_results(results: Sequence[ServingCaseResult]) -> _ServingPairs
     if not results:
         raise ValueError("Serving summary requires at least one result")
     paired: dict[str, dict[ServingMode, ServingCaseResult]] = {}
+    observed_modes: set[ServingMode] = set()
+    observed_paths: set[Path] = set()
     for row in results:
         if row.mode not in ALL_SERVING_MODES:
             raise ValueError(f"Unknown serving mode: {row.mode}")
@@ -441,13 +444,13 @@ def _pair_serving_results(results: Sequence[ServingCaseResult]) -> _ServingPairs
         if row.mode in case:
             raise ValueError(f"Duplicate serving pair: {row.case.case_id}/{row.mode}")
         case[row.mode] = row
-    modes_present = [
-        mode for mode in ALL_SERVING_MODES if any(r.mode == mode for r in results)
-    ]
-    if len({row.case.path for row in results}) != 1:
+        observed_modes.add(row.mode)
+        observed_paths.add(row.case.path)
+    modes_present = tuple(mode for mode in ALL_SERVING_MODES if mode in observed_modes)
+    if len(observed_paths) != 1:
         raise ValueError("Serving comparisons require the same evaluation path")
     for case_id, case in paired.items():
-        if set(case) != set(modes_present):
+        if case.keys() != observed_modes:
             raise ValueError(f"Missing serving modes for {case_id}")
         if len({row.case.family for row in case.values()}) != 1:
             raise ValueError(f"Family identity differs between modes for {case_id}")
@@ -466,7 +469,7 @@ def _pair_serving_results(results: Sequence[ServingCaseResult]) -> _ServingPairs
             raise ValueError(
                 f"Prompt token counts differ between serving modes for {case_id}"
             )
-    return _ServingPairs(paired, paired_cases, tuple(modes_present), coverage)
+    return _ServingPairs(paired, paired_cases, modes_present, coverage)
 
 
 def _observed_logits(row: ServingCaseResult) -> torch.Tensor:
@@ -595,7 +598,7 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
         return base
 
     by_mode = {
-        mode: summarize_mode([r for r in results if r.mode == mode])
+        mode: summarize_mode([case[mode] for case in comparison.rows.values()])
         for mode in modes_present
     }
     baseline = modes_present[0]
@@ -606,33 +609,22 @@ def summarize_serving(results: Sequence[ServingCaseResult]) -> dict[str, object]
             for mode in modes_present[1:]
         }
 
-    families = sorted({row.case.family for row in results})
+    families = _pairs_by_family(paired_cases, baseline)
     return {
         "by_mode": by_mode,
         "by_family": {
             family: {
                 mode: summarize_mode(
-                    [
-                        row
-                        for row in results
-                        if row.mode == mode and row.case.family == family
-                    ]
+                    [comparison.rows[case_id][mode] for case_id in cases]
                 )
                 for mode in modes_present
             }
-            for family in families
+            for family, cases in families.items()
         },
         "paired_cases": len(paired_cases),
         **coverage,
         "paired_deltas": deltas(paired_cases),
         "paired_deltas_by_family": {
-            family: deltas(
-                {
-                    case_id: case
-                    for case_id, case in paired_cases.items()
-                    if case[baseline].family == family
-                }
-            )
-            for family in families
+            family: deltas(cases) for family, cases in families.items()
         },
     }

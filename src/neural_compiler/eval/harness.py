@@ -924,6 +924,15 @@ def _paired_deltas(
     }
 
 
+def _pairs_by_family(
+    paired: Mapping[str, Mapping[str, CaseResult]], baseline: str
+) -> dict[str, dict[str, Mapping[str, CaseResult]]]:
+    grouped: dict[str, dict[str, Mapping[str, CaseResult]]] = {}
+    for case_id, case in paired.items():
+        grouped.setdefault(case[baseline].family, {})[case_id] = case
+    return dict(sorted(grouped.items()))
+
+
 def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
     """Require complete paired coverage; retain per-family costs and failures.
 
@@ -948,47 +957,28 @@ def matched_report(results: Sequence[CaseResult]) -> dict[str, object]:
         if len({result.family for result in case.values()}) != 1:
             raise ValueError(f"Family identity differs between paths for {case_id}")
     coverage = _paired_observation_coverage(paired)
-    families = sorted({result.family for result in results})
+    families = _pairs_by_family(paired, paths[0])
+    by_path = {path: [case[path] for case in paired.values()] for path in paths}
     return {
         "paired_cases": len(paired),
         **coverage,
-        "by_path": {
-            path: summarize([result for result in results if result.path == path])
-            for path in paths
-        },
+        "by_path": {path: summarize(rows) for path, rows in by_path.items()},
         "by_family": {
             family: {
-                path: summarize(
-                    [
-                        result
-                        for result in results
-                        if result.path == path and result.family == family
-                    ]
-                )
+                path: summarize([case[path] for case in cases.values()])
                 for path in paths
             }
-            for family in families
+            for family, cases in families.items()
         },
         "by_outcome": {
             outcome: {
-                path: sum(
-                    result.outcome == outcome
-                    for result in results
-                    if result.path == path
-                )
-                for path in paths
+                path: sum(result.outcome == outcome for result in rows)
+                for path, rows in by_path.items()
             }
             for outcome in ALL_OUTCOMES
         },
         "paired_deltas": _paired_deltas(paired),
         "paired_deltas_by_family": {
-            family: _paired_deltas(
-                {
-                    case_id: case
-                    for case_id, case in paired.items()
-                    if case[paths[0]].family == family
-                }
-            )
-            for family in families
+            family: _paired_deltas(cases) for family, cases in families.items()
         },
     }

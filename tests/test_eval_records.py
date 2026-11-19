@@ -470,6 +470,47 @@ def test_saving_strided_serving_logits_does_not_decode_them(monkeypatch):
     )
 
 
+@pytest.mark.parametrize("serving", [False, True])
+def test_family_reports_visit_input_rows_once(serving):
+    class CountedRows(list):
+        visits = 0
+
+        def __iter__(self):
+            for row in super().__iter__():
+                self.visits += 1
+                yield row
+
+    families = [f"family-{index:02d}" for index in range(16)]
+    rows = CountedRows()
+    for family in reversed(families):
+        for path, mode in zip(
+            ("no_tool", "python_tool", "current_best"), ALL_SERVING_MODES, strict=True
+        ):
+            case = CaseResult(
+                family,
+                family,
+                "python_tool" if serving else path,
+                "timeout",
+                "",
+                "",
+                1.0,
+                0,
+                0,
+                (),
+            )
+            rows.append(
+                ServingCaseResult(mode, case, (), None, 0, 0, 0, 0, 0)
+                if serving
+                else case
+            )
+
+    report = summarize_serving(rows) if serving else matched_report(rows)
+    assert report["paired_cases"] == len(families)
+    assert list(report["by_family"]) == families
+    assert list(report["paired_deltas_by_family"]) == families
+    assert rows.visits == len(rows)
+
+
 def test_logit_encoding_preserves_view_bytes_without_a_python_list(monkeypatch):
     logits = torch.tensor(
         [[99.0, -0.0, 99.0, float("nan"), 99.0, -float("inf")]], dtype=torch.bfloat16
