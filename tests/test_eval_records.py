@@ -448,6 +448,28 @@ def test_serving_observations_round_trip_bits_and_report(dtype):
     assert summarize_serving(restored) == summarize_serving(rows)
 
 
+def test_saving_strided_serving_logits_does_not_decode_them(monkeypatch):
+    logits = torch.tensor([[-0.0, 0.0, float("nan"), 0.0, -float("inf"), 0.0]])[:, ::2]
+    row = ServingCaseResult(
+        "live_pause_resume", case_rows()[2], (), logits, 0, 0, 0, 0, 0
+    )
+    stream = io.StringIO()
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            torch,
+            "frombuffer",
+            lambda *args, **kwargs: pytest.fail("Saving logits reconstructed a tensor"),
+        )
+        dump_serving_results([row], stream)
+
+    stream.seek(0)
+    restored = load_serving_results(stream)[0].final_logits
+    assert restored is not None
+    assert torch.equal(
+        restored.view(torch.uint8), logits.contiguous().view(torch.uint8)
+    )
+
+
 @pytest.mark.parametrize(
     "fault,error",
     [

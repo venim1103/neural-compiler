@@ -344,7 +344,7 @@ def _logits(value: object) -> torch.Tensor | None:
     return torch.frombuffer(raw, dtype=dtype).reshape(shape).clone()
 
 
-def _serving_case(value: object) -> ServingCaseResult:
+def _serving_metadata(value: object) -> tuple[ServingCaseResult, object]:
     data = _object(
         value,
         "serving case",
@@ -386,7 +386,12 @@ def _serving_case(value: object) -> ServingCaseResult:
         if prefix is None
         else _integer(prefix, "logit_prefix_tokens"),
     )
-    return replace(row, final_logits=_logits(data["final_logits"]))
+    return row, data["final_logits"]
+
+
+def _serving_case(value: object) -> ServingCaseResult:
+    row, logits = _serving_metadata(value)
+    return replace(row, final_logits=_logits(logits))
 
 
 def _serving_data(row: ServingCaseResult) -> dict[str, object]:
@@ -464,7 +469,7 @@ def dump_serving_results(
     """Write serving observations and detached CPU logits, not live checkpoints."""
     records = [_serving_data(row) for row in results]
     for record in records:
-        _serving_case(record)
+        _serving_metadata(record)
     _write_document("serving_cases", records, destination)
 
 

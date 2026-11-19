@@ -2529,3 +2529,11 @@ allocation). Initial **2 failed** (0.22 s); repaired cache/serving focus
 **12 passed** (3.16 s); root **632 passed, 3 skipped** (28.25 s). Ruff, changed
 formatting, whitespace and source diagnostics passed. Real controller probes
 still lack delegation; this is not a measured serving-memory or latency result.
+
+Serving evidence writes now validate row metadata without decoding the logit
+payload they just encoded. Loading still validates the payload before
+reconstructing tensors; schema v1 and bitwise round trips are unchanged.
+One three-value strided CPU fixture reproduced **1 failure** (0.08 s); the
+repaired evidence suite had **59 passes** (0.13 s), and root had
+**633 passed, 3 skipped** (22.28 s). Ruff, scoped formatting, whitespace and
+source diagnostics passed. No dependencies, downloads, model or host changes.
