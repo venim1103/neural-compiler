@@ -2397,3 +2397,30 @@ services or host changes. Next inspect native token-limit and failure-accounting
 boundaries against the same harness contract before any future study.
 
 [native-scoring-source]: experiments/exp_loop.py
+
+### 2026-11-19: preserve finite native call caps and token-limit classification
+
+The [same native routine][native-scoring-source] admitted NaN, infinity, fractional
+and boolean `max_calls` values. In particular, `len(calls) >= NaN` never holds,
+so that configuration defeated the intended serial-call limit. It now requires
+a positive integer before protocol/model setup; the default remains five.
+The routine also called `protocol.finish()` before inspecting a length stop,
+misclassifying an incomplete call at the 400-token cutoff as a malformed call.
+Length stops now retain their actual reason and sampled counts without execution,
+injection or final-answer credit. EOS-ended malformed calls still fail as
+protocol errors, and the turn limit is unchanged.
+
+**Finite routine ledger:** four constructor-free invalid-cap cases plus one
+400-ID incomplete-call case in the existing scripted matrix; at most 512 prompt
+IDs and 1,024 history IDs, no new model/guest calls. Initial focus **5 failed**
+(0.09 s); repaired **5 passed** (0.04 s); coupled protocol/evaluation **188 passed**
+(8.70 s); root **617 passed, 3 skipped** (18.82 s), fourteen existing Torch
+warnings. One failing focus, one repaired focus, one coupled/root invocation
+spent; no aborts or relaxed limits. Root Ruff/whitespace, full test-file format
+and AST-extracted native-routine format passed. Exact prefix/suffix comparison
+preserves historical script text; the previous full-file formatting debt remains.
+Pylance reports only unused parameters. Jailed runtime controls ran, while the
+three actual cgroup-controller probes still skip without delegation. No data,
+model/GPU studies, downloads, dependencies, services or host changes; fixtures
+remain in memory/normal pytest retention. Next recheck real milestone resources
+and remaining compatible prerequisites; these tests do not qualify native studies.

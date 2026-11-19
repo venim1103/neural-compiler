@@ -256,7 +256,22 @@ def native_experiment(tokenizer, monkeypatch):
     return experiment
 
 
-@pytest.mark.parametrize("scenario", ["eos", "length", "last_answer", "sandbox_error"])
+@pytest.mark.parametrize("max_calls", [float("nan"), float("inf"), 1.5, True])
+def test_native_experiment_rejects_noninteger_call_caps_before_setup(
+    monkeypatch, native_experiment, max_calls
+):
+    def forbid_setup(*_args, **_kwargs):
+        pytest.fail("Invalid call cap reached protocol/model setup")
+
+    monkeypatch.setattr(native_experiment, "QwenToolProtocol", forbid_setup)
+    monkeypatch.setattr(native_experiment, "LiveSession", forbid_setup)
+    with pytest.raises(ValueError, match="max_calls.*positive integer"):
+        native_experiment.part_c_native([], max_calls=max_calls)
+
+
+@pytest.mark.parametrize(
+    "scenario", ["eos", "length", "incomplete_length", "last_answer", "sandbox_error"]
+)
 def test_native_experiment_requires_a_complete_answer_and_stops_on_isolation_failure(
     tokenizer, monkeypatch, native_experiment, scenario
 ):
@@ -265,12 +280,17 @@ def test_native_experiment_requires_a_complete_answer_and_stops_on_isolation_fai
         answer = "Final answer: 42"
         count = len(tokenizer.encode(answer, add_special_tokens=False))
         text = "x" * (400 - count - 1) + "\n" + answer
+    elif scenario == "incomplete_length":
+        prefix = "<tool_call><function=run><parameter=code>\n"
+        count = len(tokenizer.encode(prefix, add_special_tokens=False))
+        text = prefix + "x" * (400 - count)
     elif scenario == "last_answer":
         text = "Final answer: 42\nFinal answer: 41<|im_end|>"
     elif scenario == "sandbox_error":
         text = call_text("print(42)") + text
     ids = tokenizer.encode(text, add_special_tokens=False)
-    assert len(ids) == 400 if scenario == "length" else len(ids) < 128
+    length_cut = scenario in ("length", "incomplete_length")
+    assert len(ids) == 400 if length_cut else len(ids) < 128
     sessions = []
     executions = []
 
@@ -318,8 +338,14 @@ def test_native_experiment_requires_a_complete_answer_and_stops_on_isolation_fai
         "42" if scenario == "eos" else "41" if scenario == "last_answer" else None
     )
     assert row["stop_reason"] == (
-        scenario if scenario in ("length", "sandbox_error") else "eos"
+        "length"
+        if length_cut
+        else "sandbox_error"
+        if scenario == "sandbox_error"
+        else "eos"
     )
+    if length_cut:
+        assert row["error"] == "Response turn ended at the generation-token limit"
     assert len(sessions) == 1 and sessions[0].injected == []
     if scenario == "sandbox_error":
         call_ids = tokenizer.encode(call_text("print(42)"), add_special_tokens=False)

@@ -206,8 +206,8 @@ def part_c(names):
 
 def part_c_native(names, max_calls=5):
     """Native turns and exact final answers; isolation errors are not repairable."""
-    if max_calls <= 0:
-        raise ValueError("max_calls must be positive")
+    if type(max_calls) is not int or max_calls <= 0:
+        raise ValueError("max_calls must be a positive integer")
 
     def synchronize():
         if model.device.type == "cuda":
@@ -258,12 +258,13 @@ def part_c_native(names, max_calls=5):
                 call = None
                 decoded = session.decode_until(400, on_token)
                 synchronize()
+                if decoded.reason == "length":
+                    stop_reason = "length"
+                    error = "Response turn ended at the generation-token limit"
+                    break
                 protocol.finish()
                 if call is None:
                     stop_reason = decoded.reason
-                    if decoded.reason == "length":
-                        error = "Response turn ended at the generation-token limit"
-                        break
                     answer = tok.decode(
                         decoded.token_ids[:-1], skip_special_tokens=False
                     )
