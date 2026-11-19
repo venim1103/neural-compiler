@@ -23,7 +23,7 @@ from neural_compiler.eval import (
     summarize_serving,
     validate_serving_logits,
 )
-from neural_compiler.eval.harness import CaseResult
+from neural_compiler.eval.harness import CallRecord, CaseResult
 from neural_compiler.bridge.session import CheckpointStore, LiveSession
 
 
@@ -684,6 +684,47 @@ def test_logit_validation_uses_existing_full_reprefill_tolerance(delta):
     checked = validate_serving_logits([rows[2], rows[0]])
     assert checked["cases"] == 1 and checked["full_reprefill_comparisons"] == 1
     assert checked["cache_live_exact_pairs"] == 0
+
+
+@pytest.mark.parametrize(
+    "mode,prompt_tokens,prefix,error",
+    [
+        ("full_reprefill_resubmission", 3, 3, "Token history length"),
+        ("live_pause_resume", 1, 3, "Token history length"),
+        (
+            "prefix_cached_resubmission",
+            2,
+            1,
+            "Logit prefix precedes the end of the prompt",
+        ),
+        ("live_pause_resume", 2, 3, None),
+    ],
+)
+def test_logit_validation_reconciles_observed_token_counts(
+    mode, prompt_tokens, prefix, error
+):
+    rows = [
+        replace(
+            row,
+            final_tokens=(1, 2, 3, 4),
+            logit_prefix_tokens=prefix,
+            case=replace(
+                row.case,
+                prompt_tokens=prompt_tokens if row.mode == mode else None,
+                generated_tokens=1,
+                injected_tokens=1,
+                calls=(CallRecord("ok", 0.0, 1),),
+            ),
+        )
+        for row in _logit_observations()
+    ]
+    if error is not None:
+        with pytest.raises(ValueError, match=error):
+            validate_serving_logits(rows)
+    else:
+        checked = validate_serving_logits(rows)
+        assert checked["full_reprefill_comparisons"] == 2
+        assert checked["cache_live_exact_pairs"] == 1
 
 
 @pytest.mark.parametrize(

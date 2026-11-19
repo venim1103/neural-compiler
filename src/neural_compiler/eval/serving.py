@@ -471,6 +471,20 @@ def _pair_serving_results(results: Sequence[ServingCaseResult]) -> _ServingPairs
 
 
 def _observed_logits(row: ServingCaseResult) -> torch.Tensor:
+    prompt_tokens = row.case.prompt_tokens
+    logit_prefix = row.logit_prefix_tokens
+    if prompt_tokens is not None:
+        expected = prompt_tokens + row.case.generated_tokens + row.case.injected_tokens
+        if len(row.final_tokens) != expected:
+            raise ValueError(
+                f"Token history length differs from prompt + generated + injected "
+                f"counts for {row.case.case_id}/{row.mode}"
+            )
+        if logit_prefix is not None and logit_prefix < prompt_tokens:
+            raise ValueError(
+                f"Logit prefix precedes the end of the prompt for "
+                f"{row.case.case_id}/{row.mode}"
+            )
     logits = row.final_logits
     if (
         not isinstance(logits, torch.Tensor)
@@ -499,6 +513,8 @@ def validate_serving_logits(
 ) -> dict[str, object]:
     """Check recorded same-boundary CPU logits, not live-engine qualification.
 
+    When the prompt count is known, the complete history must account for the
+    prompt, generated and injected IDs, and the logit prefix must cover the prompt.
     Live/prefix agreement is exact. Full-reprefill comparisons use the existing
     tiny CPU hybrid fixture tolerance; no task outcomes are rewritten.
     """

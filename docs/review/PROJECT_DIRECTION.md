@@ -2452,3 +2452,24 @@ qualification needs an owner-provided writable delegation.
 
 [native-scoring-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44505688956
 [native-boundary-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44506102479
+
+### 2026-11-19: reconcile token counts in serving logit replay
+
+Matching token IDs and CPU logits could pass replay even when an observed prompt
+count made the history too short or too long, or the logit prefix ended before
+the complete prompt. The opt-in validator now reconciles each measured history
+with its prompt, generated and injected counts, and requires the prefix to
+cover the prompt. Unknown prompt counts remain unknown; schema, ordinary
+summaries and numerical tolerances are unchanged. This rejects contradictory
+evidence; it does not authenticate execution or qualify a serving runtime.
+
+**Finite routine ledger:** four in-memory cases (three rows, four IDs and
+three logits per row), no model or guest setup in the focus. Initial focus
+**3 failed, 1 passed** (0.33 s); repaired **4 passed** (0.04 s); root
+**622 passed, 3 skipped** (30.88 s), fourteen existing Torch warnings.
+Ruff, changed Python formatting, whitespace and source diagnostics passed.
+Controller skips still lack writable delegation. No data downloads,
+dependencies, model studies, services or host changes. The previous
+[native-timing CI][native-timing-ci] passed at its exact revision.
+
+[native-timing-ci]: https://github.com/venim1103/neural-compiler/actions/runs/44506620598
