@@ -2597,3 +2597,20 @@ replay checks had **56 passes** (4.87 s); root had **640 passed, 3 skipped**
 (24.28 s). Ruff, scoped formatting, whitespace and source diagnostics passed.
 This measures input traversal, not reporting latency or model behavior. No
 artifacts, datasets, model runs or host changes were needed.
+
+### 2026-11-19: avoid reconstructing unused CPU logits during report replay
+
+The default serving report now checks encoded logit dtype, shape, byte order,
+hex and length without decoding or retaining the payload as a CPU tensor.
+Numerical replay still reconstructs the original tensors, as does the public
+loader by default. Schema and report fields are unchanged; JSON itself is
+still parsed in memory.
+
+The three-mode CLI fixture initially failed **2** cases (0.10 s): both
+metrics-only paths reconstructed three tensors. They now reconstruct zero
+and return the same reports; numerical replay still reconstructs all three.
+Both load modes reject the same malformed field fixtures. Evidence and CLI
+focus **32 passed** (0.14 s); root **648 passed, 3 skipped** (26.30 s). Ruff,
+scoped formatting, whitespace, source diagnostics and call-site compatibility
+passed. This measures reconstruction counts, not peak memory or latency. No
+model, guest execution in the focus, dependencies or host changes were needed.

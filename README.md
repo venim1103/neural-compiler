@@ -193,8 +193,8 @@ neural-compiler --serving-report .runs/serving_results.json
 Add `--eval-tasks .runs/tasks.json` for the same optional reference checks.
 Incomplete mode coverage, duplicate pairs and mismatched observations fail
 explicitly. A single recorded mode is supported but has no paired mode deltas.
-By default, report replay aggregates observations without checking numerical
-equivalence. To also check recorded CPU logits, use
+By default, report replay validates the encoded logit fields but aggregates
+observations without reconstructing the CPU logits. For numerical checks, use
 `neural-compiler --serving-report .runs/serving.json --check-serving-logits`
 (optionally with `--eval-tasks`). Checks run before any report is printed;
 successful output adds `logit_validation` counts and tolerances. Invalid

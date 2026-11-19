@@ -314,7 +314,7 @@ def _logits_data(value: torch.Tensor | None) -> dict[str, object] | None:
     }
 
 
-def _logits(value: object) -> torch.Tensor | None:
+def _logits(value: object, *, include_logits: bool) -> torch.Tensor | None:
     if value is None:
         return None
     data = _object(value, "logits", {"dtype", "shape", "byte_order", "bytes_hex"})
@@ -336,6 +336,10 @@ def _logits(value: object) -> torch.Tensor | None:
     dtype, itemsize = dtype_info
     if len(encoded) != 2 * math.prod(shape) * itemsize:
         raise ValueError("Logit byte length differs from shape/dtype")
+    if not include_logits:
+        # Check that Torch can represent the shape without allocating logit storage.
+        torch.empty(shape, dtype=dtype, device="meta")
+        return None
     raw = bytearray.fromhex(encoded)
     if not raw:
         return torch.empty(shape, dtype=dtype, device="cpu")
@@ -387,9 +391,10 @@ def _serving_metadata(value: object) -> tuple[ServingCaseResult, object]:
     return row, data["final_logits"]
 
 
-def _serving_case(value: object) -> ServingCaseResult:
+def _serving_case(value: object, *, include_logits: bool) -> ServingCaseResult:
     row, logits = _serving_metadata(value)
-    return replace(row, final_logits=_logits(logits))
+    decoded = _logits(logits, include_logits=include_logits)
+    return row if decoded is None else replace(row, final_logits=decoded)
 
 
 def _serving_data(row: ServingCaseResult) -> dict[str, object]:
@@ -471,8 +476,15 @@ def dump_serving_results(
     _write_document("serving_cases", records, destination)
 
 
-def load_serving_results(source: TextIO) -> tuple[ServingCaseResult, ...]:
-    """Read serving observations; logit bytes must use this host's byte order."""
+def load_serving_results(
+    source: TextIO, *, include_logits: bool = True
+) -> tuple[ServingCaseResult, ...]:
+    """Read serving observations; logit bytes must use this host's byte order.
+
+    With include_logits=False, validate the encoded logit fields but omit tensors
+    from the returned rows. Such rows are for summaries, not numerical replay.
+    """
     return tuple(
-        _serving_case(record) for record in _read_document("serving_cases", source)
+        _serving_case(record, include_logits=include_logits)
+        for record in _read_document("serving_cases", source)
     )

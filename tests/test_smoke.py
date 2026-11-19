@@ -300,10 +300,20 @@ def test_cli_replays_failed_cases_without_execution(
             "atol": 1e-6,
             "rtol": 1e-5,
         }
+    reconstructions = 0
+    frombuffer = torch.frombuffer
+
+    def count_reconstruction(*args, **kwargs):
+        nonlocal reconstructions
+        reconstructions += 1
+        return frombuffer(*args, **kwargs)
+
+    monkeypatch.setattr(torch, "frombuffer", count_reconstruction)
     assert main(arguments) == 0
     captured = capsys.readouterr()
     assert json.loads(captured.out) == expected
     assert captured.err == ""
+    assert reconstructions == (len(ALL_SERVING_MODES) if check_logits else 0)
 
 
 def test_cli_rejects_invalid_evidence_without_report(tmp_path: Path, capsys):

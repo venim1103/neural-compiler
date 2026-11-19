@@ -152,7 +152,9 @@ def main(argv: list[str] | None = None) -> int:
             if args.eval_report:
                 results = load_case_results(source)
             else:
-                serving_results = load_serving_results(source)
+                serving_results = load_serving_results(
+                    source, include_logits=args.check_serving_logits
+                )
                 results = tuple(row.case for row in serving_results)
         reference_checks: dict[str, int] | None = None
         task_overlap: dict[str, object] | None = None

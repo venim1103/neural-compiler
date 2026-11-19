@@ -535,6 +535,7 @@ def test_logit_encoding_preserves_view_bytes_without_a_python_list(monkeypatch):
     }
 
 
+@pytest.mark.parametrize("include_logits", [True, False])
 @pytest.mark.parametrize(
     "fault,error",
     [
@@ -549,7 +550,7 @@ def test_logit_encoding_preserves_view_bytes_without_a_python_list(monkeypatch):
     ],
 )
 def test_invalid_serving_observations_fail_before_tensor_reconstruction(
-    monkeypatch, fault, error
+    monkeypatch, fault, error, include_logits
 ):
     row = ServingCaseResult(
         "live_pause_resume",
@@ -590,7 +591,9 @@ def test_invalid_serving_observations_fail_before_tensor_reconstruction(
         lambda *args, **kwargs: pytest.fail("Invalid metadata reconstructed a tensor"),
     )
     with pytest.raises(ValueError, match=error):
-        load_serving_results(io.StringIO(json.dumps(data)))
+        load_serving_results(
+            io.StringIO(json.dumps(data)), include_logits=include_logits
+        )
 
 
 @pytest.mark.parametrize("logits", [None, torch.empty((1, 0))])
@@ -616,6 +619,8 @@ def test_unmeasured_or_empty_serving_logits_stay_distinct(logits):
         assert restored.final_logits is not None
         assert restored.final_logits.shape == logits.shape
         assert restored.logit_prefix_tokens is None
+    stream.seek(0)
+    assert load_serving_results(stream, include_logits=False)[0].final_logits is None
 
 
 def test_non_cpu_logits_are_rejected_without_writing():
