@@ -2491,3 +2491,17 @@ Initial focus **1 failed** (0.18 s); repaired **2 passed** (0.16 s); root
 Ruff, changed Python formatting (after fixing the new assertion), whitespace
 and source diagnostics passed. Real controller probes still lack writable
 delegation. No data downloads, model studies, dependencies or host changes.
+
+### 2026-11-19: cap evaluation turns before sampling
+
+The harness now includes remaining context in the decode request, after
+counting prompt, generated and injected IDs. Length stops at that bound retain
+their partial text without answer credit; EOS at the exact limit still scores.
+A call that fills the context does not execute because its reply cannot fit.
+Decode providers that exceed the requested limit still raise explicitly.
+
+Four scripted cases with three prompt IDs each, no model or guest: initial
+**4 failed** (0.22 s); repaired focus with adjacent contracts **19 passed**
+(1.51 s); root **627 passed, 3 skipped** (24.22 s). Ruff, changed formatting
+and source diagnostics passed. Real controller probes still lack writable
+delegation. No dependencies, downloads, data or model studies.

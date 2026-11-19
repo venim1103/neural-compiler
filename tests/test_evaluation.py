@@ -574,6 +574,54 @@ def test_context_limit_prevents_oversized_result_prefill(
     assert len(result.calls) == 1
 
 
+@pytest.mark.parametrize("boundary", ["prompt", "length", "eos", "tool"])
+def test_context_limit_caps_requested_generation(tokenizer, monkeypatch, boundary):
+    task = Task("context-boundary", "unit", "Compute.", IntegerChecker(42))
+    path = "python_tool" if boundary == "tool" else "no_tool"
+    text = (
+        call_text("print(42)") if boundary == "tool" else "Final answer: 42<|im_end|>"
+    )
+    ids = tokenizer.encode(text, add_special_tokens=False)
+    prompt_ids = [1, 2, 3]
+    monkeypatch.setattr(tokenizer, "apply_chat_template", lambda *_a, **_kw: prompt_ids)
+    capacity = 0 if boundary == "prompt" else len(ids) - (boundary == "length")
+    requested = []
+
+    class ScriptedSession:
+        def decode_until(self, max_new_tokens, on_token):
+            requested.append(max_new_tokens)
+            sampled = []
+            for token in ids[:max_new_tokens]:
+                sampled.append(token)
+                if on_token(token):
+                    return DecodeResult(tuple(sampled), "stop")
+                if token == tokenizer.eos_token_id:
+                    return DecodeResult(tuple(sampled), "eos")
+            return DecodeResult(tuple(sampled), "length")
+
+        def inject(self, _response_ids):
+            pytest.fail("No tool response can be injected at the context cap")
+
+    result = EvaluationHarness(
+        tokenizer,
+        lambda _ids: ScriptedSession(),
+        lambda: None,
+        budgets=replace(Budgets(), context_tokens=len(prompt_ids) + capacity),
+        executor=lambda *_a, **_kw: pytest.fail("No context remains for a tool reply"),
+    ).run(task, path)
+
+    assert result.generated_tokens == capacity
+    assert requested == ([capacity] if capacity else [])
+    assert result.calls == () and result.injected_tokens == 0
+    if boundary == "eos":
+        assert result.outcome == "correct"
+    else:
+        assert result.outcome == "budget_exhausted"
+        assert "context-token" in result.diagnostic.lower()
+        if boundary == "length":
+            assert result.answer == "Final answer: 42"
+
+
 def test_isolation_failure_is_not_a_model_repair_or_success(
     tokenizer, hybrid_model, monkeypatch
 ):

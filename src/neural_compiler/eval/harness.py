@@ -449,8 +449,6 @@ class EvaluationHarness:
             if call is not None:
                 raise RuntimeError("DecodeSession continued after a callback stop")
             remaining_time()
-            if prompt_count + generated + injected > self.budgets.context_tokens:
-                raise _RunFailure("budget_exhausted", "Context-token budget exhausted")
             call = protocol.feed(token)
             if path == "no_tool" and call is not None:
                 raise ProtocolError("Tool calls are disabled for the no-tool baseline")
@@ -488,12 +486,20 @@ class EvaluationHarness:
             session = self.session_factory(prompt)
             while generated < self.budgets.generated_tokens:
                 remaining_time()
+                context_remaining = (
+                    self.budgets.context_tokens - prompt_count - generated - injected
+                )
+                if context_remaining <= 0:
+                    raise _RunFailure(
+                        "budget_exhausted", "Context-token budget exhausted"
+                    )
                 call = None
                 observed_tokens = []
-                turn_limit = min(
+                generation_limit = min(
                     self.budgets.turn_tokens,
                     self.budgets.generated_tokens - generated,
                 )
+                turn_limit = min(generation_limit, context_remaining)
                 decoded = session.decode_until(turn_limit, on_token)
                 self.synchronize()
                 remaining_time()
@@ -526,7 +532,9 @@ class EvaluationHarness:
                     )
                     raise _RunFailure(
                         "budget_exhausted",
-                        "Response turn ended at the generation-token limit",
+                        "Response turn ended at the context-token limit"
+                        if context_remaining < generation_limit
+                        else "Response turn ended at the generation-token limit",
                     )
                 protocol.finish()
                 if call is None:
@@ -545,6 +553,11 @@ class EvaluationHarness:
                     raise _RunFailure(
                         "budget_exhausted",
                         "No generation tokens remain for a final answer",
+                    )
+                if len(observed_tokens) == context_remaining:
+                    raise _RunFailure(
+                        "budget_exhausted",
+                        "No context-token capacity remains for a tool response",
                     )
                 exec_start = time.perf_counter()
                 result = self.executor(
